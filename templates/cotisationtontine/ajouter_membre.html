@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Ajouter un membre{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 class="mb-3">
+    Ajouter un membre au groupe <strong>{{ group.nom }}</strong>
+  </h2>
+
+  <form method="post" class="shadow p-4 rounded bg-light">
+    {% csrf_token %}
+
+    <!-- ✅ Champ pour le nom -->
+    <div class="mb-3">
+      <label for="nom" class="form-label">Nom du membre</label>
+      <input
+        type="text"
+        class="form-control"
+        name="nom"
+        id="nom"
+        placeholder="Ex: Fatou Diop"
+        required
+      >
+    </div>
+
+    <!-- ✅ Champ pour le téléphone -->
+    <div class="mb-3">
+      <label for="phone" class="form-label">Numéro de téléphone</label>
+      <input
+        type="text"
+        class="form-control"
+        name="phone"
+        id="phone"
+        placeholder="+221770000000"
+        required
+      >
+      <div class="form-text">
+        Saisir le numéro complet avec indicatif.
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-success">Envoyer l'invitation</button>
+    <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-secondary ms-2">
+      Annuler
+    </a>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,7 @@
+<h1>Données Firestore</h1>
+{% if user %}
+  <p><strong>Nom:</strong> {{ user.name }}</p>
+  <p><strong>Téléphone:</strong> {{ user.phone }}</p>
+{% else %}
+  <p>Aucune donnée trouvée</p>
+{% endif %}

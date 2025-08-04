@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Demander un crédit</h2>
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button class="btn btn-info">Envoyer la demande</button>
+  <a href="{{ cancel_url }}" class="btn btn-secondary">Annuler</a>
+</form>
+{% endblock %}

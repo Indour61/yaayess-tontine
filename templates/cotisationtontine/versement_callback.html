@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Callback Versement{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h2 class="text-info mb-3">🔄 Traitement du versement</h2>
+  <div class="alert alert-info">
+    <p>Nous avons bien reçu le signal de paiement PayDunya.</p>
+    <p>⏳ Vérification et mise à jour en cours...</p>
+  </div>
+  <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-success">🏠 Retour au tableau de bord</a>
+</div>
+{% endblock %}

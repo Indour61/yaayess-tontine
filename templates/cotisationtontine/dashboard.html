@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard – Cotisation & Tontine{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="fw-bold text-success">
+    📊 Tableau de bord Cotisation & Tontine
+  </h1>
+</div>
+
+<!-- ✅ Messages flash -->
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<!-- ✅ Actions principales -->
+<div class="mb-4 d-flex flex-wrap gap-2">
+  <a href="{% url 'cotisationtontine:group_list' %}" class="btn btn-outline-success">
+    📋 Voir mes groupes
+  </a>
+  <a href="{% url 'cotisationtontine:ajouter_groupe' %}" class="btn btn-success">
+    ➕ Créer un groupe
+  </a>
+</div>
+
+<hr class="my-4">
+
+<!-- ✅ Section dernières actions -->
+<h2 class="h4 mb-3">🕘 Dernières actions</h2>
+{% if action_logs %}
+  <div class="list-group rounded-3 overflow-hidden shadow-sm">
+    {% for log in action_logs %}
+      <div class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <span class="fw-semibold">{{ log.action }}</span>
+          <div class="text-muted small">
+            {{ log.date|date:"d/m/Y H:i" }}
+          </div>
+        </div>
+        <span class="badge rounded-pill bg-success-subtle text-success border border-success">
+          ✅
+        </span>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="alert alert-info mt-3">
+    🔎 Aucune action récente pour le moment. Commencez par créer un groupe ou effectuer un versement pour voir votre historique ici.
+  </div>
+{% endif %}
+
+{% endblock %}

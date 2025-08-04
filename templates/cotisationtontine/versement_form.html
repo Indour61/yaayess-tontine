@@ -1,0 +1,10 @@
+{% extends 'epargnecredit/base.html' %}
+{% block content %}
+<h2>Ajouter un versement</h2>
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button class="btn btn-primary">Valider</button>
+  <a href="{{ cancel_url }}" class="btn btn-secondary">Annuler</a>
+</form>
+{% endblock %}

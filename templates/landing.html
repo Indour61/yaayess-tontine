@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block title %}Accueil - YaayESS{% endblock %}
+
+{% block content %}
+<div class="text-center mt-5">
+  <h1 class="display-4 fw-bold text-success">Bienvenue sur YaayESS</h1>
+  <p class="lead">Gérez facilement vos Cotisations & Tontine communautaire.</p>
+  {% if user.is_authenticated %}
+    <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-success btn-lg mt-3">Accéder au Dashboard</a>
+  {% else %}
+    <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-lg mt-3 me-2">Connexion</a>
+    <a href="{% url 'accounts:signup' %}" class="btn btn-outline-primary btn-lg mt-3">Inscription</a>
+  {% endif %}
+</div>
+{% endblock %}

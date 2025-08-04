@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="container mt-5">
+    <h3>Réinitialisation du cycle du groupe « {{ group.nom }} »</h3>
+    <p class="text-danger fw-bold">⚠️ Cette action va supprimer tous les versements et tirages précédents. Les membres et le montant de base seront conservés.</p>
+
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">✅ Confirmer la réinitialisation</button>
+      <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-secondary ms-2">Annuler</a>
+    </form>
+  </div>
+{% endblock %}
+

@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Confirmation{% endblock %}
+
+{% block content %}
+<div class="container mt-5 text-center">
+    <h2 class="text-warning">⚠️ Attention !</h2>
+    <p class="fs-5 mt-3">
+        Cette action va <strong>supprimer toutes les cotisations</strong> et <strong>réinitialiser le tirage au sort</strong>
+        du groupe <strong>{{ group.nom }}</strong>.
+    </p>
+    <p class="text-danger fw-bold">Êtes-vous sûr de vouloir continuer ?</p>
+
+    <form method="post" action="{% url 'cotisationtontine:reset_cycle' group.id %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger me-2">✅ Oui, réinitialiser</button>
+        <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-secondary">❌ Annuler</a>
+    </form>
+</div>
+{% endblock %}
