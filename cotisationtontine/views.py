@@ -565,54 +565,54 @@ from .models import Group, GroupMember, CotisationTontine, Tirage, TirageHistori
 def reset_cycle_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
-    # ✅ Seul l'admin peut réinitialiser
+    # ✅ Vérification admin
     if request.user != group.admin:
         messages.error(request, "Seul l'administrateur du groupe peut réinitialiser le cycle.")
         return redirect('cotisationtontine:group_detail', group_id=group.id)
 
-    # ✅ Afficher la page de confirmation si ce n'est pas un POST
+    # ✅ Afficher confirmation avant POST
     if request.method != 'POST':
         return render(request, 'cotisationtontine/confirm_reset.html', {'group': group})
 
-    membres = set(group.membres.all())
-    tirages_courants = group.tirages.all()
+    # ✅ Vérifier que tous les membres ont gagné
+    membres = set(group.membres.select_related('user'))
+    tirages_actuels = list(group.tirages.select_related('gagnant'))
+    tirages_historiques = list(group.tirages_historiques.select_related('gagnant'))
 
-    # ✅ Tous les membres doivent avoir gagné
-    gagnants = {t.gagnant for t in tirages_courants if t.gagnant}
-    anciens_gagnants = {t.gagnant for t in group.tirages_historiques.all() if t.gagnant}
-    total_gagnants = gagnants.union(anciens_gagnants)
+    gagnants_actuels = {tirage.gagnant for tirage in tirages_actuels if tirage.gagnant}
+    gagnants_historiques = {tirage.gagnant for tirage in tirages_historiques if tirage.gagnant}
+    tous_gagnants = gagnants_actuels.union(gagnants_historiques)
 
-    membres_non_gagnants = membres - total_gagnants
+    membres_non_gagnants = membres - tous_gagnants
 
     if membres_non_gagnants:
-        messages.warning(request, "Tous les membres doivent avoir gagné au moins une fois avant de réinitialiser le cycle.")
+        noms = ", ".join(m.user.username for m in membres_non_gagnants)
+        messages.warning(request, f"Les membres suivants n'ont pas encore gagné : {noms}.")
         return redirect('cotisationtontine:group_detail', group_id=group.id)
 
     # ✅ Archiver les tirages actuels
-    for tirage in tirages_courants:
-        TirageHistorique.objects.create(
+    TirageHistorique.objects.bulk_create([
+        TirageHistorique(
             group=group,
             gagnant=tirage.gagnant,
             montant=tirage.montant,
             date_tirage=tirage.date_tirage or timezone.now()
         )
+        for tirage in tirages_actuels
+    ])
 
-    # ✅ Supprimer les tirages et cotisations
-    tirages_courants.delete()
+    # ✅ Suppression des données de cycle en cours
+    group.tirages.all().delete()
     CotisationTontine.objects.filter(member__group=group).delete()
 
-    # ✅ Mettre à jour la date de reset
+    # ✅ Marquer le nouveau cycle
     group.date_reset = timezone.now()
-
-    # ✅ Réinitialiser le cycle si applicable
     if hasattr(group, 'cycle_en_cours'):
         group.cycle_en_cours = True
-
     group.save()
 
     messages.success(request, "✅ Cycle réinitialisé avec succès. Les membres peuvent recommencer les versements.")
     return redirect('cotisationtontine:group_detail', group_id=group.id)
-
 
 from django.views.decorators.http import require_http_methods
 

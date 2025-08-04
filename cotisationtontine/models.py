@@ -190,3 +190,19 @@ class ActionLog(models.Model):
     def __str__(self):
         return f"{self.date} - {self.user} : {self.action}"
 
+from django.db import models
+from django.utils import timezone
+
+class HistoriqueAction(models.Model):
+    ACTION_CHOICES = [
+        ('RESET_CYCLE', 'Réinitialisation du cycle'),
+        ('AUTRE', 'Autre action'),
+    ]
+
+    group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name='actions')
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    description = models.TextField()
+    date = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.get_action_display()} - {self.group.nom} - {self.date.strftime('%d/%m/%Y %H:%M')}"

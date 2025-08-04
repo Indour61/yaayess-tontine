@@ -128,4 +128,21 @@
     </table>
   </div>
 </div>
+<!-- Historique des actions -->
+<div class="mt-5">
+  <h4>🕓 Historique des actions</h4>
+  <ul class="list-group">
+    {% for action in group.actions.all %}
+      <li class="list-group-item">
+        <strong>{{ action.date|date:"d/m/Y H:i" }}</strong> —
+        <span class="fw-semibold">{{ action.get_action_display }}</span><br>
+        <span class="text-muted small">{{ action.description|linebreaksbr }}</span>
+      </li>
+    {% empty %}
+      <li class="list-group-item text-muted">Aucune action enregistrée pour ce groupe.</li>
+    {% endfor %}
+  </ul>
+</div>
+
+
 {% endblock %}
