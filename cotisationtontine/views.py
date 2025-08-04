@@ -558,7 +558,6 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
 from django.utils import timezone
-
 from .models import Group, GroupMember, CotisationTontine, Tirage, TirageHistorique
 
 @login_required
@@ -569,97 +568,27 @@ def reset_cycle_view(request, group_id):
     # ✅ Seul l'admin peut réinitialiser
     if request.user != group.admin:
         messages.error(request, "Seul l'administrateur du groupe peut réinitialiser le cycle.")
-        return redirect('cotisationtontine:tirage_resultat', group_id=group.id)
+        return redirect('cotisationtontine:group_detail', group_id=group.id)
 
-    membres = set(group.membres.all())
-    tirages_courants = group.tirages.all()
-    anciens_tirages = group.tirages_historiques.all()
-
-    # ✅ Vérification : chaque membre doit avoir gagné au moins une fois
-    gagnants_courants = {t.gagnant for t in tirages_courants if t.gagnant}
-    gagnants_historiques = {t.gagnant for t in anciens_tirages if t.gagnant}
-    tous_les_gagnants = gagnants_courants.union(gagnants_historiques)
-
-    membres_non_gagnants = membres - tous_les_gagnants
-    if membres_non_gagnants:
-        messages.warning(
-            request,
-            "Tous les membres doivent avoir été gagnants au moins une fois avant de réinitialiser le cycle."
-        )
-        return redirect('cotisationtontine:tirage_resultat', group_id=group.id)
-
-    # ✅ Archiver les tirages actuels
-    for tirage in tirages_courants:
-        TirageHistorique.objects.create(
-            group=group,
-            gagnant=tirage.gagnant,
-            montant=tirage.montant,
-            date_tirage=tirage.date_tirage or timezone.now()
-        )
-
-    # ✅ Supprimer les tirages actuels et les cotisations
-    tirages_courants.delete()
-    CotisationTontine.objects.filter(member__group=group).delete()
-
-    # ✅ Réinitialiser le statut du cycle si champ disponible
-    if hasattr(group, 'cycle_en_cours'):
-        group.cycle_en_cours = True
-        group.save()
-
-    messages.success(
-        request,
-        f"✅ Le cycle du groupe « {group.nom} » a été réinitialisé avec succès. Les membres peuvent recommencer les versements."
-    )
-    return redirect('cotisationtontine:tirage_resultat', group_id=group.id)
-
-# cotisationtontine/views.py
-
-from django.shortcuts import render, get_object_or_404
-from .models import Group, Tirage
-
-def tirage_resultat_view(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-    tirages = Tirage.objects.filter(group=group).order_by('-date_tirage')
-
-    return render(request, 'cotisationtontine/tirage_resultat.html', {
-        'group': group,
-        'tirages': tirages,
-    })
-
-
-"""
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.db import transaction
-from django.utils import timezone
-from .models import Group, GroupMember, CotisationTontine, Tirage, TirageHistorique
-
-@login_required
-@transaction.atomic
-def reset_cycle_view(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-
-    # ✅ Seul l'admin peut réinitialiser
-    if request.user != group.admin:
-        messages.error(request, "Seul l'administrateur du groupe peut réinitialiser le cycle.")
-        return redirect('cotisationtontine:tirage_resultat', group_id=group.id)
+    # ✅ Afficher la page de confirmation si ce n'est pas un POST
+    if request.method != 'POST':
+        return render(request, 'cotisationtontine/confirm_reset.html', {'group': group})
 
     membres = set(group.membres.all())
     tirages_courants = group.tirages.all()
 
-    # ✅ Tous les membres doivent avoir gagné au moins une fois
-    gagnants = {t.gagnant for t in tirages_courants if t.gagnant is not None}
-    anciens_gagnants = {t.gagnant for t in group.tirages_historiques.all() if t.gagnant is not None}
+    # ✅ Tous les membres doivent avoir gagné
+    gagnants = {t.gagnant for t in tirages_courants if t.gagnant}
+    anciens_gagnants = {t.gagnant for t in group.tirages_historiques.all() if t.gagnant}
     total_gagnants = gagnants.union(anciens_gagnants)
 
     membres_non_gagnants = membres - total_gagnants
 
     if membres_non_gagnants:
         messages.warning(request, "Tous les membres doivent avoir gagné au moins une fois avant de réinitialiser le cycle.")
-        return redirect('cotisationtontine:tirage_resultat', group_id=group.id)
+        return redirect('cotisationtontine:group_detail', group_id=group.id)
 
-    # ✅ Archiver les tirages
+    # ✅ Archiver les tirages actuels
     for tirage in tirages_courants:
         TirageHistorique.objects.create(
             group=group,
@@ -672,48 +601,28 @@ def reset_cycle_view(request, group_id):
     tirages_courants.delete()
     CotisationTontine.objects.filter(member__group=group).delete()
 
-    # ✅ (Optionnel) réactiver un état de cycle (si champ `cycle_en_cours`)
+    # ✅ Mettre à jour la date de reset
+    group.date_reset = timezone.now()
+
+    # ✅ Réinitialiser le cycle si applicable
     if hasattr(group, 'cycle_en_cours'):
         group.cycle_en_cours = True
-        group.save()
 
-    messages.success(request, "Cycle réinitialisé avec succès. Les membres peuvent recommencer les versements.")
-    return redirect('cotisationtontine:tirage_resultat', group_id=group.id)
-"""
+    group.save()
+
+    messages.success(request, "✅ Cycle réinitialisé avec succès. Les membres peuvent recommencer les versements.")
+    return redirect('cotisationtontine:group_detail', group_id=group.id)
+
+
 from django.views.decorators.http import require_http_methods
 
 def confirm_reset_cycle_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
-    return render(request, 'cotisationtontine/confirm_reset_cycle.html', {'group': group})
+    return render(request, 'cotisationtontine/confirm_reset.html', {'group': group})
 
 
+from django.shortcuts import render
 
-
-"""
-from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect
-from django.views.decorators.http import require_http_methods
-from .models import Group, GroupMember, CotisationTontine, Tirage
-
-@require_http_methods(["POST"])
-def reset_cycle_view(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-
-    # Supprimer les cotisations et tirages liés à ce groupe
-    CotisationTontine.objects.filter(member__group=group).delete()
-    Tirage.objects.filter(group=group).delete()
-
-    # Recréer les cotisations de base pour chaque membre
-    membres = GroupMember.objects.filter(group=group)
-    for membre in membres:
-        CotisationTontine.objects.create(
-            member=membre,
-            montant=membre.montant,
-            statut="VALIDÉ"
-        )
-
-    messages.success(request, f"✅ Le cycle du groupe « {group.nom} » a été réinitialisé avec succès.")
-    return redirect('cotisationtontine:group_detail', group_id=group.id)
-
-
-"""
+def tirage_resultat_view(request, group_id):
+    # logiquement, on affiche les résultats ici
+    return render(request, 'cotisationtontine/tirage_resultat.html', {'group_id': group_id})

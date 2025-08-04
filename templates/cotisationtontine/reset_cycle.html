@@ -1,14 +1,17 @@
-{% extends "base.html" %}
-{% block content %}
-  <div class="container mt-5">
-    <h3>Réinitialisation du cycle du groupe « {{ group.nom }} »</h3>
-    <p class="text-danger fw-bold">⚠️ Cette action va supprimer tous les versements et tirages précédents. Les membres et le montant de base seront conservés.</p>
+{% extends 'base.html' %}
 
-    <form method="post">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-danger">✅ Confirmer la réinitialisation</button>
-      <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-secondary ms-2">Annuler</a>
-    </form>
-  </div>
+{% block title %}🔁 Cycle Réinitialisé{% endblock %}
+
+{% block content %}
+<div class="container mt-5 text-center">
+    <h1 class="text-success fw-bold mb-4">✅ Cycle réinitialisé avec succès</h1>
+    <p class="fs-4">Toutes les cotisations et les anciens tirages du groupe
+        <strong class="text-primary">{{ group.nom }}</strong> ont été supprimés.
+    </p>
+
+    <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-outline-primary mt-4">
+        ⬅ Retour au groupe
+    </a>
+</div>
 {% endblock %}
 

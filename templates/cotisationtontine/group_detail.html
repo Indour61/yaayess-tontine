@@ -8,6 +8,11 @@
   <!-- Titre -->
   <h1 class="fw-bold text-success">{{ group.nom }}</h1>
   <p class="mb-1">📅 Date de création : {{ group.date_creation|date:"d/m/Y" }}</p>
+
+  {% if group.date_reset %}
+    <p class="mb-1 text-muted">🔁 Dernier reset : {{ group.date_reset|date:"d/m/Y H:i" }}</p>
+  {% endif %}
+
   <p class="mb-4">💰 Montant de base du groupe :
     <strong class="text-primary">
       {{ group.montant_base|default:"0"|floatformat:0 }} FCFA
@@ -66,15 +71,16 @@
     <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}" class="btn btn-warning">
       🎲 Tirage au sort
     </a>
+
     <!-- Bouton Reset Cycle -->
     <form action="{% url 'cotisationtontine:reset_cycle' group.id %}" method="get" class="d-inline">
       <button type="submit" class="btn btn-danger">
         🔁 Réinitialiser le cycle
       </button>
     </form>
-
   </div>
 
+  <!-- Table des membres -->
   <div class="table-responsive">
     <table class="table table-bordered align-middle">
       <thead class="table-light">
@@ -95,7 +101,7 @@
               {% endif %}
             </td>
             <td>{{ m.user.phone }}</td>
-            <td>{{ member.montant }} FCFA</td>
+            <td>{{ m.montant }} FCFA</td>
             <td class="d-flex flex-wrap gap-1">
               {% if m.montant < group.montant_base %}
                 <a href="{% url 'cotisationtontine:initier_versement' m.id %}" class="btn btn-sm btn-success flex-fill">💳 Verser</a>
