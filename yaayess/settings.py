@@ -13,6 +13,10 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 """
 
+dependencies = [
+    ('cotisationtontine', '0009_alter_group_date_creation'),
+]
+
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.

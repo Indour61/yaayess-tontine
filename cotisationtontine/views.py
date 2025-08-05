@@ -653,3 +653,33 @@ def reset_cycle_view(request, group_id):
 def tirage_resultat_view(request, group_id):
     # logiquement, on affiche les résultats ici
     return render(request, 'cotisationtontine/tirage_resultat.html', {'group_id': group_id})
+
+
+from django.shortcuts import get_object_or_404, redirect, render
+from django.contrib import messages
+import random, string
+
+def inscription_par_invit(request, code):
+    group = get_object_or_404(Group, code_invitation=code)
+
+    if request.method == 'POST':
+        nom = request.POST.get('nom')
+        telephone = request.POST.get('telephone')
+
+        if CustomUser.objects.filter(phone=telephone).exists():
+            messages.error(request, "Ce numéro est déjà utilisé.")
+        else:
+            password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+            user = CustomUser.objects.create_user(
+                phone=telephone,
+                nom=nom,
+                password=password,
+            )
+            GroupMember.objects.create(
+                group=group,
+                user=user,
+            )
+            messages.success(request, f"Bienvenue dans le groupe {group.nom} ! Vous pouvez maintenant vous connecter.")
+            return redirect('accounts:login')
+
+    return render(request, 'cotisationtontine/inscription_par_invit.html', {'group': group})

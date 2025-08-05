@@ -3,6 +3,18 @@
 {% block title %}Détails du groupe{% endblock %}
 
 {% block content %}
+<div class="alert alert-info">
+  📩 <strong>Lien d’adhésion</strong> :
+  <a href="{% url 'cotisationtontine:inscription_par_invit' group.code_invitation %}">
+  Rejoindre via lien d’invitation
+  </a>
+  <a href="https://wa.me/?text=Rejoins notre groupe YaayESS ici 👉 {{ request.build_absolute_uri|slice:':-1' }}rejoindre/{{ group.code_invitation }}/"
+   class="btn btn-sm btn-success mt-2" target="_blank">Partager sur WhatsApp</a>
+
+  <br>
+  <small>Partagez ce lien par WhatsApp, email ou SMS pour permettre aux membres de s’inscrire automatiquement dans ce groupe.</small>
+</div>
+
 <div class="container mt-4">
 
   <!-- Titre -->

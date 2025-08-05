@@ -1,6 +1,8 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from .views import inscription_par_invit
+
 from .views_api import (
     GroupViewSet, GroupMemberViewSet,
     VersementViewSet, ActionLogViewSet
@@ -61,4 +63,7 @@ urlpatterns = [
 
     path('group/<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
 
+    path('rejoindre/<uuid:code>/', inscription_par_invit, name='inscription_par_invit')
+
 ]
+

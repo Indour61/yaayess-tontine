@@ -7,7 +7,7 @@ class Group(models.Model):
     nom = models.CharField(max_length=255, verbose_name="Nom du groupe")
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
     date_reset = models.DateTimeField(null=True, blank=True)
-    last_reset = models.DateTimeField(null=True, blank=True)
+    code_invitation = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)  # 👈 Nouveau champ
     admin = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
