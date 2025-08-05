@@ -1,16 +1,9 @@
-from django.shortcuts import render, redirect
-from django.contrib import messages
-from django.utils import timezone
-from datetime import timedelta
-
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.utils import timezone
 
-from .forms import GroupForm
-from .models import Group, GroupMember, Invitation
 from .utils import envoyer_invitation  # à implémenter pour Twilio/SMS
 from django.db import models
 
@@ -514,6 +507,12 @@ def creer_invitation_view(request, group_id):
     messages.success(request, f"Lien d'invitation généré pour {phone}")
     return redirect('cotisationtontine:group_detail', group_id=group.id)
 
+from django.db.models import Sum
+import random
+
+from .models import Group, CotisationTontine
+
+from cotisationtontine.models import CotisationTontine, GroupMember
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
@@ -553,11 +552,13 @@ def tirage_au_sort_view(request, group_id):
     }
     return render(request, 'cotisationtontine/tirage_resultat.html', context)
 
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
 from django.utils import timezone
+
 from .models import Group, GroupMember, CotisationTontine, Tirage, TirageHistorique
 
 @login_required
@@ -565,32 +566,30 @@ from .models import Group, GroupMember, CotisationTontine, Tirage, TirageHistori
 def reset_cycle_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
-    # ✅ Vérification admin
+    # ✅ Vérification que l'utilisateur est admin
     if request.user != group.admin:
         messages.error(request, "Seul l'administrateur du groupe peut réinitialiser le cycle.")
         return redirect('cotisationtontine:group_detail', group_id=group.id)
 
-    # ✅ Afficher confirmation avant POST
+    # ✅ Afficher une confirmation avant la réinitialisation
     if request.method != 'POST':
         return render(request, 'cotisationtontine/confirm_reset.html', {'group': group})
 
-    # ✅ Vérifier que tous les membres ont gagné
-    membres = set(group.membres.select_related('user'))
-    tirages_actuels = list(group.tirages.select_related('gagnant'))
-    tirages_historiques = list(group.tirages_historiques.select_related('gagnant'))
+    # ✅ Vérifier que tous les membres ont déjà gagné
+    membres = set(group.membres.all())
+    gagnants_actuels = {tirage.gagnant for tirage in group.tirages.all() if tirage.gagnant}
+    gagnants_historiques = {tirage.gagnant for tirage in group.tirages_historiques.all() if tirage.gagnant}
 
-    gagnants_actuels = {tirage.gagnant for tirage in tirages_actuels if tirage.gagnant}
-    gagnants_historiques = {tirage.gagnant for tirage in tirages_historiques if tirage.gagnant}
-    tous_gagnants = gagnants_actuels.union(gagnants_historiques)
-
-    membres_non_gagnants = membres - tous_gagnants
+    tous_les_gagnants = gagnants_actuels.union(gagnants_historiques)
+    membres_non_gagnants = membres - tous_les_gagnants
 
     if membres_non_gagnants:
         noms = ", ".join(m.user.username for m in membres_non_gagnants)
         messages.warning(request, f"Les membres suivants n'ont pas encore gagné : {noms}.")
         return redirect('cotisationtontine:group_detail', group_id=group.id)
 
-    # ✅ Archiver les tirages actuels
+    # ✅ Archiver les tirages en cours
+    tirages_actuels = group.tirages.all()
     TirageHistorique.objects.bulk_create([
         TirageHistorique(
             group=group,
@@ -601,11 +600,11 @@ def reset_cycle_view(request, group_id):
         for tirage in tirages_actuels
     ])
 
-    # ✅ Suppression des données de cycle en cours
-    group.tirages.all().delete()
+    # ✅ Supprimer les données du cycle en cours
+    tirages_actuels.delete()
     CotisationTontine.objects.filter(member__group=group).delete()
 
-    # ✅ Marquer le nouveau cycle
+    # ✅ Marquer la date du nouveau cycle
     group.date_reset = timezone.now()
     if hasattr(group, 'cycle_en_cours'):
         group.cycle_en_cours = True
@@ -614,14 +613,42 @@ def reset_cycle_view(request, group_id):
     messages.success(request, "✅ Cycle réinitialisé avec succès. Les membres peuvent recommencer les versements.")
     return redirect('cotisationtontine:group_detail', group_id=group.id)
 
-from django.views.decorators.http import require_http_methods
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from cotisationtontine.models import Group, CotisationTontine, Versement, GroupMember
+from django.contrib import messages
+from django.utils import timezone
+from django.urls import reverse
 
-def confirm_reset_cycle_view(request, group_id):
+
+@login_required
+def reset_cycle_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
-    return render(request, 'cotisationtontine/confirm_reset.html', {'group': group})
 
+    # ✅ Vérifie si l'utilisateur connecté est l'admin du groupe
+    if group.admin != request.user:
+        messages.error(request, "Vous n'avez pas la permission de réinitialiser ce groupe.")
+        return redirect('dashboard_tontine_simple')
 
-from django.shortcuts import render
+    if request.method == 'POST':
+        # Remettre à zéro les montants
+        for membre in group.membres.all():
+            membre.montant = 0
+            membre.save()
+
+        # Supprimer les cotisations et versements
+        CotisationTontine.objects.filter(member__group=group).delete()
+        Versement.objects.filter(member__group=group).delete()
+
+        # Date de reset
+        group.date_reset = timezone.now()
+        group.save()
+
+        messages.success(request, f"✅ Le cycle du groupe « {group.nom} » a été réinitialisé avec succès.")
+        return redirect('cotisationtontine:group_detail', group_id=group.id)
+
+    return render(request, 'cotisationtontine/confirm_reset_cycle.html', {'group': group})
+
 
 def tirage_resultat_view(request, group_id):
     # logiquement, on affiche les résultats ici

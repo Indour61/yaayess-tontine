@@ -6,7 +6,7 @@ import uuid
 class Group(models.Model):
     nom = models.CharField(max_length=255, verbose_name="Nom du groupe")
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
-    date_dernier_reset = models.DateTimeField(null=True, blank=True)
+    date_reset = models.DateTimeField(null=True, blank=True)
     last_reset = models.DateTimeField(null=True, blank=True)
     admin = models.ForeignKey(
         settings.AUTH_USER_MODEL,

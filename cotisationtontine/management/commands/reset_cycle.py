@@ -1,56 +1,47 @@
-from django.core.management.base import BaseCommand
-from cotisationtontine.models import Group, GroupMember, CotisationTontine, Tirage
-from django.utils.timezone import now
-from cotisationtontine.models import HistoriqueAction
+from django.core.management.base import BaseCommand, CommandError
+#from epargnecredit.models import Group, GroupMember
+from django.utils import timezone
 
 
 class Command(BaseCommand):
-    help = "Réinitialise les cotisations et le tirage au sort d’un groupe donné"
+    help = 'Réinitialise un cycle pour un groupe si tous les membres ont atteint le montant de base'
 
     def add_arguments(self, parser):
         parser.add_argument('group_id', type=int, help='ID du groupe à réinitialiser')
 
-    def handle(self, *args, **options):
-        group_id = options['group_id']
+    def handle(self, *args, **kwargs):
+        group_id = kwargs['group_id']
 
         try:
             group = Group.objects.get(id=group_id)
         except Group.DoesNotExist:
-            self.stderr.write(self.style.ERROR(f"Groupe avec ID {group_id} introuvable."))
+            raise CommandError(f"Groupe avec ID {group_id} introuvable.")
+
+        membres = group.membres.all()
+
+        if not membres.exists():
+            self.stdout.write(self.style.WARNING("Aucun membre dans ce groupe."))
             return
 
-        # Supprimer les cotisations
-        cotisations = CotisationTontine.objects.filter(member__group=group)
-        nb_cotisations = cotisations.count()
-        cotisations.delete()
+        # Vérifier que tous les membres ont atteint le montant de base
+        membres_incomplets = []
+        for membre in membres:
+            if not hasattr(membre, 'etat_versement') or membre.etat_versement != 'Atteint':
+                membres_incomplets.append(membre)
 
-        # Supprimer les tirages
-        tirages = Tirage.objects.filter(group=group)
-        nb_tirages = tirages.count()
-        tirages.delete()
+        if membres_incomplets:
+            self.stdout.write(self.style.WARNING("Tous les membres n'ont pas encore atteint le montant de base."))
+            for m in membres_incomplets:
+                self.stdout.write(f"- {m.user.username}")
+            return
 
-        # Remettre les montants à zéro
-        membres = GroupMember.objects.filter(group=group)
-        nb_membres = membres.count()
+        # Réinitialiser les données
         for membre in membres:
             membre.montant = 0
             membre.save()
 
-        self.stdout.write(self.style.SUCCESS(f"\nGroupe : {group.nom} (ID: {group.id})"))
-        self.stdout.write(f"📅 Date de réinitialisation : {now().strftime('%Y-%m-%d %H:%M:%S')}")
-        self.stdout.write(f"👥 Membres dans le groupe : {nb_membres}")
-        self.stdout.write(f"🎲 Tirages archivés : {nb_tirages}")
-        self.stdout.write(f"💸 Cotisations supprimées : {nb_cotisations}")
-        self.stdout.write("===========================================")
+        group.date_reset = timezone.now()
+        group.save()
 
-
-HistoriqueAction.objects.create(
-    group=group,
-    action='RESET_CYCLE',
-    description=(
-        f"Réinitialisation manuelle du cycle via la commande reset_cycle.\n"
-        f"Nombre de membres : {member_count}.\n"
-        f"Cotisations supprimées : {cotisation_count}.\n"
-        f"Tirages archivés : {tirage_count}."
-    )
-)
+        self.stdout.write(
+            self.style.SUCCESS(f"✅ Cycle du groupe '{group.nom}' (ID {group.id}) réinitialisé avec succès."))

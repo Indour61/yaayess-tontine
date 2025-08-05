@@ -11,6 +11,27 @@
         Groupe : <span class="text-success fw-semibold">{{ group.nom }}</span>
     </h4>
 
+    {% if erreur %}
+      <div class="alert alert-danger">
+        ⚠️ {{ erreur }}
+      </div>
+    {% endif %}
+
+    {% if tirage_possible %}
+      <a href="{% url 'cotisationtontine:lancer_tirage' group.id %}"
+         class="btn btn-primary btn-lg">
+         🎲 Lancer le tirage au sort
+      </a>
+    {% else %}
+      <a href="#"
+         class="btn btn-primary btn-lg disabled"
+         tabindex="-1"
+         aria-disabled="true">
+         🎲 Lancer le tirage au sort
+      </a>
+      <p class="text-danger mt-2">Tous les membres n'ont pas encore effectué leur cotisation.</p>
+    {% endif %}
+
     {% if gagnant %}
         <div class="mt-5">
             <h2 class="text-success">👏 Félicitations à 🎉</h2>

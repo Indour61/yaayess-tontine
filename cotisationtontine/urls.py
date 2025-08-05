@@ -55,5 +55,10 @@ urlpatterns = [
 
     # --- Cycle ---
     path('group/<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
-    path('group/<int:group_id>/cycle/confirmation-reset/', views.confirm_reset_cycle_view, name='confirm_reset_cycle'),
+#    path('group/<int:group_id>/cycle/confirmation-reset/', views.confirm_reset_cycle_view, name='confirm_reset_cycle'),
+
+    path('group/<int:group_id>/lancer-tirage/', views.tirage_au_sort_view, name='lancer_tirage'),
+
+    path('group/<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
+
 ]
