@@ -510,7 +510,6 @@ def creer_invitation_view(request, group_id):
 from django.db.models import Sum
 import random
 
-from .models import Group, CotisationTontine
 
 from cotisationtontine.models import CotisationTontine, GroupMember
 from django.shortcuts import get_object_or_404, render
@@ -521,9 +520,15 @@ import random
 
 from .models import Group, GroupMember, CotisationTontine, Tirage
 
+from django.http import HttpResponseForbidden
+
 @login_required
 def tirage_au_sort_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
+
+    # ✅ Vérifier si l'utilisateur est autorisé
+    if request.user != group.admin and not request.user.is_superuser:
+        return render(request, '403.html', status=403)
 
     # Filtrer membres actifs uniquement
     membres_eligibles = group.membres.filter(actif=True)
@@ -566,9 +571,9 @@ from .models import Group, GroupMember, CotisationTontine, Tirage, TirageHistori
 def reset_cycle_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
-    # ✅ Vérification que l'utilisateur est admin
-    if request.user != group.admin:
-        messages.error(request, "Seul l'administrateur du groupe peut réinitialiser le cycle.")
+    # ✅ Autoriser admin ou superuser
+    if request.user != group.admin and not request.user.is_superuser:
+        messages.error(request, "Seul l'administrateur ou un superutilisateur peut réinitialiser le cycle.")
         return redirect('cotisationtontine:group_detail', group_id=group.id)
 
     # ✅ Afficher une confirmation avant la réinitialisation
@@ -612,6 +617,7 @@ def reset_cycle_view(request, group_id):
 
     messages.success(request, "✅ Cycle réinitialisé avec succès. Les membres peuvent recommencer les versements.")
     return redirect('cotisationtontine:group_detail', group_id=group.id)
+
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required

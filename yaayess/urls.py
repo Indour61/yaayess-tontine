@@ -13,3 +13,5 @@ urlpatterns = [
     path('accounts/', include(('accounts.urls', 'accounts'), namespace='accounts')),
 
 ]
+handler403 = "django.shortcuts.render"
+

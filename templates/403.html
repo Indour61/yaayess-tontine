@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+
+{% block title %}⛔ Accès refusé{% endblock %}
+
+{% block content %}
+<div class="container text-center mt-5">
+    <h1 class="display-4 text-danger">⛔ Accès refusé</h1>
+    <p class="fs-4 mt-4">Vous n'avez pas la permission d'effectuer cette action.</p>
+    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-outline-primary mt-3">
+        Retour au tableau de bord
+    </a>
+</div>
+{% endblock %}

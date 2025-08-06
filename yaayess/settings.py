@@ -1,22 +1,10 @@
 import os
 from pathlib import Path
 
-"""
-import firebase_admin
-from firebase_admin import credentials
-
-FIREBASE_CRED_PATH = BASE_DIR / 'config/firebase_credentials.json'
-
-# Initialisation unique de Firebase
-if not firebase_admin._apps:
-    cred = credentials.Certificate(FIREBASE_CRED_PATH)
-    firebase_admin.initialize_app(cred)
-"""
 
 dependencies = [
     ('cotisationtontine', '0009_alter_group_date_creation'),
 ]
-
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -34,6 +22,14 @@ DEBUG = True
 
 #ALLOWED_HOSTS = []
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+
+# Pour rendre les erreurs visibles en mode debug=False
+
+#DEBUG = False
+#ALLOWED_HOSTS = ['*']  # ou ton domaine
+
+# Assure-toi d'avoir ce paramètre
+CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'
 
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
