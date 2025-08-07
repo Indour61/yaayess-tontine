@@ -63,7 +63,9 @@ urlpatterns = [
 
     path('group/<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
 
-    path('rejoindre/<uuid:code>/', inscription_par_invit, name='inscription_par_invit')
+    path('rejoindre/<uuid:code>/', inscription_par_invit, name='inscription_par_invit'),
+
+    path('rejoindre/<uuid:token>/', views.rejoindre_par_lien, name='rejoindre_par_lien'),
 
 ]
 

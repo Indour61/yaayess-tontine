@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block title %}Rejoindre le groupe {{ group.nom }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <div class="text-center mb-4">
+    <h2 class="text-success">🤝 Rejoindre le groupe "{{ group.nom }}"</h2>
+    <p class="text-muted">Entrez vos informations pour devenir membre.</p>
+  </div>
+
+  {% if message %}
+    <div class="alert alert-info text-center">
+      {{ message }}
+    </div>
+  {% endif %}
+
+  <div class="card mx-auto" style="max-width: 500px;">
+    <div class="card-body">
+      <form method="POST">
+        {% csrf_token %}
+
+        <div class="mb-3">
+          <label for="nom" class="form-label">Nom complet</label>
+          <input type="text" class="form-control" id="nom" name="nom" placeholder="Votre nom" required>
+        </div>
+
+        <div class="mb-3">
+          <label for="phone" class="form-label">Numéro de téléphone</label>
+          <input type="tel" class="form-control" id="phone" name="phone" placeholder="77 123 45 67" required>
+        </div>
+
+        <div class="d-grid">
+          <button type="submit" class="btn btn-primary">✅ Rejoindre le groupe</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -8,6 +8,7 @@ class Group(models.Model):
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
     date_reset = models.DateTimeField(null=True, blank=True)
     code_invitation = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)  # 👈 Nouveau champ
+    invitation_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     admin = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

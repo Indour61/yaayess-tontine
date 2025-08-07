@@ -80,22 +80,23 @@
        ➕ Ajouter un membre
     </a>
 
-    <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}" class="btn btn-warning">
-      🎲 Tirage au sort
-    </a>
+    {% if request.user == group.admin or request.user.is_super_admin %}
+    <div class="d-flex flex-wrap gap-2 mt-4">
 
-    <!-- Bouton Reset Cycle -->
-      {% if request.user == group.admin or request.user.is_superuser %}
-          <a href="{% url 'cotisationtontine:reset_cycle' group.id %}" class="btn btn-danger btn-lg">
-              ♻ Réinitialiser le cycle
-          </a>
-      {% else %}
-          <button class="btn btn-secondary btn-lg" disabled>
-              ♻ Réinitialiser le cycle (admin uniquement)
-          </button>
-      {% endif %}
+      <!-- 🎲 Bouton Tirage au sort -->
+      <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}" class="btn btn-outline-primary">
+        🎲 Lancer le tirage au sort
+      </a>
+
+      <!-- ♻️ Bouton Réinitialiser le cycle -->
+      <form action="{% url 'cotisationtontine:reset_cycle' group.id %}" method="post" onsubmit="return confirm('Confirmer la réinitialisation du cycle ?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-danger">
+          ♻️ Réinitialiser le cycle
+        </button>
+      </form>
   </div>
-
+{% endif %}
 
   <!-- Table des membres -->
   <div class="table-responsive">

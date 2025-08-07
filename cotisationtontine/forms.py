@@ -33,14 +33,13 @@ class GroupMemberForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
 
-    class GroupMemberForm(forms.ModelForm):
-        class Meta:
-            model = GroupMember
-            fields = ['user']  # Suppression de 'role'
-            # Suppression aussi du widget role puisqu'il n'existe plus
-            # widgets = {
-            #     'role': forms.Select(attrs={'class': 'form-select'})
-            # }
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['user'].label_from_instance = lambda obj: f"{obj.nom} ({obj.phone})"
+
+    class Meta:
+        model = GroupMember
+        fields = ['user']
 
 
 # ✅ Formulaire de versement
