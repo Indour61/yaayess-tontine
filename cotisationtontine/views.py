@@ -267,17 +267,19 @@ def reset_cycle_view(request, group_id):
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
-from .models import Group  # adapte au nom exact de ton modèle de groupe
+from .models import Group
 
 @login_required
 def group_list_view(request):
     """
-    Affiche la liste des groupes auxquels l'utilisateur est associé.
+    Affiche la liste des groupes :
+    - Tous les groupes si super admin
+    - Sinon, seulement ceux créés par l'utilisateur
     """
-    # Adapte selon ton modèle. Si ton modèle s'appelle Group et a un champ admin ou members :
-    groupes = Group.objects.filter(admin=request.user)  # exemple si tu veux les groupes créés par l'utilisateur
-    # Ou, si tu as un modèle de relation :
-    # groupes = request.user.group_set.all()
+    if request.user.is_super_admin:
+        groupes = Group.objects.all()
+    else:
+        groupes = Group.objects.filter(admin=request.user)
 
     return render(request, 'cotisationtontine/group_list.html', {
         'groupes': groupes

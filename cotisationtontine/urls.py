@@ -33,7 +33,7 @@ urlpatterns = [
     path('dashboard/', views.dashboard_tontine_simple, name='dashboard_tontine_simple'),
 
     # --- Groupes ---
-    path('groups/', views.group_list, name='group_list'),
+    path('groups/', views.group_list_view, name='group_list'),
     path('groups/create/', views.ajouter_groupe_view, name='ajouter_groupe'),
     path('group/<int:group_id>/', views.group_detail, name='group_detail'),
 

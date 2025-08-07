@@ -23,14 +23,6 @@ class InvitationAdmin(admin.ModelAdmin):
     list_filter = ('used',)
     search_fields = ('phone', 'group__nom')
 
-"""
-@admin.register
-class VersementAdmin(admin.ModelAdmin):
-    list_display = ('member', 'montant', 'methode', 'date')  # 'statut' supprimé
-    list_filter = ('methode',)  # 'statut' supprimé
-    search_fields = ('member__user__nom', 'member__group__nom', 'transaction_id')
-    autocomplete_fields = ('member',)
-"""
 
 @admin.register(ActionLog)
 class ActionLogAdmin(admin.ModelAdmin):

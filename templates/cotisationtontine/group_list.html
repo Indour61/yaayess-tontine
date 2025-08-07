@@ -8,9 +8,9 @@
   <a href="{% url 'cotisationtontine:ajouter_groupe' %}" class="btn btn-success">➕ Créer un groupe</a>
 </div>
 
-{% if groups %}
+{% if groupes %}
   <div class="list-group shadow-sm">
-    {% for g in groups %}
+    {% for g in groupes %}
       <a href="{% url 'cotisationtontine:group_detail' g.id %}" class="list-group-item list-group-item-action">
         <div class="d-flex justify-content-between align-items-center">
           <div>
@@ -24,7 +24,11 @@
   </div>
 {% else %}
   <div class="alert alert-info mt-3">
-    Vous n'avez encore créé aucun groupe. Commencez par en créer un !
+    {% if request.user.is_super_admin %}
+      Aucun groupe trouvé pour le moment.
+    {% else %}
+      Vous n'avez encore créé aucun groupe. Commencez par en créer un !
+    {% endif %}
   </div>
 {% endif %}
 {% endblock %}
