@@ -44,6 +44,10 @@
                     {{ montant_total|floatformat:0|intcomma }} FCFA
                 </strong>
             </p>
+            <!-- Bouton Payer le gagnant -->
+            <a href="{% url 'cotisationtontine:payer_gagnant' group.id %}" class="btn btn-warning btn-lg mt-4">
+                💸 Payer le gagnant maintenant
+            </a>
         </div>
     {% else %}
         <div class="alert alert-warning mt-5">

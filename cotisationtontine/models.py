@@ -207,3 +207,30 @@ class HistoriqueAction(models.Model):
 
     def __str__(self):
         return f"{self.get_action_display()} - {self.group.nom} - {self.date.strftime('%d/%m/%Y %H:%M')}"
+
+# tontine/models.py
+from django.db import models
+from django.conf import settings
+from .models import Group, GroupMember  # Assure-toi que c’est bien dans le même fichier
+
+class PaiementGagnant(models.Model):
+    STATUT_CHOICES = [
+        ('SUCCES', 'Succès'),
+        ('ECHEC', 'Échec'),
+    ]
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="paiements")
+    gagnant = models.ForeignKey(GroupMember, on_delete=models.CASCADE, related_name="paiements_reçus")
+    montant = models.DecimalField(max_digits=10, decimal_places=2)
+    statut = models.CharField(max_length=10, choices=STATUT_CHOICES)
+    message = models.TextField(blank=True, null=True)
+    transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    date_paiement = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date_paiement']
+        verbose_name = "Paiement gagnant"
+        verbose_name_plural = "Paiements des gagnants"
+
+    def __str__(self):
+        return f"{self.gagnant.user.nom} - {self.montant} FCFA - {self.statut}"

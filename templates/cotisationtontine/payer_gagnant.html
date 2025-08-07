@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}Payer le gagnant - {{ group.nom }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+  <h2 class="fw-bold text-primary">💸 Paiement du gagnant</h2>
+  <p class="lead">Vous êtes sur le point de transférer <strong>{{ montant_total }} FCFA</strong> à :</p>
+
+  <div class="card p-3 mb-4">
+    <h4 class="mb-1 text-success">{{ gagnant.user.nom }}</h4>
+    <p class="mb-0">📱 Téléphone : {{ gagnant.user.phone }}</p>
+    <p class="mb-0">👥 Groupe : {{ group.nom }}</p>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="alert alert-warning">
+      ⚠️ Cette action est irréversible. Une fois le paiement envoyé, il sera enregistré et ne pourra plus être annulé.
+    </div>
+    <button type="submit" class="btn btn-success">✅ Confirmer et envoyer le paiement</button>
+    <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-secondary ms-2">↩️ Retour</a>
+
+  </form>
+
+</div>
+{% endblock %}

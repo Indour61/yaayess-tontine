@@ -513,50 +513,53 @@ from django.db.models import Sum
 import random
 
 
-from cotisationtontine.models import CotisationTontine, GroupMember
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
-from django.utils import timezone
 from django.db import models
+from django.utils import timezone
+from django.http import HttpResponseForbidden
 import random
 
-from .models import Group, GroupMember, CotisationTontine, Tirage
+from cotisationtontine.models import Group, GroupMember, CotisationTontine, Tirage
 
-from django.http import HttpResponseForbidden
 
 @login_required
 def tirage_au_sort_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
-    # ✅ Vérifier si l'utilisateur est autorisé
+    # ✅ Vérifier que seul l'admin ou un superuser peut lancer un tirage
     if request.user != group.admin and not request.user.is_superuser:
         return render(request, '403.html', status=403)
 
-    # Filtrer membres actifs uniquement
-    membres_eligibles = group.membres.filter(actif=True)
+    # ✅ Filtrer uniquement les membres actifs et non exclus
+    membres_eligibles = group.membres.filter(actif=True, exit_liste=False)
+
+    gagnant = None
+    montant_total = 0
 
     if membres_eligibles.exists():
         gagnant = random.choice(list(membres_eligibles))
-        montant_total = CotisationTontine.objects.filter(member__group=group).aggregate(
-            total=models.Sum('montant')
-        )['total'] or 0
 
-        # Enregistrer tirage
+        # ✅ Calcul du montant total des cotisations valides du groupe
+        montant_total = CotisationTontine.objects.filter(
+            member__group=group,
+            statut='valide'
+        ).aggregate(total=models.Sum('montant'))['total'] or 0
+
+        # ✅ Enregistrement du tirage
         Tirage.objects.create(
             group=group,
             gagnant=gagnant,
             membre=gagnant,
             montant=montant_total,
         )
-    else:
-        gagnant = None
-        montant_total = 0
 
     context = {
         'group': group,
         'gagnant': gagnant,
         'montant_total': montant_total,
     }
+
     return render(request, 'cotisationtontine/tirage_resultat.html', context)
 
 
@@ -739,3 +742,91 @@ def rejoindre_groupe(request, uuid_code):
             message = f"Bienvenue {nom}, vous avez été ajouté au groupe {group.nom} avec succès !"
 
     return render(request, 'rejoindre_groupe.html', {'group': group, 'message': message})
+
+import requests
+from django.shortcuts import get_object_or_404, render, redirect
+from django.contrib import messages
+from django.db.models import Sum
+from django.conf import settings
+
+from .models import Group, Tirage, PaiementGagnant, CotisationTontine
+
+def payer_gagnant(request, group_id):
+    group = get_object_or_404(Group, id=group_id)
+
+    # Récupérer le dernier tirage gagnant
+    dernier_tirage = Tirage.objects.filter(group=group).order_by('-date_tirage').first()
+
+    if not dernier_tirage or not dernier_tirage.gagnant:
+        messages.error(request, "Aucun gagnant défini pour ce groupe.")
+        return redirect('group_detail', group_id=group.id)
+
+    gagnant = dernier_tirage.gagnant
+
+    # Calcul du montant total des cotisations validées
+    montant_total = CotisationTontine.objects.filter(
+        member__group=group,
+        statut='valide'
+    ).aggregate(total=Sum('montant'))['total'] or 0
+
+    if request.method == 'POST':
+        # Préparer les headers et payload pour PayDunya (ajuste selon API PayDunya)
+        url = "https://app.paydunya.com/api/v1/transfer-to-wallet"
+        headers = {
+            "Content-Type": "application/json",
+            "PAYDUNYA-MASTER-KEY": settings.PAYDUNYA_KEYS['master_key'],
+            "PAYDUNYA-PRIVATE-KEY": settings.PAYDUNYA_KEYS['private_key'],
+            "PAYDUNYA-TOKEN": settings.PAYDUNYA_KEYS['token'],
+        }
+        data = {
+            "amount": float(montant_total),
+            "recipient_number": gagnant.user.phone,
+            "wallet": "WAVE",  # ou autre wallet supporté
+            "reason": f"Paiement tirage - {group.nom}"
+        }
+
+        try:
+            response = requests.post(url, headers=headers, json=data)
+            res = response.json()
+
+            if res.get("response_code") == "00":
+                # Paiement réussi : enregistrer dans PaiementGagnant
+                PaiementGagnant.objects.create(
+                    group=group,
+                    gagnant=gagnant,
+                    montant=montant_total,
+                    statut='SUCCES',
+                    message=res.get("response_text", ""),
+                    transaction_id=res.get("transaction_id", "")
+                )
+                messages.success(request, f"Paiement de {montant_total} FCFA envoyé à {gagnant.user.nom} avec succès.")
+            else:
+                # Paiement échoué : enregistrer erreur
+                PaiementGagnant.objects.create(
+                    group=group,
+                    gagnant=gagnant,
+                    montant=montant_total,
+                    statut='ECHEC',
+                    message=res.get("response_text", "")
+                )
+                messages.error(request, f"Échec du paiement : {res.get('response_text')}")
+        except Exception as e:
+            messages.error(request, f"Erreur lors du paiement : {str(e)}")
+
+        return redirect('group_detail', group_id=group.id)
+
+    # Méthode GET : afficher la page de confirmation
+    return render(request, 'cotisationtontine/payer_gagnant.html', {
+        'group': group,
+        'gagnant': gagnant,
+        'montant_total': montant_total,
+    })
+
+from django.shortcuts import render
+from .models import PaiementGagnant
+
+def liste_paiements_gagnants(request):
+    paiements = PaiementGagnant.objects.select_related('gagnant__user', 'group').order_by('-date_paiement')
+    return render(request, 'cotisationtontine/paiement_gagnant.html', {
+        'paiements': paiements
+    })
