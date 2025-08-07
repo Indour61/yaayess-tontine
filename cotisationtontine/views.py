@@ -515,19 +515,16 @@ import random
 
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
-from django.db import models
 from django.utils import timezone
-from django.http import HttpResponseForbidden
 import random
 
-from cotisationtontine.models import Group, GroupMember, CotisationTontine, Tirage
-
+from cotisationtontine.models import Group, Tirage
 
 @login_required
 def tirage_au_sort_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
-    # ✅ Vérifier que seul l'admin ou un superuser peut lancer un tirage
+    # ✅ Vérifier que seul l'admin du groupe ou un superuser peut lancer un tirage
     if request.user != group.admin and not request.user.is_superuser:
         return render(request, '403.html', status=403)
 
@@ -538,13 +535,11 @@ def tirage_au_sort_view(request, group_id):
     montant_total = 0
 
     if membres_eligibles.exists():
+        # ✅ Choisir un gagnant au hasard
         gagnant = random.choice(list(membres_eligibles))
 
-        # ✅ Calcul du montant total des cotisations valides du groupe
-        montant_total = CotisationTontine.objects.filter(
-            member__group=group,
-            statut='valide'
-        ).aggregate(total=models.Sum('montant'))['total'] or 0
+        # ✅ Calcul simplifié du montant total attendu
+        montant_total = group.montant_base * membres_eligibles.count()
 
         # ✅ Enregistrement du tirage
         Tirage.objects.create(
