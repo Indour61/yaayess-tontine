@@ -1,28 +1,47 @@
 {% extends 'base.html' %}
+{% load humanize %}
 
-{% block title %}Payer le gagnant - {{ group.nom }}{% endblock %}
+{% block title %}💸 Paiement du gagnant{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container mt-5">
+    <h1 class="mb-4 text-warning fw-bold text-center">💸 Paiement du gagnant</h1>
 
-  <h2 class="fw-bold text-primary">💸 Paiement du gagnant</h2>
-  <p class="lead">Vous êtes sur le point de transférer <strong>{{ montant_total }} FCFA</strong> à :</p>
+    <div class="card shadow-sm p-4">
+        <p class="fs-5">Vous êtes sur le point de transférer
+            <strong class="text-danger">{{ montant_total|floatformat:0|intcomma }} FCFA</strong> à :
+        </p>
 
-  <div class="card p-3 mb-4">
-    <h4 class="mb-1 text-success">{{ gagnant.user.nom }}</h4>
-    <p class="mb-0">📱 Téléphone : {{ gagnant.user.phone }}</p>
-    <p class="mb-0">👥 Groupe : {{ group.nom }}</p>
-  </div>
+        <ul class="list-group list-group-flush mb-4">
+            <li class="list-group-item">
+                <strong>👤 Nom :</strong> {{ gagnant.user.nom }}
+            </li>
+            <li class="list-group-item">
+                <strong>📱 Téléphone :</strong> {{ gagnant.user.phone }}
+            </li>
+            <li class="list-group-item">
+                <strong>👥 Groupe :</strong> {{ group.nom }}
+            </li>
+        </ul>
 
-  <form method="post">
-    {% csrf_token %}
-    <div class="alert alert-warning">
-      ⚠️ Cette action est irréversible. Une fois le paiement envoyé, il sera enregistré et ne pourra plus être annulé.
+        <div class="alert alert-warning">
+            ⚠️ Cette action est irréversible. Une fois le paiement envoyé, il sera enregistré et ne pourra plus être annulé.
+        </div>
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-outline-secondary">
+                    ⬅ Annuler
+                </a>
+                <button type="submit" class="btn btn-success">
+                    ✅ Confirmer et payer {{ montant_total|floatformat:0|intcomma }} FCFA
+                </button>
+            </div>
+        </form>
     </div>
-    <button type="submit" class="btn btn-success">✅ Confirmer et envoyer le paiement</button>
-    <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-secondary ms-2">↩️ Retour</a>
 
-  </form>
-
+    <p class="text-center text-muted mt-4">© 2025 YaayESS. Tous droits réservés.</p>
 </div>
 {% endblock %}
+

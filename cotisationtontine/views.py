@@ -741,10 +741,9 @@ def rejoindre_groupe(request, uuid_code):
 import requests
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib import messages
-from django.db.models import Sum
 from django.conf import settings
 
-from .models import Group, Tirage, PaiementGagnant, CotisationTontine
+from .models import Group, Tirage, PaiementGagnant
 
 def payer_gagnant(request, group_id):
     group = get_object_or_404(Group, id=group_id)
@@ -758,14 +757,10 @@ def payer_gagnant(request, group_id):
 
     gagnant = dernier_tirage.gagnant
 
-    # Calcul du montant total des cotisations validées
-    montant_total = CotisationTontine.objects.filter(
-        member__group=group,
-        statut='valide'
-    ).aggregate(total=Sum('montant'))['total'] or 0
+    # ✅ Calcul simplifié du montant total (montant de base × membres éligibles)
+    montant_total = group.montant_base * group.membres.filter(actif=True, exit_liste=False).count()
 
     if request.method == 'POST':
-        # Préparer les headers et payload pour PayDunya (ajuste selon API PayDunya)
         url = "https://app.paydunya.com/api/v1/transfer-to-wallet"
         headers = {
             "Content-Type": "application/json",
@@ -776,7 +771,7 @@ def payer_gagnant(request, group_id):
         data = {
             "amount": float(montant_total),
             "recipient_number": gagnant.user.phone,
-            "wallet": "WAVE",  # ou autre wallet supporté
+            "wallet": "WAVE",
             "reason": f"Paiement tirage - {group.nom}"
         }
 
@@ -785,7 +780,6 @@ def payer_gagnant(request, group_id):
             res = response.json()
 
             if res.get("response_code") == "00":
-                # Paiement réussi : enregistrer dans PaiementGagnant
                 PaiementGagnant.objects.create(
                     group=group,
                     gagnant=gagnant,
@@ -794,9 +788,11 @@ def payer_gagnant(request, group_id):
                     message=res.get("response_text", ""),
                     transaction_id=res.get("transaction_id", "")
                 )
-                messages.success(request, f"Paiement de {montant_total} FCFA envoyé à {gagnant.user.nom} avec succès.")
+                messages.success(
+                    request,
+                    f"Paiement de {montant_total:,} FCFA envoyé à {gagnant.user.nom} avec succès."
+                )
             else:
-                # Paiement échoué : enregistrer erreur
                 PaiementGagnant.objects.create(
                     group=group,
                     gagnant=gagnant,
@@ -810,7 +806,6 @@ def payer_gagnant(request, group_id):
 
         return redirect('group_detail', group_id=group.id)
 
-    # Méthode GET : afficher la page de confirmation
     return render(request, 'cotisationtontine/payer_gagnant.html', {
         'group': group,
         'gagnant': gagnant,
