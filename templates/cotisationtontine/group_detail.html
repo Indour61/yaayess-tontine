@@ -149,7 +149,7 @@
   <div class="mt-5">
     <h4>🕓 Historique des actions</h4>
     <ul class="list-group">
-      {% for action in group.actions.all %}
+      {% for action in group.historique_actions.all %}
         <li class="list-group-item">
           <strong>{{ action.date|date:"d/m/Y H:i" }}</strong> —
           <span class="fw-semibold">{{ action.get_action_display }}</span><br>

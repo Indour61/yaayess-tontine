@@ -73,4 +73,7 @@ urlpatterns = [
     path('paiement_gagnant/callback/', views.paiement_gagnant_callback, name='paiement_gagnant_callback'),
     path('paiement_gagnant/merci/', views.paiement_gagnant_merci, name='paiement_gagnant_merci'),
 
+    path("group/<int:group_id>/historique-cycles/", views.historique_cycles_view, name="historique_cycles",),
+
+    path("historique-actions/", views.historique_actions_view, name="historique_actions"),
 ]

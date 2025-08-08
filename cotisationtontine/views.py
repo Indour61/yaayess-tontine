@@ -204,7 +204,7 @@ def group_list(request):
 from django.db.models import Sum
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from .models import Group, GroupMember, Versement
+from .models import Group, GroupMember, Versement, ActionLog  # ⬅️ import ActionLog si dans le même app
 
 @login_required
 def group_detail(request, group_id):
@@ -212,9 +212,7 @@ def group_detail(request, group_id):
 
     membres = group.membres.select_related('user')
 
-#    user_is_admin = group.membres.filter(user=request.user, role='ADMIN').exists()
-
-    # Versements du groupe
+    # ✅ Récupération des versements
     versements = Versement.objects.filter(member__group=group)
     total_montant = versements.aggregate(total=Sum('montant'))['total'] or 0
 
@@ -225,15 +223,20 @@ def group_detail(request, group_id):
     for membre in membres:
         membre.montant = montants_membres_dict.get(membre.id, 0)
 
-    # ✅ Ajout : stocker l'admin dans le contexte
-    admin_user = group.admin  # CustomUser
+    # ✅ Ajout : utilisateur admin
+    admin_user = group.admin
+
+    # ✅ Ajout : historique des actions (si ActionLog a un champ group)
+    actions = ActionLog.objects.filter(group=group).order_by('-date') if hasattr(ActionLog, "group") else []
 
     return render(request, 'cotisationtontine/group_detail.html', {
         'group': group,
         'membres': membres,
         'versements': versements,
         'total_montant': total_montant,
-        'admin_user': admin_user,  # ⬅️ Ajouté
+        'admin_user': admin_user,
+        'actions': actions,  # ⬅️ envoyé au template
+        'user_is_admin': request.user == admin_user or getattr(request.user, "is_super_admin", False),
     })
 
 from django.http import HttpResponse
@@ -660,6 +663,36 @@ def tirage_resultat_view(request, group_id):
     # logiquement, on affiche les résultats ici
     return render(request, 'cotisationtontine/tirage_resultat.html', {'group_id': group_id})
 
+# cotisationtontine/views.py
+
+from django.shortcuts import render, get_object_or_404
+#from .models import Group, Cycle
+from django.contrib.auth.decorators import login_required
+
+@login_required
+def historique_cycles_view(request, group_id):
+    """
+    Affiche l'historique des cycles passés d'un groupe.
+    """
+    group = get_object_or_404(Group, id=group_id)
+
+    # Récupération des cycles archivés (ex: statut = "fini")
+    anciens_cycles = (
+        Cycle.objects.filter(group=group)
+        .exclude(date_fin__isnull=True)  # On garde que les cycles terminés
+        .prefetch_related(
+            "etapes__tirage__beneficiaire__user"
+        )  # Optimise les requêtes
+        .order_by("-date_debut")
+    )
+
+    context = {
+        "group": group,
+        "anciens_cycles": anciens_cycles
+    }
+    return render(request, "cotisationtontine/historique_cycles.html", context)
+
+
 
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
@@ -926,4 +959,22 @@ def liste_paiements_gagnants(request):
     paiements = PaiementGagnant.objects.select_related('gagnant__user', 'group').order_by('-date_paiement')
     return render(request, 'cotisationtontine/paiement_gagnant.html', {
         'paiements': paiements
+    })
+
+# cotisationtontine/views.py
+
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from .models import ActionLog
+
+@login_required
+def historique_actions_view(request):
+    """
+    Affiche l'historique des actions enregistrées dans ActionLog.
+    """
+    # Récupération des logs déjà triés via Meta.ordering
+    logs = ActionLog.objects.select_related("user")
+
+    return render(request, "cotisationtontine/historique_actions.html", {
+        "logs": logs
     })

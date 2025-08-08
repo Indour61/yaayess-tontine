@@ -178,9 +178,15 @@ class Versement(models.Model):
         """Montant total payé = montant + frais (utile pour PayDunya)."""
         return self.montant + self.frais
 
-
-# ✅ Historique des actions
+# ✅ Historique des actions générales
 class ActionLog(models.Model):
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        related_name="action_logs",  # <- NOM CHANGÉ
+        null=True,
+        blank=True
+    )
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     action = models.TextField()
     date = models.DateTimeField(auto_now_add=True)
@@ -191,22 +197,26 @@ class ActionLog(models.Model):
     def __str__(self):
         return f"{self.date} - {self.user} : {self.action}"
 
-from django.db import models
-from django.utils import timezone
 
+# ✅ Historique spécifique (avec types d'actions prédéfinis)
 class HistoriqueAction(models.Model):
     ACTION_CHOICES = [
         ('RESET_CYCLE', 'Réinitialisation du cycle'),
         ('AUTRE', 'Autre action'),
     ]
 
-    group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name='actions')
+    group = models.ForeignKey(
+        'Group',
+        on_delete=models.CASCADE,
+        related_name='historique_actions'  # <- NOM CHANGÉ
+    )
     action = models.CharField(max_length=50, choices=ACTION_CHOICES)
     description = models.TextField()
     date = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
         return f"{self.get_action_display()} - {self.group.nom} - {self.date.strftime('%d/%m/%Y %H:%M')}"
+
 
 # tontine/models.py
 from django.db import models
@@ -234,3 +244,4 @@ class PaiementGagnant(models.Model):
 
     def __str__(self):
         return f"{self.gagnant.user.nom} - {self.montant} FCFA - {self.statut}"
+
