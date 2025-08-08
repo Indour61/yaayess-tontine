@@ -3,39 +3,68 @@
 
 {% block content %}
 <div class="container mt-4">
-  <h2>Effectuer un versement pour {{ member.nom }}</h2>
+  <h2 class="mb-4">Effectuer un versement pour <strong>{{ member.nom }}</strong></h2>
 
-  <form method="post" id="versement-form">
+  <form method="post" id="versement-form" class="needs-validation" novalidate>
     {% csrf_token %}
 
     <!-- Champ montant -->
     <div class="mb-3">
       <label for="montant" class="form-label">Montant à verser (FCFA)</label>
-      <input type="number" class="form-control" name="montant" id="montant" min="1" required>
+      <input
+        type="number"
+        class="form-control"
+        name="montant"
+        id="montant"
+        min="1"
+        required
+        placeholder="Ex: 5000"
+      >
+      <div class="invalid-feedback">
+        Veuillez saisir un montant valide supérieur à 0.
+      </div>
     </div>
 
     <!-- Champ méthode de paiement -->
     <div class="mb-3">
       <label for="methode" class="form-label">Méthode de paiement</label>
       <select name="methode" id="methode" class="form-select" required>
-        <option value="paydunya">PayDunya</option>
+        <option value="paydunya" selected>PayDunya</option>
         <option value="caisse">Caisse (sans frais)</option>
       </select>
+      <div class="invalid-feedback">
+        Veuillez sélectionner une méthode de paiement.
+      </div>
     </div>
 
     <!-- Infos frais -->
-    <div class="mb-3" id="frais-section">
+    <div class="mb-3" id="frais-section" style="display:none;">
       <p class="mb-1">🧾 <strong>Frais :</strong> <span id="frais">0</span> FCFA</p>
       <p class="mb-1">💳 <strong>Total à payer :</strong> <span id="total">0</span> FCFA</p>
     </div>
 
     <!-- Boutons -->
     <button type="submit" class="btn btn-success" id="submit-btn">💳 Payer avec PayDunya</button>
-    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-secondary">Annuler</a>
+    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-secondary ms-2">Annuler</a>
   </form>
 </div>
 
 <script>
+// Bootstrap validation custom
+(() => {
+  'use strict'
+
+  const form = document.getElementById('versement-form')
+
+  form.addEventListener('submit', event => {
+    if (!form.checkValidity()) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    form.classList.add('was-validated')
+  }, false)
+})();
+
 document.addEventListener('DOMContentLoaded', function() {
   const montantInput = document.getElementById('montant');
   const methodeSelect = document.getElementById('methode');
@@ -45,10 +74,14 @@ document.addEventListener('DOMContentLoaded', function() {
   const submitBtn = document.getElementById('submit-btn');
 
   function updateFrais() {
-    let montant = parseFloat(montantInput.value) || 0;
+    let montant = parseFloat(montantInput.value);
+    if (isNaN(montant) || montant <= 0) {
+      montant = 0;
+    }
+
     let methode = methodeSelect.value;
 
-    if (methode === 'paydunya') {
+    if (methode === 'paydunya' && montant > 0) {
       let fraisPourcent = montant * 0.02;
       let fraisFixe = 50;
       let fraisTotal = fraisPourcent + fraisFixe;
@@ -58,7 +91,6 @@ document.addEventListener('DOMContentLoaded', function() {
       totalEl.textContent = total.toFixed(0);
       fraisSection.style.display = 'block';
       submitBtn.textContent = '💳 Payer avec PayDunya';
-
     } else {
       // Mode "Caisse"
       fraisSection.style.display = 'none';
@@ -73,3 +105,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+

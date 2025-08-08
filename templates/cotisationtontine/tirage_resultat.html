@@ -4,7 +4,7 @@
 {% block title %}🎲 Tirage au sort{% endblock %}
 
 {% block content %}
-<div class="container mt-5 text-center">
+<div class="container mt-5 text-center" style="max-width: 600px;">
     <h1 class="mb-4 text-primary fw-bold">🎲 Tirage au sort</h1>
 
     <h4 class="mb-3">
@@ -12,19 +12,19 @@
     </h4>
 
     {% if erreur %}
-      <div class="alert alert-danger">
+      <div class="alert alert-danger" role="alert">
         ⚠️ {{ erreur }}
       </div>
     {% endif %}
 
     {% if tirage_possible %}
       <a href="{% url 'cotisationtontine:lancer_tirage' group.id %}"
-         class="btn btn-primary btn-lg">
+         class="btn btn-primary btn-lg mb-3">
          🎲 Lancer le tirage au sort
       </a>
     {% else %}
       <a href="#"
-         class="btn btn-primary btn-lg disabled"
+         class="btn btn-primary btn-lg disabled mb-3"
          tabindex="-1"
          aria-disabled="true">
          🎲 Lancer le tirage au sort
@@ -50,12 +50,12 @@
             </a>
         </div>
     {% else %}
-        <div class="alert alert-warning mt-5">
+        <div class="alert alert-warning mt-5" role="alert">
             Aucun membre éligible au tirage pour le moment.
         </div>
     {% endif %}
 
-    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-outline-primary mt-4">
+    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-outline-primary mt-4 px-4">
         ⬅ Retour au tableau de bord
     </a>
 </div>

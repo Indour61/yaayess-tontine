@@ -7,38 +7,40 @@
   <h2 class="fw-bold text-success">💸 Historique des paiements des gagnants</h2>
 
   {% if paiements %}
-    <table class="table table-bordered table-hover mt-3">
-      <thead class="table-success">
-        <tr>
-          <th>Groupe</th>
-          <th>Gagnant</th>
-          <th>Montant</th>
-          <th>Statut</th>
-          <th>Date</th>
-          <th>Message</th>
-          <th>Transaction ID</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in paiements %}
-        <tr>
-          <td>{{ p.group.nom }}</td>
-          <td>{{ p.gagnant.user.nom }}</td>
-          <td>{{ p.montant }} FCFA</td>
-          <td>
-            {% if p.statut == 'SUCCES' %}
-              <span class="badge bg-success">Succès</span>
-            {% else %}
-              <span class="badge bg-danger">Échec</span>
-            {% endif %}
-          </td>
-          <td>{{ p.date_paiement|date:"d/m/Y H:i" }}</td>
-          <td>{{ p.message|default:"—" }}</td>
-          <td>{{ p.transaction_id|default:"—" }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive mt-3">
+      <table class="table table-bordered table-hover align-middle">
+        <thead class="table-success">
+          <tr>
+            <th>Groupe</th>
+            <th>Gagnant</th>
+            <th>Montant</th>
+            <th>Statut</th>
+            <th>Date</th>
+            <th>Message</th>
+            <th>Transaction ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in paiements %}
+          <tr>
+            <td>{{ p.group.nom }}</td>
+            <td>{{ p.gagnant.user.nom }}</td>
+            <td>{{ p.montant }} FCFA</td>
+            <td>
+              {% if p.statut == 'SUCCES' %}
+                <span class="badge bg-success">Succès</span>
+              {% else %}
+                <span class="badge bg-danger">Échec</span>
+              {% endif %}
+            </td>
+            <td>{{ p.date_paiement|date:"d/m/Y H:i" }}</td>
+            <td>{{ p.message|default:"—" }}</td>
+            <td>{{ p.transaction_id|default:"—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
     <div class="alert alert-info mt-4">
       Aucun paiement gagnant enregistré pour le moment.

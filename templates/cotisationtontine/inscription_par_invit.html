@@ -3,19 +3,64 @@
 {% block title %}Inscription - {{ group.nom }}{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-    <h2>👋 Rejoindre le groupe "{{ group.nom }}"</h2>
-    <form method="post">
-        {% csrf_token %}
-        <div class="mb-3">
-            <label for="nom" class="form-label">Nom complet</label>
-            <input type="text" class="form-control" id="nom" name="nom" required>
-        </div>
-        <div class="mb-3">
-            <label for="telephone" class="form-label">Téléphone</label>
-            <input type="text" class="form-control" id="telephone" name="telephone" required>
-        </div>
-        <button type="submit" class="btn btn-success">Rejoindre le groupe</button>
-    </form>
+<div class="container mt-5" style="max-width: 480px;">
+  <h2 class="mb-4">👋 Rejoindre le groupe "<strong>{{ group.nom }}</strong>"</h2>
+
+  <form method="post" class="needs-validation" novalidate>
+    {% csrf_token %}
+
+    <div class="mb-3">
+      <label for="nom" class="form-label">Nom complet</label>
+      <input
+        type="text"
+        class="form-control"
+        id="nom"
+        name="nom"
+        placeholder="Ex: Fatou Diop"
+        required
+        autocomplete="name"
+      >
+      <div class="invalid-feedback">
+        Veuillez saisir votre nom complet.
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label for="telephone" class="form-label">Téléphone</label>
+      <input
+        type="tel"
+        class="form-control"
+        id="telephone"
+        name="telephone"
+        placeholder="+221770000000"
+        pattern="^\+?[0-9\s\-]{7,15}$"
+        required
+        autocomplete="tel"
+      >
+      <div class="form-text">Saisir le numéro complet avec indicatif, ex: +221770000000</div>
+      <div class="invalid-feedback">
+        Veuillez saisir un numéro de téléphone valide.
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-success w-100">Rejoindre le groupe</button>
+  </form>
 </div>
+
+<script>
+(() => {
+  'use strict'
+
+  const form = document.querySelector('form.needs-validation')
+
+  form.addEventListener('submit', event => {
+    if (!form.checkValidity()) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    form.classList.add('was-validated')
+  }, false)
+})();
+</script>
 {% endblock %}
+

@@ -861,6 +861,63 @@ def payer_gagnant(request, group_id):
         'montant_total': montant_total,
     })
 
+import json
+import logging
+from django.http import HttpResponse, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+from .models import PaiementGagnant
+
+logger = logging.getLogger(__name__)
+
+@csrf_exempt  # PayDunya ne peut pas envoyer le CSRF token
+def paiement_gagnant_callback(request):
+    if request.method != 'POST':
+        return JsonResponse({"error": "Méthode non autorisée"}, status=405)
+
+    try:
+        data = json.loads(request.body)
+        logger.info(f"Callback PayDunya reçu: {json.dumps(data)}")
+
+        token = data.get('token')
+        status = data.get('status')  # Ex: "PAID", "FAILED", etc.
+        response_code = data.get('response_code')
+        response_text = data.get('response_text', '')
+
+        if not token:
+            return JsonResponse({"error": "Token manquant"}, status=400)
+
+        # Chercher le PaiementGagnant par transaction_id (token)
+        paiement = PaiementGagnant.objects.filter(transaction_id=token).first()
+        if not paiement:
+            logger.error(f"PaiementGagnant introuvable pour token={token}")
+            return JsonResponse({"error": "Paiement introuvable"}, status=404)
+
+        # Mettre à jour le statut selon la réponse
+        if response_code == "00" and status == "PAID":
+            paiement.statut = 'SUCCES'
+        else:
+            paiement.statut = 'ECHEC'
+
+        paiement.message = response_text
+        paiement.save()
+
+        logger.info(f"PaiementGagnant {token} mis à jour avec statut {paiement.statut}")
+
+        return JsonResponse({"success": True})
+
+    except json.JSONDecodeError:
+        logger.error("Corps JSON invalide dans callback PayDunya")
+        return JsonResponse({"error": "JSON invalide"}, status=400)
+    except Exception as e:
+        logger.error(f"Erreur inattendue dans callback PayDunya: {e}")
+        return JsonResponse({"error": "Erreur serveur"}, status=500)
+
+from django.shortcuts import render
+
+def paiement_gagnant_merci(request):
+    return render(request, 'cotisationtontine/paiement_gagnant_merci.html')
+
 
 from django.shortcuts import render
 from .models import PaiementGagnant

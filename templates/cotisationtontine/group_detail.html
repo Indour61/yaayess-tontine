@@ -1,50 +1,53 @@
 {% extends 'base.html' %}
+{% load humanize %}
+
 
 {% block title %}Détails du groupe{% endblock %}
 
 {% block content %}
-<div class="alert alert-info">
-  📩 <strong>Lien d’adhésion</strong> :
-  <a href="{% url 'cotisationtontine:inscription_par_invit' group.code_invitation %}">
-  Rejoindre via lien d’invitation
-  </a>
-  <a href="https://wa.me/?text=Rejoins notre groupe YaayESS ici 👉 {{ request.build_absolute_uri|slice:':-1' }}rejoindre/{{ group.code_invitation }}/"
-   class="btn btn-sm btn-success mt-2" target="_blank">Partager sur WhatsApp</a>
-
-  <br>
-  <small>Partagez ce lien par WhatsApp, email ou SMS pour permettre aux membres de s’inscrire automatiquement dans ce groupe.</small>
-</div>
-
 <div class="container mt-4">
 
-  <!-- Titre -->
+  <!-- Lien d'adhésion et partage WhatsApp -->
+  <div class="alert alert-info d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
+    <div>
+      📩 <strong>Lien d’adhésion</strong> :
+      <a href="{% url 'cotisationtontine:inscription_par_invit' group.code_invitation %}">
+        Rejoindre via lien d’invitation
+      </a>
+      <br>
+      <small>Partagez ce lien par WhatsApp, email ou SMS pour permettre aux membres de s’inscrire automatiquement dans ce groupe.</small>
+    </div>
+    <a href="https://wa.me/?text=Rejoins notre groupe YaayESS ici 👉 {{ request.build_absolute_uri|slice:':-1' }}rejoindre/{{ group.code_invitation }}/"
+       class="btn btn-sm btn-success ms-md-auto"
+       target="_blank" rel="noopener">
+      <i class="bi bi-whatsapp"></i> Partager sur WhatsApp
+    </a>
+  </div>
+
+  <!-- Titre et infos du groupe -->
   <h1 class="fw-bold text-success">{{ group.nom }}</h1>
   <p class="mb-1">📅 Date de création : {{ group.date_creation|date:"d/m/Y" }}</p>
-
   {% if group.date_reset %}
-    <p class="mb-1 text-muted">🔁 Dernier reset : {{ group.date_reset|date:"d/m/Y H:i" }}</p>
+    <p class="mb-3 text-muted">🔁 Dernier reset : {{ group.date_reset|date:"d/m/Y H:i" }}</p>
   {% endif %}
-
   <p class="mb-4">💰 Montant de base du groupe :
-    <strong class="text-primary">
-      {{ group.montant_base|default:"0"|floatformat:0 }} FCFA
-    </strong>
+    <strong class="text-primary">{{ group.montant_base|default:"0"|floatformat:0 }} FCFA</strong>
   </p>
 
   <!-- Messages flash -->
   {% if messages %}
     {% for message in messages %}
-      <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %} mt-2">
+      <div class="alert alert-{{ message.tags|default:'info' }} mt-2" role="alert">
         {{ message|safe }}
       </div>
     {% endfor %}
   {% endif %}
 
-  <!-- ✅ Invitation -->
+  <!-- Invitation (admin uniquement) -->
   {% if user_is_admin %}
-    <div class="card p-3 mb-4 border-success">
+    <div class="card p-3 mb-4 border-success shadow-sm">
       <h5 class="text-success fw-bold">📨 Inviter un membre</h5>
-      <form method="post" action="{% url 'cotisationtontine:creer_invitation' group.id %}" class="row g-2">
+      <form method="post" action="{% url 'cotisationtontine:creer_invitation' group.id %}" class="row g-2 align-items-center">
         {% csrf_token %}
         <div class="col-12 col-md-6">
           <input type="text" name="phone" class="form-control" placeholder="Numéro WhatsApp (ex: 77xxxxxxx)" required>
@@ -57,13 +60,12 @@
       {% if request.session.last_invitation_link %}
         <div class="alert alert-success mt-3">
           🔗 Lien d’invitation :
-          <div class="d-flex flex-column">
+          <div class="d-flex flex-column flex-md-row align-items-center gap-2">
             <a href="{{ request.session.last_invitation_link }}" target="_blank" class="text-break">
               {{ request.session.last_invitation_link }}
             </a>
-            <a class="btn btn-sm btn-outline-success mt-2"
-               href="https://wa.me/?text={{ request.session.last_invitation_link|urlencode }}"
-               target="_blank">
+            <a href="https://wa.me/?text={{ request.session.last_invitation_link|urlencode }}"
+               class="btn btn-sm btn-outline-success" target="_blank" rel="noopener">
               📤 Partager sur WhatsApp
             </a>
           </div>
@@ -73,34 +75,31 @@
   {% endif %}
 
   <!-- Membres + boutons -->
-  <div class="d-flex flex-wrap justify-content-start align-items-center gap-2 mb-3">
-    <h2 class="mt-4 me-auto">Membres</h2>
-
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h2 class="mt-4">{{ membres.count }} membre{{ membres.count|pluralize }}</h2>
     <a href="{% url 'cotisationtontine:ajouter_membre' group.id %}" class="btn btn-primary">
-       ➕ Ajouter un membre
+      ➕ Ajouter un membre
     </a>
+  </div>
 
-    {% if request.user == group.admin or request.user.is_super_admin %}
-    <div class="d-flex flex-wrap gap-2 mt-4">
-
-      <!-- 🎲 Bouton Tirage au sort -->
+  {% if request.user == group.admin or request.user.is_super_admin %}
+    <div class="d-flex flex-wrap gap-2 mb-3">
       <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}" class="btn btn-outline-primary">
         🎲 Lancer le tirage au sort
       </a>
 
-      <!-- ♻️ Bouton Réinitialiser le cycle -->
       <form action="{% url 'cotisationtontine:reset_cycle' group.id %}" method="post" onsubmit="return confirm('Confirmer la réinitialisation du cycle ?');">
         {% csrf_token %}
         <button type="submit" class="btn btn-outline-danger">
           ♻️ Réinitialiser le cycle
         </button>
       </form>
-  </div>
-{% endif %}
+    </div>
+  {% endif %}
 
   <!-- Table des membres -->
-  <div class="table-responsive">
-    <table class="table table-bordered align-middle">
+  <div class="table-responsive shadow-sm rounded">
+    <table class="table table-bordered align-middle mb-0">
       <thead class="table-light">
         <tr>
           <th>Nom</th>
@@ -115,11 +114,11 @@
             <td>
               {{ m.user.nom }}
               {% if m.user == group.admin %}
-                ✅ <span class="text-success fw-bold">(admin)</span>
+                <span class="badge bg-success ms-2">Admin</span>
               {% endif %}
             </td>
             <td>{{ m.user.phone }}</td>
-            <td>{{ m.montant }} FCFA</td>
+            <td>{{ m.montant|intcomma }} FCFA</td>
             <td class="d-flex flex-wrap gap-1">
               {% if m.montant < group.montant_base %}
                 <a href="{% url 'cotisationtontine:initier_versement' m.id %}" class="btn btn-sm btn-success flex-fill">💳 Verser</a>
@@ -127,40 +126,40 @@
                 <button class="btn btn-sm btn-secondary flex-fill" disabled>✅ Atteint</button>
               {% endif %}
               <a href="{% url 'cotisationtontine:editer_membre' group.id m.id %}" class="btn btn-sm btn-warning flex-fill">✏️</a>
-              <a href="{% url 'cotisationtontine:supprimer_membre' group.id m.id %}" class="btn btn-sm btn-danger flex-fill">🗑️</a>
+              <a href="{% url 'cotisationtontine:supprimer_membre' group.id m.id %}" class="btn btn-sm btn-danger flex-fill" onclick="return confirm('Confirmer la suppression ?');">🗑️</a>
             </td>
           </tr>
         {% empty %}
           <tr>
-            <td colspan="4" class="text-center">Aucun membre pour l’instant</td>
+            <td colspan="4" class="text-center text-muted">Aucun membre pour l’instant</td>
           </tr>
         {% endfor %}
       </tbody>
       <tfoot>
         <tr class="fw-bold table-light">
           <td colspan="2" class="text-end">Total cotisations</td>
-          <td>{{ total_montant|default:"0"|floatformat:0 }} FCFA</td>
+          <td>{{ total_montant|default:"0"|intcomma }} FCFA</td>
           <td></td>
         </tr>
       </tfoot>
     </table>
   </div>
-</div>
-<!-- Historique des actions -->
-<div class="mt-5">
-  <h4>🕓 Historique des actions</h4>
-  <ul class="list-group">
-    {% for action in group.actions.all %}
-      <li class="list-group-item">
-        <strong>{{ action.date|date:"d/m/Y H:i" }}</strong> —
-        <span class="fw-semibold">{{ action.get_action_display }}</span><br>
-        <span class="text-muted small">{{ action.description|linebreaksbr }}</span>
-      </li>
-    {% empty %}
-      <li class="list-group-item text-muted">Aucune action enregistrée pour ce groupe.</li>
-    {% endfor %}
-  </ul>
-</div>
 
+  <!-- Historique des actions -->
+  <div class="mt-5">
+    <h4>🕓 Historique des actions</h4>
+    <ul class="list-group">
+      {% for action in group.actions.all %}
+        <li class="list-group-item">
+          <strong>{{ action.date|date:"d/m/Y H:i" }}</strong> —
+          <span class="fw-semibold">{{ action.get_action_display }}</span><br>
+          <span class="text-muted small">{{ action.description|linebreaksbr }}</span>
+        </li>
+      {% empty %}
+        <li class="list-group-item text-muted">Aucune action enregistrée pour ce groupe.</li>
+      {% endfor %}
+    </ul>
+  </div>
 
+</div>
 {% endblock %}

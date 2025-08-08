@@ -1,12 +1,20 @@
 {% extends 'base.html' %}
 {% block title %}Callback Versement{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-  <h2 class="text-info mb-3">🔄 Traitement du versement</h2>
-  <div class="alert alert-info">
-    <p>Nous avons bien reçu le signal de paiement PayDunya.</p>
-    <p>⏳ Vérification et mise à jour en cours...</p>
+<div class="container mt-5 text-center" style="max-width: 500px;">
+  <h2 class="text-info mb-4">🔄 Traitement du versement</h2>
+
+  <div class="alert alert-info d-flex align-items-center justify-content-center" role="alert">
+    <div class="spinner-border text-info me-3" role="status" aria-hidden="true"></div>
+    <div>
+      <p class="mb-1">Nous avons bien reçu le signal de paiement PayDunya.</p>
+      <p>⏳ Vérification et mise à jour en cours...</p>
+    </div>
   </div>
-  <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-success">🏠 Retour au tableau de bord</a>
+
+  <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-success mt-3 px-4">
+    🏠 Retour au tableau de bord
+  </a>
 </div>
 {% endblock %}

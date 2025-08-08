@@ -3,14 +3,14 @@
 {% block title %}Accueil - YaayESS{% endblock %}
 
 {% block content %}
-<div class="text-center mt-5">
+<div class="text-center mt-5 px-3">
   <h1 class="display-4 fw-bold text-success">Bienvenue sur YaayESS</h1>
-  <p class="lead">Gérez facilement vos Cotisations & Tontine communautaire.</p>
+  <p class="lead mb-4">Gérez facilement vos Cotisations & Tontine communautaire.</p>
   {% if user.is_authenticated %}
-    <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-success btn-lg mt-3">Accéder au Dashboard</a>
+    <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-success btn-lg px-4">Accéder au Dashboard</a>
   {% else %}
-    <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-lg mt-3 me-2">Connexion</a>
-    <a href="{% url 'accounts:signup' %}" class="btn btn-outline-primary btn-lg mt-3">Inscription</a>
+    <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-lg me-2 px-4 mb-2 mb-md-0">Connexion</a>
+    <a href="{% url 'accounts:signup' %}" class="btn btn-outline-primary btn-lg px-4">Inscription</a>
   {% endif %}
 </div>
 {% endblock %}

@@ -3,7 +3,7 @@
 {% block title %}Rejoindre le groupe {{ group.nom }}{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
+<div class="container mt-5 py-3">
   <div class="text-center mb-4">
     <h2 class="text-success">🤝 Rejoindre le groupe "{{ group.nom }}"</h2>
     <p class="text-muted">Entrez vos informations pour devenir membre.</p>
@@ -17,17 +17,18 @@
 
   <div class="card mx-auto" style="max-width: 500px;">
     <div class="card-body">
-      <form method="POST">
+      <form method="POST" novalidate>
         {% csrf_token %}
 
         <div class="mb-3">
           <label for="nom" class="form-label">Nom complet</label>
-          <input type="text" class="form-control" id="nom" name="nom" placeholder="Votre nom" required>
+          <input type="text" class="form-control" id="nom" name="nom" placeholder="Ex : Fatou Diop" required>
         </div>
 
         <div class="mb-3">
           <label for="phone" class="form-label">Numéro de téléphone</label>
-          <input type="tel" class="form-control" id="phone" name="phone" placeholder="77 123 45 67" required>
+          <input type="tel" class="form-control" id="phone" name="phone" placeholder="+221 77 123 45 67" required pattern="\+?\d{8,15}">
+          <div class="form-text">Saisissez un numéro valide avec indicatif (ex: +221771234567)</div>
         </div>
 
         <div class="d-grid">
@@ -38,3 +39,4 @@
   </div>
 </div>
 {% endblock %}
+

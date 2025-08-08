@@ -9,10 +9,10 @@
     Ajouter un membre au groupe <strong>{{ group.nom }}</strong>
   </h2>
 
-  <form method="post" class="shadow p-4 rounded bg-light">
+  <form method="post" class="shadow p-4 rounded bg-light needs-validation" novalidate>
     {% csrf_token %}
 
-    <!-- ✅ Champ pour le nom -->
+    <!-- Champ pour le nom -->
     <div class="mb-3">
       <label for="nom" class="form-label">Nom du membre</label>
       <input
@@ -22,22 +22,30 @@
         id="nom"
         placeholder="Ex: Fatou Diop"
         required
+        autofocus
       >
+      <div class="invalid-feedback">
+        Veuillez saisir le nom du membre.
+      </div>
     </div>
 
-    <!-- ✅ Champ pour le téléphone -->
+    <!-- Champ pour le téléphone -->
     <div class="mb-3">
       <label for="phone" class="form-label">Numéro de téléphone</label>
       <input
-        type="text"
+        type="tel"
         class="form-control"
         name="phone"
         id="phone"
         placeholder="+221770000000"
+        pattern="^\+?\d{7,15}$"
         required
       >
       <div class="form-text">
         Saisir le numéro complet avec indicatif.
+      </div>
+      <div class="invalid-feedback">
+        Veuillez saisir un numéro de téléphone valide.
       </div>
     </div>
 
@@ -47,4 +55,23 @@
     </a>
   </form>
 </div>
+
+<!-- Validation JS Bootstrap 5 -->
+<script>
+  (() => {
+    'use strict'
+    const forms = document.querySelectorAll('.needs-validation')
+    Array.from(forms).forEach(form => {
+      form.addEventListener('submit', event => {
+        if (!form.checkValidity()) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+        form.classList.add('was-validated')
+      }, false)
+    })
+  })()
+</script>
 {% endblock %}
+
+

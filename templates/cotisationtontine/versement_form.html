@@ -1,10 +1,15 @@
-{% extends 'epargnecredit/base.html' %}
+{% extends 'cotisationtontine/base.html' %}
+
 {% block content %}
-<h2>Ajouter un versement</h2>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button class="btn btn-primary">Valider</button>
-  <a href="{{ cancel_url }}" class="btn btn-secondary">Annuler</a>
-</form>
+<div class="container mt-4" style="max-width: 600px;">
+  <h2 class="mb-4">Ajouter un versement</h2>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary flex-grow-1">Valider</button>
+      <a href="{{ cancel_url }}" class="btn btn-secondary flex-grow-1">Annuler</a>
+    </div>
+  </form>
+</div>
 {% endblock %}

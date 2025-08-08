@@ -8,33 +8,56 @@
     ➕ Ajouter un versement au groupe <strong>{{ group.nom }}</strong>
   </h2>
 
-  <form method="post" class="shadow p-4 rounded bg-light">
+  <form method="post" class="shadow p-4 rounded bg-light needs-validation" novalidate>
     {% csrf_token %}
     <div class="mb-3">
       <label for="montant" class="form-label">💰 Montant</label>
       <input
         type="number"
         step="0.01"
-        min="0"
+        min="0.01"
         class="form-control"
         id="montant"
         name="montant"
         placeholder="Ex: 5000"
         required
       >
+      <div class="invalid-feedback">
+        Veuillez saisir un montant valide supérieur à 0.
+      </div>
     </div>
 
     <div class="mb-3">
       <label for="methode" class="form-label">💳 Méthode de paiement</label>
       <select class="form-select" id="methode" name="methode" required>
+        <option value="">-- Choisir une méthode --</option>
         <option value="ESPECES">Espèces</option>
         <option value="PAYDUNYA">PayDunya</option>
         <option value="PAYPAL">PayPal</option>
       </select>
+      <div class="invalid-feedback">
+        Veuillez sélectionner une méthode de paiement.
+      </div>
     </div>
 
     <button type="submit" class="btn btn-success">💾 Enregistrer le versement</button>
     <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-secondary ms-2">Annuler</a>
   </form>
 </div>
+
+<script>
+  (() => {
+    'use strict'
+    const forms = document.querySelectorAll('.needs-validation')
+    Array.from(forms).forEach(form => {
+      form.addEventListener('submit', event => {
+        if (!form.checkValidity()) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+        form.classList.add('was-validated')
+      }, false)
+    })
+  })()
+</script>
 {% endblock %}

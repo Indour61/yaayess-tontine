@@ -1,10 +1,19 @@
 {% extends 'base.html' %}
+
+{% block title %}Rembourser un crédit{% endblock %}
+
 {% block content %}
-<h2>Rembourser un crédit</h2>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button class="btn btn-warning">Rembourser</button>
-  <a href="{{ cancel_url }}" class="btn btn-secondary">Annuler</a>
-</form>
+<div class="container mt-4" style="max-width: 600px;">
+  <h2 class="mb-4">💸 Rembourser un crédit</h2>
+
+  <form method="post" class="shadow p-4 rounded bg-light">
+    {% csrf_token %}
+    {{ form.as_p }}
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-warning flex-fill">Rembourser</button>
+      <a href="{{ cancel_url }}" class="btn btn-secondary flex-fill">Annuler</a>
+    </div>
+  </form>
+</div>
 {% endblock %}

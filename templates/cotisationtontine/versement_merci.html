@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% block title %}Merci pour votre paiement{% endblock %}
 {% block content %}
-<div class="container mt-5 text-center">
+<div class="container mt-5 text-center" style="max-width: 500px;">
   <div class="mb-4">
     <h1 class="display-4 text-success">✅ Merci !</h1>
     <p class="lead">Votre versement a été enregistré avec succès.</p>
   </div>
-  <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-success btn-lg">
+  <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-success btn-lg w-100">
     🏠 Retour au tableau de bord
   </a>
 </div>
