@@ -738,13 +738,21 @@ def rejoindre_groupe(request, uuid_code):
 
     return render(request, 'rejoindre_groupe.html', {'group': group, 'message': message})
 
+
+import logging
 import requests
-from django.shortcuts import get_object_or_404, render, redirect
-from django.contrib import messages
+import json
+from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, redirect, render
 
 from .models import Group, Tirage, PaiementGagnant
 
+logger = logging.getLogger(__name__)
+
+@login_required
 def payer_gagnant(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
@@ -757,52 +765,93 @@ def payer_gagnant(request, group_id):
 
     gagnant = dernier_tirage.gagnant
 
-    # ✅ Calcul simplifié du montant total (montant de base × membres éligibles)
+    # Montant de base × membres éligibles
     montant_total = group.montant_base * group.membres.filter(actif=True, exit_liste=False).count()
 
     if request.method == 'POST':
-        url = "https://app.paydunya.com/api/v1/transfer-to-wallet"
+        montant_total = Decimal(montant_total)
+
+        frais_pourcent = montant_total * Decimal('0.02')
+        frais_fixe = Decimal('50')
+        frais_total = (frais_pourcent + frais_fixe).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+        montant_total_avec_frais = (montant_total + frais_total).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+
+        montant_total_avec_frais_int = int(montant_total_avec_frais)
+        frais_total_int = int(frais_total)
+
+        if settings.DEBUG and getattr(settings, 'NGROK_BASE_URL', None):
+            base_url = settings.NGROK_BASE_URL.rstrip('/') + '/'
+        else:
+            base_url = request.build_absolute_uri('/')
+
         headers = {
             "Content-Type": "application/json",
-            "PAYDUNYA-MASTER-KEY": settings.PAYDUNYA_KEYS['master_key'],
-            "PAYDUNYA-PRIVATE-KEY": settings.PAYDUNYA_KEYS['private_key'],
-            "PAYDUNYA-TOKEN": settings.PAYDUNYA_KEYS['token'],
+            "Accept": "application/json",
+            "PAYDUNYA-MASTER-KEY": settings.PAYDUNYA_KEYS["master_key"],
+            "PAYDUNYA-PRIVATE-KEY": settings.PAYDUNYA_KEYS["private_key"],
+            "PAYDUNYA-PUBLIC-KEY": settings.PAYDUNYA_KEYS["public_key"],
+            "PAYDUNYA-TOKEN": settings.PAYDUNYA_KEYS["token"],
         }
-        data = {
-            "amount": float(montant_total),
-            "recipient_number": gagnant.user.phone,
-            "wallet": "WAVE",
-            "reason": f"Paiement tirage - {group.nom}"
+
+        payload = {
+            "invoice": {
+                "items": [{
+                    "name": "Paiement gagnant Tontine",
+                    "quantity": 1,
+                    "unit_price": montant_total_avec_frais_int,
+                    "total_price": montant_total_avec_frais_int,
+                    "description": f"Paiement {gagnant.user.nom} - Frais {frais_total_int} FCFA"
+                }],
+                "description": f"Versement gagnant (+{frais_total_int} FCFA de frais)",
+                "total_amount": montant_total_avec_frais_int,
+                "callback_url": f"{base_url}cotisationtontine/paiement_gagnant/callback/",
+                "return_url": f"{base_url}cotisationtontine/paiement_gagnant/merci/"
+            },
+            "store": {
+                "name": "YaayESS",
+                "tagline": "Plateforme de gestion financière",
+                "website_url": "https://yaayess.com"
+            },
+            "custom_data": {
+                "group_id": group.id,
+                "gagnant_id": gagnant.id,
+                "montant_saisi": int(montant_total),
+                "frais_total": frais_total_int
+            }
         }
 
         try:
-            response = requests.post(url, headers=headers, json=data)
-            res = response.json()
+            logger.info("⏳ Envoi requête PayDunya...")
+            response = requests.post(
+                "https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create",
+                headers=headers,
+                json=payload,
+                timeout=15
+            )
+            logger.info(f"✅ Statut HTTP PayDunya : {response.status_code}")
 
-            if res.get("response_code") == "00":
+            if response.status_code != 200:
+                messages.error(request, f"Erreur PayDunya : {response.text}")
+                return redirect('group_detail', group_id=group.id)
+
+            data = response.json()
+            logger.debug(f"🧾 Réponse JSON PayDunya : {json.dumps(data, indent=2)}")
+
+            if data.get("response_code") == "00":
                 PaiementGagnant.objects.create(
                     group=group,
                     gagnant=gagnant,
                     montant=montant_total,
-                    statut='SUCCES',
-                    message=res.get("response_text", ""),
-                    transaction_id=res.get("transaction_id", "")
+                    statut='EN_ATTENTE',
+                    transaction_id=data.get("token"),
+                    message="Paiement en attente validation PayDunya"
                 )
-                messages.success(
-                    request,
-                    f"Paiement de {montant_total:,} FCFA envoyé à {gagnant.user.nom} avec succès."
-                )
+                return redirect(data.get("response_text"))  # Redirection vers la page paiement PayDunya
             else:
-                PaiementGagnant.objects.create(
-                    group=group,
-                    gagnant=gagnant,
-                    montant=montant_total,
-                    statut='ECHEC',
-                    message=res.get("response_text", "")
-                )
-                messages.error(request, f"Échec du paiement : {res.get('response_text')}")
-        except Exception as e:
-            messages.error(request, f"Erreur lors du paiement : {str(e)}")
+                messages.error(request, f"Échec création paiement : {data.get('response_text')}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Erreur réseau PayDunya: {e}")
+            messages.error(request, f"Erreur réseau PayDunya: {str(e)}")
 
         return redirect('group_detail', group_id=group.id)
 
@@ -811,6 +860,7 @@ def payer_gagnant(request, group_id):
         'gagnant': gagnant,
         'montant_total': montant_total,
     })
+
 
 from django.shortcuts import render
 from .models import PaiementGagnant
