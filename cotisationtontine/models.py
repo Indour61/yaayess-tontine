@@ -3,11 +3,15 @@ from django.conf import settings
 from django.utils import timezone
 import uuid
 
+# ... tes modèles ...
+
+
+
 class Group(models.Model):
     nom = models.CharField(max_length=255, verbose_name="Nom du groupe")
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
     date_reset = models.DateTimeField(null=True, blank=True)
-    code_invitation = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)  # 👈 Nouveau champ
+    code_invitation = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     invitation_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     admin = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -18,6 +22,16 @@ class Group(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, verbose_name="Code d'invitation")
     montant_base = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Montant de base")
 
+    # ✅ Nouveau champ pour mémoriser le prochain gagnant à exclure
+    prochain_gagnant = models.ForeignKey(
+        'GroupMember',  # On pointe vers le bon modèle
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="groupes_prochain_gagnant",
+        verbose_name="Prochain gagnant à exclure"
+    )
+
     class Meta:
         ordering = ['-date_creation']
         verbose_name = "Groupe"
@@ -25,6 +39,7 @@ class Group(models.Model):
 
     def __str__(self):
         return f"{self.nom} (admin : {self.admin})"
+
 
 # ✅ Membre du groupe
 class GroupMember(models.Model):
@@ -41,7 +56,9 @@ class GroupMember(models.Model):
         verbose_name_plural = "Membres du groupe"
 
     def __str__(self):
-        return f"{self.user.nom}"
+        # Utilise username si le modèle User n'a pas de champ 'nom'
+        return getattr(self.user, 'nom', self.user.username)
+
 
 # ✅ Historique des tirages
 class TirageHistorique(models.Model):

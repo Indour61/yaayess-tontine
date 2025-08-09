@@ -516,12 +516,12 @@ from django.db.models import Sum
 import random
 
 
+
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
-from django.utils import timezone
+from django.db import transaction
 import random
-
-from cotisationtontine.models import Group, Tirage
+from cotisationtontine.models import Group, Tirage, GroupMember
 
 @login_required
 def tirage_au_sort_view(request, group_id):
@@ -531,33 +531,51 @@ def tirage_au_sort_view(request, group_id):
     if request.user != group.admin and not request.user.is_superuser:
         return render(request, '403.html', status=403)
 
-    # ✅ Filtrer uniquement les membres actifs et non exclus
-    membres_eligibles = group.membres.filter(actif=True, exit_liste=False)
+    def membres_eligibles_pour_tirage(group):
+        membres = list(group.membres.filter(actif=True, exit_liste=False))
+        total = len(membres)
+
+        if total <= 1:
+            return membres  # tout le monde éligible
+
+        # Exclure le prochain gagnant s'il est défini et qu'il reste plus de 2 membres
+        if group.prochain_gagnant and total > 2:
+            membres = [m for m in membres if m.id != group.prochain_gagnant.id]
+
+        # Si on est à 2 membres restants, on réintègre le prochain gagnant
+        return membres
+
+    membres_eligibles = membres_eligibles_pour_tirage(group)
 
     gagnant = None
     montant_total = 0
 
-    if membres_eligibles.exists():
-        # ✅ Choisir un gagnant au hasard
-        gagnant = random.choice(list(membres_eligibles))
+    if membres_eligibles:
+        gagnant = random.choice(membres_eligibles)
+        montant_total = group.montant_base * len(membres_eligibles)
 
-        # ✅ Calcul simplifié du montant total attendu
-        montant_total = group.montant_base * membres_eligibles.count()
+        with transaction.atomic():
+            # Enregistrer le tirage
+            Tirage.objects.create(
+                group=group,
+                gagnant=gagnant,
+                membre=gagnant,
+                montant=montant_total,
+            )
 
-        # ✅ Enregistrement du tirage
-        Tirage.objects.create(
-            group=group,
-            gagnant=gagnant,
-            membre=gagnant,
-            montant=montant_total,
-        )
+            # Déterminer le prochain gagnant à ignorer
+            total_apres_tirage = group.membres.filter(actif=True, exit_liste=False).count() - 1
+            if total_apres_tirage > 2:
+                group.prochain_gagnant = gagnant
+            else:
+                group.prochain_gagnant = None
+            group.save()
 
     context = {
         'group': group,
         'gagnant': gagnant,
         'montant_total': montant_total,
     }
-
     return render(request, 'cotisationtontine/tirage_resultat.html', context)
 
 
@@ -978,3 +996,22 @@ def historique_actions_view(request):
     return render(request, "cotisationtontine/historique_actions.html", {
         "logs": logs
     })
+
+
+from django.db.models import Count
+
+
+def membres_eligibles_pour_tirage(group):
+    # Récupère le dernier tirage et son gagnant
+    dernier_tirage = group.tirages.order_by('-date').first()  # adapte selon ton related_name
+    membres = group.members.all()  # adapte selon ton related_name
+
+    # Si le groupe a 1 membre ou moins, tous sont éligibles (pas d'exclusion)
+    if membres.count() <= 1:
+        return membres
+
+    # Sinon, exclut le dernier gagnant du tirage
+    if dernier_tirage:
+        membres = membres.exclude(id=dernier_tirage.gagnant.id)
+
+    return membres
