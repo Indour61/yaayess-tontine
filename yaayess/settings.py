@@ -1,9 +1,20 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()  # charge automatiquement les variables du fichier .env
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'ta_clef_secrète_ici_en_dev'
+
+#SECRET_KEY = 'ta_clef_secrète_ici_en_dev'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+
+if not SECRET_KEY:
+    raise ValueError("La variable d'environnement DJANGO_SECRET_KEY n'est pas définie")
+
+
 
 DEBUG = True
 
@@ -57,13 +68,30 @@ WSGI_APPLICATION = 'yaayess.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'railway',
-        'USER': 'postgres',
-        'PASSWORD': 'iAXFNusZYoVVnwOYNhuSuiKfGuhOFLXz',
-        'HOST': 'hopper.proxy.rlwy.net',
-        'PORT': '13805',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT'),
     }
 }
+
+# PayDunya Sandbox API Keys
+
+
+PAYDUNYA_KEYS = {
+    "master_key": os.getenv("PAYDUNYA_MASTER_KEY"),
+    "private_key": os.getenv("PAYDUNYA_PRIVATE_KEY"),
+    "public_key": os.getenv("PAYDUNYA_PUBLIC_KEY"),
+    "token": os.getenv("PAYDUNYA_TOKEN"),
+}
+
+# Optionnel : vérifier que toutes les clés sont présentes
+if not all(PAYDUNYA_KEYS.values()):
+    raise ValueError("Toutes les clés PayDunya doivent être définies dans les variables d'environnement.")
+
+
+
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
