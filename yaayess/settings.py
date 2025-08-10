@@ -15,9 +15,11 @@ if not SECRET_KEY:
     raise ValueError("La variable d'environnement DJANGO_SECRET_KEY n'est pas définie")
 
 
+#DEBUG = False
+#ALLOWED_HOSTS = ['localhost', '127.0.0.1', "yaayess.com", "www.yaayess.com"]
 
+#mode local
 DEBUG = True
-
 ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 INSTALLED_APPS = [
@@ -67,6 +69,24 @@ WSGI_APPLICATION = 'yaayess.wsgi.application'
 
 DATABASES = {
     'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'yaayessdb',
+        'USER': 'yaayessuser',
+        'PASSWORD': 'Y@aY3$S!2025',
+        'HOST': '168.231.117.6',   # IP du VPS
+        'PORT': '3306',
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            'charset': 'utf8mb4',
+        },
+    }
+}
+
+
+
+"""
+DATABASES = {
+    'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv('DB_NAME'),
         'USER': os.getenv('DB_USER'),
@@ -75,7 +95,7 @@ DATABASES = {
         'PORT': os.getenv('DB_PORT'),
     }
 }
-
+"""
 # PayDunya Sandbox API Keys
 
 

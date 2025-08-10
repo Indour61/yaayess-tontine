@@ -5,8 +5,6 @@ import uuid
 
 # ... tes modèles ...
 
-
-
 class Group(models.Model):
     nom = models.CharField(max_length=255, verbose_name="Nom du groupe")
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
@@ -22,9 +20,16 @@ class Group(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, verbose_name="Code d'invitation")
     montant_base = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Montant de base")
 
-    # ✅ Nouveau champ pour mémoriser le prochain gagnant à exclure
+    montant_fixe_gagnant = models.DecimalField(  # 💡 Nouveau champ
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Montant fixe pour les gagnants"
+    )
+
     prochain_gagnant = models.ForeignKey(
-        'GroupMember',  # On pointe vers le bon modèle
+        'GroupMember',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

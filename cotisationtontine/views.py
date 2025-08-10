@@ -512,11 +512,6 @@ def creer_invitation_view(request, group_id):
     messages.success(request, f"Lien d'invitation généré pour {phone}")
     return redirect('cotisationtontine:group_detail', group_id=group.id)
 
-from django.db.models import Sum
-import random
-
-
-
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -527,7 +522,7 @@ from cotisationtontine.models import Group, Tirage, GroupMember
 def tirage_au_sort_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
-    # ✅ Vérifier que seul l'admin du groupe ou un superuser peut lancer un tirage
+    # ✅ Vérifier que seul l'admin ou un superuser peut tirer au sort
     if request.user != group.admin and not request.user.is_superuser:
         return render(request, '403.html', status=403)
 
@@ -542,7 +537,6 @@ def tirage_au_sort_view(request, group_id):
         if group.prochain_gagnant and total > 2:
             membres = [m for m in membres if m.id != group.prochain_gagnant.id]
 
-        # Si on est à 2 membres restants, on réintègre le prochain gagnant
         return membres
 
     membres_eligibles = membres_eligibles_pour_tirage(group)
@@ -552,7 +546,14 @@ def tirage_au_sort_view(request, group_id):
 
     if membres_eligibles:
         gagnant = random.choice(membres_eligibles)
-        montant_total = group.montant_base * len(membres_eligibles)
+
+        # 💡 Si c'est le premier tirage, on fixe le montant pour tous les gagnants
+        if group.montant_fixe_gagnant is None:
+            montant_total = group.montant_base * group.membres.filter(actif=True, exit_liste=False).count()
+            group.montant_fixe_gagnant = montant_total
+            group.save()
+        else:
+            montant_total = group.montant_fixe_gagnant
 
         with transaction.atomic():
             # Enregistrer le tirage
@@ -816,8 +817,11 @@ def payer_gagnant(request, group_id):
 
     gagnant = dernier_tirage.gagnant
 
-    # Montant de base × membres éligibles
-    montant_total = group.montant_base * group.membres.filter(actif=True, exit_liste=False).count()
+    # 💡 Utiliser le montant fixe si défini, sinon le calculer
+    if group.montant_fixe_gagnant is not None:
+        montant_total = group.montant_fixe_gagnant
+    else:
+        montant_total = group.montant_base * group.membres.filter(actif=True, exit_liste=False).count()
 
     if request.method == 'POST':
         montant_total = Decimal(montant_total)
@@ -897,7 +901,7 @@ def payer_gagnant(request, group_id):
                     transaction_id=data.get("token"),
                     message="Paiement en attente validation PayDunya"
                 )
-                return redirect(data.get("response_text"))  # Redirection vers la page paiement PayDunya
+                return redirect(data.get("response_text"))  # Redirection vers PayDunya
             else:
                 messages.error(request, f"Échec création paiement : {data.get('response_text')}")
         except requests.exceptions.RequestException as e:
