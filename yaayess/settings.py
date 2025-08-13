@@ -10,14 +10,25 @@ SECRET_KEY = os.environ.get(
     "SECRET_KEY",
     "5)l#zeh#+4zu)iwd8*4bm2!+bf-%=5n9dpv4um2r(@e!(k(y%j"
 )
-DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
-#ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
+DEBUG = False
+
+ALLOWED_HOSTS = ['168.231.117.6', 'yaayess.com', 'www.yaayess.com']
+
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+SECURE_SSL_REDIRECT = True  # redirige HTTP vers HTTPS
+SECURE_HSTS_SECONDS = 31536000  # active HSTS
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+
+"""
 ALLOWED_HOSTS = os.environ.get(
     "ALLOWED_HOSTS",
     "yaayess.com,www.yaayess.com,168.231.117.6"
 ).split(",")
-
+"""
 # ----------------------------------------------------
 # 📦 INSTALLED APPS
 # ----------------------------------------------------
@@ -38,6 +49,7 @@ INSTALLED_APPS = [
 
     # Outils
     'whitenoise.runserver_nostatic',
+    "sslserver",
 
 ]
 
@@ -138,12 +150,21 @@ EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 # ----------------------------------------------------
 # 💳 PAYDUNYA CONFIG
 # ----------------------------------------------------
+"""
 PAYDUNYA = {
     "MASTER_KEY": os.environ.get("PAYDUNYA_MASTER_KEY", "EWTNDBmX-0SOD-ZbSr-yoUd-Ir5sntAz6oPu"),
     "PRIVATE_KEY": os.environ.get("PAYDUNYA_PRIVATE_KEY", "test_private_vrIpn4PNbHG5pv5XOrAZALAhOGc"),
     "PUBLIC_KEY": os.environ.get("PAYDUNYA_PUBLIC_KEY", "krIuIZWRPez0Es6h6cHua6rodKy"),
     "TOKEN": os.environ.get("PAYDUNYA_TOKEN", "LRWkyGfcnXSTvRAjUYN7"),
 }
+
+PAYDUNYA_MASTER_KEY="EWTNDBmX-0SOD-ZbSr-yoUd-Ir5sntAz6oPu"
+PAYDUNYA_PRIVATE_KEY="test_private_vrIpn4PNbHG5pv5XOrAZALAhOGc"
+PAYDUNYA_PUBLIC_KEY="krIuIZWRPez0Es6h6cHua6rodKy"
+PAYDUNYA_TOKEN="LRWkyGfcnXSTvRAjUYN7"
+"""
+
+
 
 # ----------------------------------------------------
 # 🔒 SECURITY HEADERS (Production)
@@ -158,6 +179,14 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
 
 
+# === Clés API PayDunya ===
+PAYDUNYA_KEYS = {
+    "master_key": "EWTNDBmX-0SOD-ZbSr-yoUd-Ir5sntAz6oPu",
+    "private_key": "test_private_vrIpn4PNbHG5pv5XOrAZALAhOGc",
+    "public_key": "krIuIZWRPez0Es6h6cHua6rodKy",
+    "token": "LRWkyGfcnXSTvRAjUYN7",
+    "mode": "live",  # ou 'sandbox' selon l'environnement
+}
 
 
 
