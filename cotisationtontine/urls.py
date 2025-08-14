@@ -1,7 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
-from .views import inscription_par_invit
 from .views import liste_paiements_gagnants
 
 from .views_api import (
@@ -64,9 +63,8 @@ urlpatterns = [
 
     path('group/<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
 
-    path('rejoindre/<uuid:code>/', inscription_par_invit, name='inscription_par_invit'),
+    path('rejoindre/<uuid:code>/', views.inscription_et_rejoindre, name='inscription_et_rejoindre'),
 
-    path('rejoindre/<uuid:token>/', views.rejoindre_par_lien, name='rejoindre_par_lien'),
     path('group/<int:group_id>/payer-gagnant/', views.payer_gagnant, name='payer_gagnant'),
     path('paiements-gagnants/', liste_paiements_gagnants, name='paiements_gagnants'),
 

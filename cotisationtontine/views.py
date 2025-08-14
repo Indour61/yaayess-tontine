@@ -711,84 +711,47 @@ def historique_cycles_view(request, group_id):
     }
     return render(request, "cotisationtontine/historique_cycles.html", context)
 
-
-
-from django.shortcuts import get_object_or_404, redirect, render
-from django.contrib import messages
-import random, string
-
-def inscription_par_invit(request, code):
-    group = get_object_or_404(Group, code_invitation=code)
-
-    if request.method == 'POST':
-        nom = request.POST.get('nom')
-        telephone = request.POST.get('telephone')
-
-        if CustomUser.objects.filter(phone=telephone).exists():
-            messages.error(request, "Ce numéro est déjà utilisé.")
-        else:
-            password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-            user = CustomUser.objects.create_user(
-                phone=telephone,
-                nom=nom,
-                password=password,
-            )
-            GroupMember.objects.create(
-                group=group,
-                user=user,
-            )
-            messages.success(request, f"Bienvenue dans le groupe {group.nom} ! Vous pouvez maintenant vous connecter.")
-            return redirect('accounts:login')
-
-    return render(request, 'cotisationtontine/inscription_par_invit.html', {'group': group})
-
-from django.shortcuts import get_object_or_404, redirect
-from django.contrib import messages
-from .models import Group, GroupMember
-
-@login_required
-def rejoindre_par_lien(request, token):
-    group = get_object_or_404(Group, invitation_token=token)
-
-    # Vérifie si l'utilisateur est déjà membre
-    if GroupMember.objects.filter(group=group, user=request.user).exists():
-        messages.info(request, "Vous êtes déjà membre de ce groupe.")
-        return redirect('cotisationtontine:group_detail', group.id)
-
-    # Ajouter l'utilisateur au groupe
-    GroupMember.objects.create(group=group, user=request.user)
-    messages.success(request, f"Vous avez rejoint le groupe {group.nom}.")
-    return redirect('cotisationtontine:group_detail', group.id)
-
-# views.py
 from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
 from accounts.models import CustomUser
 from .models import Group, GroupMember
 import random
 import string
 
-def rejoindre_groupe(request, uuid_code):
-    group = get_object_or_404(Group, code_invitation=uuid_code)
-    message = None
+def inscription_et_rejoindre(request, code):
+    """
+    1️⃣ Inscription du membre invité
+    2️⃣ Ajout automatique au groupe
+    """
+    group = get_object_or_404(Group, code_invitation=code)
 
     if request.method == 'POST':
-        nom = request.POST.get('nom')
-        phone = request.POST.get('phone')
+        nom = request.POST.get('nom', '').strip()
+        phone = request.POST.get('phone', '').strip()
 
-        if Member.objects.filter(group=group, phone=phone).exists():
-            message = "Vous êtes déjà membre de ce groupe."
+        if not nom:
+            messages.error(request, "Le nom complet est obligatoire.")
+        elif not phone:
+            messages.error(request, "Le numéro de téléphone est obligatoire.")
         else:
-            # Crée un compte utilisateur automatiquement
-            if not CustomUser.objects.filter(phone=phone).exists():
+            user, created = CustomUser.objects.get_or_create(phone=phone, defaults={'nom': nom})
+            if created:
                 password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-                CustomUser.objects.create_user(phone=phone, nom=nom, password=password)
+                user.set_password(password)
+                user.save()
+                messages.success(request, f"Compte créé avec succès. Vous pouvez vous connecter avec {phone}.")
+            else:
+                messages.info(request, f"Le numéro {phone} est déjà enregistré. Vous serez ajouté au groupe automatiquement.")
 
-            user = CustomUser.objects.get(phone=phone)
-            Member.objects.create(nom=nom, phone=phone, user=user, group=group)
+            if not GroupMember.objects.filter(group=group, user=user).exists():
+                GroupMember.objects.create(group=group, user=user)
+                messages.success(request, f"Bienvenue {nom}, vous avez été ajouté au groupe {group.nom} !")
+            else:
+                messages.info(request, "Vous êtes déjà membre de ce groupe.")
 
-            message = f"Bienvenue {nom}, vous avez été ajouté au groupe {group.nom} avec succès !"
+            return redirect('cotisationtontine:group_detail', group.id)
 
-    return render(request, 'rejoindre_groupe.html', {'group': group, 'message': message})
+    return render(request, 'cotisationtontine/inscription_par_invit.html', {'group': group})
 
 
 import logging

@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% load humanize %}
 
-
 {% block title %}Détails du groupe{% endblock %}
 
 {% block content %}
@@ -11,7 +10,7 @@
   <div class="alert alert-info d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
     <div>
       📩 <strong>Lien d’adhésion</strong> :
-      <a href="{% url 'cotisationtontine:inscription_par_invit' group.code_invitation %}">
+      <a href="{% url 'cotisationtontine:inscription_et_rejoindre' group.code_invitation %}">
         Rejoindre via lien d’invitation
       </a>
       <br>
@@ -125,9 +124,13 @@
               {% else %}
                 <button class="btn btn-sm btn-secondary flex-fill" disabled>✅ Atteint</button>
               {% endif %}
-              <a href="{% url 'cotisationtontine:editer_membre' group.id m.id %}" class="btn btn-sm btn-warning flex-fill">✏️</a>
-              <a href="{% url 'cotisationtontine:supprimer_membre' group.id m.id %}" class="btn btn-sm btn-danger flex-fill" onclick="return confirm('Confirmer la suppression ?');">🗑️</a>
+
+              {% if request.user == group.admin or request.user.is_superuser %}
+                <a href="{% url 'cotisationtontine:editer_membre' group.id m.id %}" class="btn btn-sm btn-warning flex-fill">✏️</a>
+                <a href="{% url 'cotisationtontine:supprimer_membre' group.id m.id %}" class="btn btn-sm btn-danger flex-fill" onclick="return confirm('Confirmer la suppression ?');">🗑️</a>
+              {% endif %}
             </td>
+
           </tr>
         {% empty %}
           <tr>
@@ -163,3 +166,4 @@
 
 </div>
 {% endblock %}
+

@@ -6,6 +6,23 @@
 <div class="container mt-5" style="max-width: 480px;">
   <h2 class="mb-4">👋 Rejoindre le groupe "<strong>{{ group.nom }}</strong>"</h2>
 
+  <!-- Affichage des messages Django -->
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert
+                  {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %}"
+           role="alert">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if message %}
+    <div class="alert alert-info" role="alert">
+      {{ message }}
+    </div>
+  {% endif %}
+
   <form method="post" class="needs-validation" novalidate>
     {% csrf_token %}
 
@@ -31,7 +48,7 @@
         type="tel"
         class="form-control"
         id="telephone"
-        name="telephone"
+        name="phone"
         placeholder="+221770000000"
         pattern="^\+?[0-9\s\-]{7,15}$"
         required
@@ -63,4 +80,3 @@
 })();
 </script>
 {% endblock %}
-

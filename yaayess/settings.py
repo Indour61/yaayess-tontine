@@ -12,8 +12,11 @@ SECRET_KEY = os.environ.get(
 )
 
 DEBUG = False
-
 ALLOWED_HOSTS = ['168.231.117.6', 'yaayess.com', 'www.yaayess.com']
+
+#DEBUG = True
+
+#ALLOWED_HOSTS = ['*']
 
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
@@ -49,8 +52,7 @@ INSTALLED_APPS = [
 
     # Outils
     'whitenoise.runserver_nostatic',
-    "sslserver",
-
+    'sslserver',
 ]
 
 # ----------------------------------------------------
