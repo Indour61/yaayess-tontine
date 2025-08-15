@@ -204,12 +204,14 @@ def group_list(request):
 from django.db.models import Sum
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from .models import Group, GroupMember, Versement, ActionLog  # ⬅️ import ActionLog si dans le même app
+from django.urls import reverse
+from .models import Group, GroupMember, Versement, ActionLog
 
 @login_required
 def group_detail(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
+    # Tous les membres du groupe
     membres = group.membres.select_related('user')
 
     # ✅ Récupération des versements
@@ -220,14 +222,25 @@ def group_detail(request, group_id):
     versements_par_membre = versements.values('member').annotate(total_montant=Sum('montant'))
     montants_membres_dict = {v['member']: v['total_montant'] for v in versements_par_membre}
 
+    # Ajout du montant à chaque membre
     for membre in membres:
         membre.montant = montants_membres_dict.get(membre.id, 0)
 
-    # ✅ Ajout : utilisateur admin
+    # ✅ Vérification admin
     admin_user = group.admin
+    user_is_admin = request.user == admin_user or getattr(request.user, "is_super_admin", False)
 
-    # ✅ Ajout : historique des actions (si ActionLog a un champ group)
+    # ✅ Historique des actions
     actions = ActionLog.objects.filter(group=group).order_by('-date') if hasattr(ActionLog, "group") else []
+
+    # ✅ Lien d'invitation absolu pour partager sur WhatsApp ou email
+    invite_url = request.build_absolute_uri(
+        reverse('cotisationtontine:inscription_et_rejoindre', args=[group.code_invitation])
+    )
+
+    # Stocker dernier lien généré dans la session pour affichage dans le template (optionnel)
+    if user_is_admin:
+        request.session['last_invitation_link'] = invite_url
 
     return render(request, 'cotisationtontine/group_detail.html', {
         'group': group,
@@ -235,8 +248,10 @@ def group_detail(request, group_id):
         'versements': versements,
         'total_montant': total_montant,
         'admin_user': admin_user,
-        'actions': actions,  # ⬅️ envoyé au template
-        'user_is_admin': request.user == admin_user or getattr(request.user, "is_super_admin", False),
+        'actions': actions,
+        'user_is_admin': user_is_admin,
+        'invite_url': invite_url,
+        'last_invitation_link': request.session.get('last_invitation_link', None),
     })
 
 from django.http import HttpResponse
@@ -471,11 +486,14 @@ def creer_invitation(group, phone):
     )
     return invitation
 
-from django.utils import timezone
 from datetime import timedelta
+from django.utils import timezone
 from django.views.decorators.http import require_POST
-from django.shortcuts import redirect
-from .models import Invitation, Group, GroupMember
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
+from django.urls import reverse
+from django.contrib.auth.decorators import login_required
+from .models import Invitation, Group
 
 @require_POST
 @login_required
@@ -483,8 +501,7 @@ def creer_invitation_view(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
     # Vérifie que l'utilisateur est admin du groupe
-    is_admin = GroupMember.objects.filter(group=group, user=request.user, role='ADMIN').exists()
-    if not is_admin:
+    if request.user != group.admin:
         messages.error(request, "Vous n'avez pas l'autorisation de générer une invitation pour ce groupe.")
         return redirect('cotisationtontine:group_detail', group_id=group.id)
 
@@ -501,7 +518,7 @@ def creer_invitation_view(request, group_id):
         expire_at=expiration
     )
 
-    # Générer le lien
+    # Générer le lien d'invitation
     invitation_link = request.build_absolute_uri(
         reverse('cotisationtontine:accepter_invitation', args=[str(invitation.token)])
     )
@@ -711,6 +728,7 @@ def historique_cycles_view(request, group_id):
     }
     return render(request, "cotisationtontine/historique_cycles.html", context)
 
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from accounts.models import CustomUser
@@ -718,10 +736,12 @@ from .models import Group, GroupMember
 import random
 import string
 
+
 def inscription_et_rejoindre(request, code):
     """
     1️⃣ Inscription du membre invité
     2️⃣ Ajout automatique au groupe
+    3️⃣ Redirection vers group_detail après inscription
     """
     group = get_object_or_404(Group, code_invitation=code)
 
@@ -734,17 +754,27 @@ def inscription_et_rejoindre(request, code):
         elif not phone:
             messages.error(request, "Le numéro de téléphone est obligatoire.")
         else:
-            user, created = CustomUser.objects.get_or_create(phone=phone, defaults={'nom': nom})
+            # Vérifie si l'utilisateur existe déjà
+            user, created = CustomUser.objects.get_or_create(phone=phone)
+
             if created:
+                user.nom = nom
                 password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
                 user.set_password(password)
                 user.save()
-                messages.success(request, f"Compte créé avec succès. Vous pouvez vous connecter avec {phone}.")
+                messages.success(
+                    request,
+                    f"Compte créé avec succès. Vous pouvez vous connecter avec {phone}. Mot de passe: {password}"
+                )
             else:
-                messages.info(request, f"Le numéro {phone} est déjà enregistré. Vous serez ajouté au groupe automatiquement.")
+                messages.info(
+                    request,
+                    f"Le numéro {phone} est déjà enregistré. Vous serez ajouté au groupe automatiquement."
+                )
 
-            if not GroupMember.objects.filter(group=group, user=user).exists():
-                GroupMember.objects.create(group=group, user=user)
+            # Ajout au groupe
+            group_member, gm_created = GroupMember.objects.get_or_create(group=group, user=user)
+            if gm_created:
                 messages.success(request, f"Bienvenue {nom}, vous avez été ajouté au groupe {group.nom} !")
             else:
                 messages.info(request, "Vous êtes déjà membre de ce groupe.")
