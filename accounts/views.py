@@ -4,20 +4,33 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 
 from .forms import CustomUserCreationForm, CustomAuthenticationForm
+from django.contrib.auth import authenticate, login
+from django.contrib.auth import login
+from django.contrib.auth import get_backends
+
+from django.shortcuts import render, redirect
+from django.contrib.auth import login, authenticate, get_backends
+from django.contrib import messages
+from .forms import CustomUserCreationForm
+
+from django.contrib.auth import login
+from django.contrib.auth import get_backends
 
 
-# ✅ Vue d'inscription
 def signup_view(request):
     """
-    Permet de créer un compte CustomUser.
+    Crée un compte CustomUser et connecte automatiquement l'utilisateur.
     """
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user)
-            messages.success(request, f"Bienvenue {user.nom or user.phone} ! Votre compte a été créé.")
-            # Redirige vers le dashboard épargne-crédit par défaut
+
+            # Récupérer le backend compatible
+            backend = get_backends()[0]  # prend le premier backend
+            login(request, user, backend=f'{backend.__module__}.{backend.__class__.__name__}')
+
+            messages.success(request, f"Bienvenue {user.nom} ! Votre compte a été créé.")
             return redirect('cotisationtontine:dashboard_tontine_simple')
         else:
             messages.error(request, "Veuillez corriger les erreurs ci-dessous.")
@@ -26,23 +39,21 @@ def signup_view(request):
     return render(request, 'accounts/signup.html', {'form': form})
 
 
-# ✅ Vue de connexion
 def login_view(request):
     """
-    Permet de se connecter avec phone + mot de passe.
+    Connexion avec nom + mot de passe.
     """
-    if request.method == 'POST':
-        form = CustomAuthenticationForm(request=request, data=request.POST)
-        if form.is_valid():
-            user = form.get_user()
+    if request.method == "POST":
+        nom = request.POST.get('nom')
+        password = request.POST.get('password')
+        user = authenticate(request, username=nom, password=password)  # username = nom pour le backend
+        if user is not None:
             login(request, user)
-            messages.success(request, f"Bienvenue {user.nom or user.phone} !")
+            messages.success(request, f"Bienvenue {user.nom} !")
             return redirect('cotisationtontine:dashboard_tontine_simple')
         else:
-            messages.error(request, "Numéro ou mot de passe incorrect.")
-    else:
-        form = CustomAuthenticationForm()
-    return render(request, 'accounts/login.html', {'form': form})
+            messages.error(request, "Nom ou mot de passe incorrect.")
+    return render(request, 'accounts/login.html')
 
 
 # ✅ Vue de déconnexion

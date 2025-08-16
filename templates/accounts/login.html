@@ -9,12 +9,12 @@
   {{ form.non_field_errors }}
 
   <div class="mb-3">
-    <label for="id_phone">Téléphone :</label>
-    {{ form.phone }}
+    <label for="id_nom">Nom :</label>
+    <input type="text" name="nom" id="id_nom" class="form-control" required>
   </div>
   <div class="mb-3">
     <label for="id_password">Mot de passe :</label>
-    {{ form.password }}
+    <input type="password" name="password" id="id_password" class="form-control" required>
   </div>
   <button type="submit" class="btn btn-success">Se connecter</button>
 </form>
