@@ -17,12 +17,17 @@ SECRET_KEY = os.environ.get(
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 
+
+
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
 SECURE_SSL_REDIRECT = True  # redirige HTTP vers HTTPS
 SECURE_HSTS_SECONDS = 31536000  # active HSTS
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+
+
+# settings.py
 
 
 """
@@ -191,4 +196,8 @@ AUTHENTICATION_BACKENDS = [
     'accounts.backends.NomBackend',          # connexion via nom
     'django.contrib.auth.backends.ModelBackend',  # fallback standard
 ]
+
+# settings.py
+LOGIN_URL = '/accounts/login/'          # redirection pour utilisateurs non connectés
+LOGIN_REDIRECT_URL = '/groups/'         # redirection après login réussi
 

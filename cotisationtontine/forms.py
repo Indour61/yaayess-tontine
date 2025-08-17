@@ -81,3 +81,35 @@ class RegisterForm(UserCreationForm):
                 'placeholder': 'Votre numéro de téléphone'
             }),
         }
+
+# cotisationtontine/forms.py
+from django import forms
+from django.contrib.auth.password_validation import validate_password
+from accounts.models import CustomUser
+
+class InvitationSignupForm(forms.ModelForm):
+    password1 = forms.CharField(
+        label="Mot de passe",
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Mot de passe'}),
+        help_text="Votre mot de passe doit être sécurisé."
+    )
+    password2 = forms.CharField(
+        label="Confirmer le mot de passe",
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Confirmer le mot de passe'}),
+    )
+
+    class Meta:
+        model = CustomUser
+        fields = ['nom', 'phone']
+        widgets = {
+            'nom': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: Fatou Diop'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: 77xxxxxxx'}),
+        }
+
+    def clean_password2(self):
+        p1 = self.cleaned_data.get('password1')
+        p2 = self.cleaned_data.get('password2')
+        if p1 and p2 and p1 != p2:
+            raise forms.ValidationError("Les mots de passe ne correspondent pas.")
+        validate_password(p1)  # Validation Django standard
+        return p2

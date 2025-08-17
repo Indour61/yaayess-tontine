@@ -6,12 +6,10 @@
 <div class="container mt-5" style="max-width: 480px;">
   <h2 class="mb-4">👋 Rejoindre le groupe "<strong>{{ group.nom }}</strong>"</h2>
 
-  <!-- Affichage des messages Django -->
+  <!-- Messages Django -->
   {% if messages %}
     {% for message in messages %}
-      <div class="alert
-                  {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %}"
-           role="alert">
+      <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
         {{ message }}
       </div>
     {% endfor %}
@@ -19,27 +17,37 @@
 
   <form method="post" class="needs-validation" novalidate>
     {% csrf_token %}
+    {{ form.non_field_errors }}
 
     <div class="mb-3">
-      <label for="nom" class="form-label">Nom complet</label>
-      <input
-        type="text"
-        class="form-control"
-        id="nom"
-        name="nom"
-        placeholder="Ex: Fatou Diop"
-        required
-        autocomplete="name"
-      >
-      <div class="invalid-feedback">
-        Veuillez saisir votre nom complet.
-      </div>
+      <label for="{{ form.nom.id_for_label }}" class="form-label">Nom complet</label>
+      {{ form.nom }}
+      {{ form.nom.errors }}
+    </div>
+
+    <div class="mb-3">
+      <label for="{{ form.phone.id_for_label }}" class="form-label">Téléphone</label>
+      {{ form.phone }}
+      {{ form.phone.errors }}
+    </div>
+
+    <div class="mb-3">
+      <label for="{{ form.password1.id_for_label }}" class="form-label">Mot de passe</label>
+      {{ form.password1 }}
+      {{ form.password1.errors }}
+    </div>
+
+    <div class="mb-3">
+      <label for="{{ form.password2.id_for_label }}" class="form-label">Confirmez le mot de passe</label>
+      {{ form.password2 }}
+      {{ form.password2.errors }}
     </div>
 
     <button type="submit" class="btn btn-success w-100">Rejoindre le groupe</button>
   </form>
 </div>
 
+<!-- Validation Bootstrap JS -->
 <script>
 (() => {
   'use strict'
@@ -56,3 +64,4 @@
 })();
 </script>
 {% endblock %}
+

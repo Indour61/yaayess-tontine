@@ -3,10 +3,6 @@ from django.contrib.auth import login, logout
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 
-from .forms import CustomUserCreationForm, CustomAuthenticationForm
-from django.contrib.auth import authenticate, login
-from django.contrib.auth import login
-from django.contrib.auth import get_backends
 
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, authenticate, get_backends
@@ -38,21 +34,35 @@ def signup_view(request):
         form = CustomUserCreationForm()
     return render(request, 'accounts/signup.html', {'form': form})
 
+from django.shortcuts import render, redirect
+from django.contrib.auth import login, authenticate, get_backends
+from django.contrib import messages
+from cotisationtontine.models import GroupMember, Group
 
 def login_view(request):
     """
-    Connexion avec nom + mot de passe.
+    Connexion avec nom + mot de passe et redirection selon rôle :
+    - membre : vers son groupe
+    - admin : vers la liste des groupes
     """
     if request.method == "POST":
         nom = request.POST.get('nom')
         password = request.POST.get('password')
-        user = authenticate(request, username=nom, password=password)  # username = nom pour le backend
+        user = authenticate(request, username=nom, password=password)
         if user is not None:
             login(request, user)
             messages.success(request, f"Bienvenue {user.nom} !")
-            return redirect('cotisationtontine:dashboard_tontine_simple')
+
+            # Vérifier si l'utilisateur est membre d'un groupe
+            try:
+                group_member = GroupMember.objects.get(user=user)
+                return redirect('cotisationtontine:group_detail', group_id=group_member.group.id)
+            except GroupMember.DoesNotExist:
+                # Sinon, redirection admin / liste des groupes
+                return redirect('cotisationtontine:group_list')
         else:
             messages.error(request, "Nom ou mot de passe incorrect.")
+
     return render(request, 'accounts/login.html')
 
 

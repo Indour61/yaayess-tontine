@@ -254,6 +254,28 @@ def group_detail(request, group_id):
         'last_invitation_link': request.session.get('last_invitation_link', None),
     })
 
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from .models import Group
+
+@login_required
+def group_list_view(request):
+    """
+    Affiche la liste des groupes :
+    - Tous les groupes si super admin
+    - Sinon, seulement ceux créés par l'utilisateur
+    """
+    if request.user.is_super_admin:
+        groupes = Group.objects.all()
+    else:
+        groupes = Group.objects.filter(admin=request.user)
+
+    return render(request, 'cotisationtontine/group_list.html', {
+        'groupes': groupes
+    })
+
+
+
 from django.http import HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
@@ -283,42 +305,11 @@ def reset_cycle_view(request, group_id):
     messages.info(request, f"Cycle réinitialisé pour le groupe {group.nom} (à implémenter).")
     return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
-from .models import Group
-
-@login_required
-def group_list_view(request):
-    """
-    Affiche la liste des groupes :
-    - Tous les groupes si super admin
-    - Sinon, seulement ceux créés par l'utilisateur
-    """
-    if request.user.is_super_admin:
-        groupes = Group.objects.all()
-    else:
-        groupes = Group.objects.filter(admin=request.user)
-
-    return render(request, 'cotisationtontine/group_list.html', {
-        'groupes': groupes
-    })
-
-from cotisationtontine.models import GroupMember, Versement
-import logging
-import requests
-import json
-from decimal import Decimal
-from django.conf import settings
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
-
-logger = logging.getLogger(__name__)
 
 @login_required
 def initier_versement(request, member_id):
     member = get_object_or_404(GroupMember, id=member_id)
+    group_id = member.group.id  # ID du groupe pour la redirection
 
     if request.method == 'POST':
         try:
@@ -331,7 +322,6 @@ def initier_versement(request, member_id):
         methode = request.POST.get('methode', 'paydunya').lower()
 
         if methode == 'caisse':
-            # ✅ Enregistrement direct sans frais
             Versement.objects.create(
                 member=member,
                 montant=montant_saisi,
@@ -339,14 +329,14 @@ def initier_versement(request, member_id):
                 methode="CAISSE",
                 transaction_id="CAISSE-" + str(member.id)
             )
-            # ✅ Mise à jour du solde dans GroupMember
             member.montant += Decimal(montant_saisi)
             member.save()
 
             messages.success(request, f"Versement de {montant_saisi} FCFA enregistré via Caisse.")
-            return redirect('cotisationtontine:dashboard_tontine_simple')
+            # 🔹 Redirection vers le détail du groupe
+            return redirect('cotisationtontine:group_detail', group_id=group_id)
 
-        # ✅ Sinon : PayDunya
+        # --- PayDunya ---
         frais_pourcent = montant_saisi * 0.02
         frais_fixe = 50
         frais_total = int(round(frais_pourcent + frais_fixe))
@@ -377,8 +367,9 @@ def initier_versement(request, member_id):
                 }],
                 "description": f"Paiement épargne (+{frais_total} FCFA de frais)",
                 "total_amount": montant_total,
-                "callback_url": f"{base_url}cotisationtontine/versement/callback/",
-                "return_url": f"{base_url}cotisationtontine/versement/merci/"
+                # 🔹 Callback et return vers la page du groupe
+                "callback_url": f"{base_url}groups/versement/callback/",
+                "return_url": f"{base_url}groups/{group_id}/"
             },
             "store": {
                 "name": "YaayESS",
@@ -394,21 +385,14 @@ def initier_versement(request, member_id):
         }
 
         try:
-            logger.info("⏳ Envoi de la requête à PayDunya...")
             response = requests.post(
                 "https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create",
                 headers=headers,
                 json=payload,
                 timeout=15
             )
-            logger.info(f"✅ Statut HTTP PayDunya : {response.status_code}")
-
-            if response.status_code != 200:
-                return JsonResponse({"error": "Erreur PayDunya", "details": response.text}, status=500)
 
             data = response.json()
-            logger.debug(f"🧾 Réponse JSON PayDunya : {json.dumps(data, indent=2)}")
-
             if data.get("response_code") == "00":
                 Versement.objects.create(
                     member=member,
@@ -417,12 +401,12 @@ def initier_versement(request, member_id):
                     methode="PAYDUNYA",
                     transaction_id=data.get("token")
                 )
-                return redirect(data.get("response_text"))
+                # 🔹 Redirection vers la page du groupe après PayDunya
+                return redirect(f"/groups/{group_id}/")
             else:
                 return JsonResponse({"error": "Échec du paiement", "details": data.get("response_text")}, status=400)
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Erreur réseau PayDunya: {e}")
             return JsonResponse({"error": "Erreur réseau PayDunya", "details": str(e)}, status=500)
 
     return render(request, "cotisationtontine/initier_versement.html", {"member": member})
@@ -728,57 +712,80 @@ def historique_cycles_view(request, group_id):
     }
     return render(request, "cotisationtontine/historique_cycles.html", context)
 
-
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.contrib.auth import login, authenticate
 from accounts.models import CustomUser
 from .models import Group, GroupMember
-import random
-import string
+from django import forms
+
+# views.py
+class InvitationSignupForm(forms.ModelForm):
+    password1 = forms.CharField(
+        label="Mot de passe",
+        widget=forms.PasswordInput(attrs={'class':'form-control', 'required': True}),
+        min_length=6
+    )
+    password2 = forms.CharField(
+        label="Confirmez le mot de passe",
+        widget=forms.PasswordInput(attrs={'class':'form-control', 'required': True}),
+        min_length=6
+    )
+
+    class Meta:
+        model = CustomUser
+        fields = ['nom', 'phone']
+        widgets = {
+            'nom': forms.TextInput(attrs={'class':'form-control','placeholder':'Ex: Fatou Diop','required': True}),
+            'phone': forms.TextInput(attrs={'class':'form-control','placeholder':'Ex: 77xxxxxxx','required': True}),
+        }
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from django.contrib.auth import login, get_backends
+from .forms import InvitationSignupForm
+from .models import Group, GroupMember
+from accounts.models import CustomUser
 
 def inscription_et_rejoindre(request, code):
-    """
-    1️⃣ Inscription du membre invité
-    2️⃣ Ajout automatique au groupe
-    3️⃣ Redirection vers group_detail après inscription
-    """
     group = get_object_or_404(Group, code_invitation=code)
 
-    if request.method == 'POST':
-        nom = request.POST.get('nom', '').strip()
+    if request.method == "POST":
+        form = InvitationSignupForm(request.POST)
+        if form.is_valid():
+            nom = form.cleaned_data['nom']
+            phone = form.cleaned_data['phone']
+            password = form.cleaned_data['password1']
 
-        if not nom:
-            messages.error(request, "Le nom complet est obligatoire.")
-        else:
-            # Vérifie si l'utilisateur existe déjà
-            user, created = CustomUser.objects.get_or_create(nom=nom)
-
+            # Création ou récupération de l'utilisateur
+            user, created = CustomUser.objects.get_or_create(
+                phone=phone,
+                defaults={'nom': nom}
+            )
             if created:
-                # Génération d'un mot de passe aléatoire
-                password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
                 user.set_password(password)
                 user.save()
-                messages.success(
-                    request,
-                    f"Compte créé avec succès. Vous pouvez vous connecter avec le nom '{nom}'. Mot de passe: {password}"
-                )
+                messages.success(request, "Votre compte a été créé avec succès !")
             else:
-                messages.info(
-                    request,
-                    f"Le nom {nom} est déjà enregistré. Vous serez ajouté au groupe automatiquement."
-                )
+                messages.info(request, "Vous avez déjà un compte, nous vous ajoutons au groupe.")
 
             # Ajout au groupe
-            group_member, gm_created = GroupMember.objects.get_or_create(group=group, user=user)
-            if gm_created:
-                messages.success(request, f"Bienvenue {nom}, vous avez été ajouté au groupe {group.nom} !")
-            else:
-                messages.info(request, "Vous êtes déjà membre de ce groupe.")
+            GroupMember.objects.get_or_create(group=group, user=user)
 
-            return redirect('cotisationtontine:group_detail', group.id)
+            # 🔑 Connexion automatique compatible multi-backends
+            backend = get_backends()[0]
+            login(request, user, backend=f"{backend.__module__}.{backend.__class__.__name__}")
 
-    return render(request, 'cotisationtontine/inscription_par_invit.html', {'group': group})
+            return redirect('cotisationtontine:group_detail', group_id=group.id)
+        else:
+            messages.error(request, "Veuillez corriger les erreurs ci-dessous.")
+    else:
+        form = InvitationSignupForm()
 
+    return render(request, 'cotisationtontine/inscription_par_invit.html', {
+        'group': group,
+        'form': form
+    })
 
 import logging
 import requests

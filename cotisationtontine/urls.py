@@ -2,7 +2,6 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
 from .views import liste_paiements_gagnants
-
 from .views_api import (
     GroupViewSet, GroupMemberViewSet,
     VersementViewSet, ActionLogViewSet
@@ -33,14 +32,14 @@ urlpatterns = [
     path('dashboard/', views.dashboard_tontine_simple, name='dashboard_tontine_simple'),
 
     # --- Groupes ---
-    path('groups/', views.group_list_view, name='group_list'),
-    path('groups/create/', views.ajouter_groupe_view, name='ajouter_groupe'),
-    path('group/<int:group_id>/', views.group_detail, name='group_detail'),
+    path('', views.group_list_view, name='group_list'),                  # /groups/
+    path('create/', views.ajouter_groupe_view, name='ajouter_groupe'),   # /groups/create/
+    path('<int:group_id>/', views.group_detail, name='group_detail'),    # /groups/<id>/
 
     # --- Membres ---
-    path('group/<int:group_id>/membre/ajouter/', views.ajouter_membre_view, name='ajouter_membre'),
-    path('group/<int:group_id>/membre/<int:membre_id>/editer/', views.editer_membre_view, name='editer_membre'),
-    path('group/<int:group_id>/membre/<int:membre_id>/supprimer/', views.supprimer_membre_view, name='supprimer_membre'),
+    path('<int:group_id>/membre/ajouter/', views.ajouter_membre_view, name='ajouter_membre'),
+    path('<int:group_id>/membre/<int:membre_id>/editer/', views.editer_membre_view, name='editer_membre'),
+    path('<int:group_id>/membre/<int:membre_id>/supprimer/', views.supprimer_membre_view, name='supprimer_membre'),
 
     # --- Versements ---
     path('versement/initier/<int:member_id>/', views.initier_versement, name='initier_versement'),
@@ -49,29 +48,27 @@ urlpatterns = [
 
     # --- Invitations ---
     path('invitation/<uuid:token>/', views.accepter_invitation, name='accepter_invitation'),
-    path('group/<int:group_id>/invitation/creer/', views.creer_invitation_view, name='creer_invitation'),
+    path('<int:group_id>/invitation/creer/', views.creer_invitation_view, name='creer_invitation'),
 
     # --- Tirage ---
-    path('group/<int:group_id>/tirage-au-sort/', views.tirage_au_sort_view, name='tirage_au_sort'),
-    path('group/<int:group_id>/tirage-resultat/', views.tirage_resultat_view, name='tirage_resultat'),
+    path('<int:group_id>/tirage-au-sort/', views.tirage_au_sort_view, name='tirage_au_sort'),
+    path('<int:group_id>/tirage-resultat/', views.tirage_resultat_view, name='tirage_resultat'),
 
     # --- Cycle ---
-    path('group/<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
-#    path('group/<int:group_id>/cycle/confirmation-reset/', views.confirm_reset_cycle_view, name='confirm_reset_cycle'),
+    path('<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
+    path('<int:group_id>/lancer-tirage/', views.tirage_au_sort_view, name='lancer_tirage'),
 
-    path('group/<int:group_id>/lancer-tirage/', views.tirage_au_sort_view, name='lancer_tirage'),
-
-    path('group/<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
-
+    # --- Rejoindre groupe ---
     path('rejoindre/<uuid:code>/', views.inscription_et_rejoindre, name='inscription_et_rejoindre'),
 
-    path('group/<int:group_id>/payer-gagnant/', views.payer_gagnant, name='payer_gagnant'),
+    # --- Paiement gagnant ---
+    path('<int:group_id>/payer-gagnant/', views.payer_gagnant, name='payer_gagnant'),
     path('paiements-gagnants/', liste_paiements_gagnants, name='paiements_gagnants'),
-
     path('paiement_gagnant/callback/', views.paiement_gagnant_callback, name='paiement_gagnant_callback'),
     path('paiement_gagnant/merci/', views.paiement_gagnant_merci, name='paiement_gagnant_merci'),
 
-    path("group/<int:group_id>/historique-cycles/", views.historique_cycles_view, name="historique_cycles",),
-
+    # --- Historique cycles & actions ---
+    path('<int:group_id>/historique-cycles/', views.historique_cycles_view, name='historique_cycles'),
     path("historique-actions/", views.historique_actions_view, name="historique_actions"),
 ]
+
