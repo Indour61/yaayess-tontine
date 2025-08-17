@@ -89,9 +89,9 @@
       <thead class="table-light">
         <tr>
           <th>Nom</th>
-          <th>Téléphone</th>
-          <th>Montant</th>
           <th style="min-width: 180px;">Actions</th>
+          <th>Montant</th>
+          <th>Téléphone</th>
         </tr>
       </thead>
       <tbody>
@@ -103,8 +103,8 @@
                 <span class="badge bg-success ms-2">Admin</span>
               {% endif %}
             </td>
-            <td>{{ m.user.phone }}</td>
-            <td>{{ m.montant|intcomma }} FCFA</td>
+
+
             <td class="d-flex flex-wrap gap-1">
               {% if m.montant < group.montant_base %}
                 <a href="{% url 'cotisationtontine:initier_versement' m.id %}" class="btn btn-sm btn-success flex-fill">💳 Verser</a>
@@ -117,6 +117,9 @@
                 <a href="{% url 'cotisationtontine:supprimer_membre' group.id m.id %}" class="btn btn-sm btn-danger flex-fill" onclick="return confirm('Confirmer la suppression ?');">🗑️</a>
               {% endif %}
             </td>
+            <td>{{ m.montant|intcomma }} FCFA</td>
+
+            <td>{{ m.user.phone }}</td>
           </tr>
         {% empty %}
           <tr>

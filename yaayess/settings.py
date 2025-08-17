@@ -76,22 +76,20 @@ WSGI_APPLICATION = 'yaayess.wsgi.application'
 # ----------------------------------------------------
 # 🗄 DATABASE (MySQL)
 # ----------------------------------------------------
+
+
 DATABASES = {
     'default': {
-        'ENGINE': os.environ.get("DB_ENGINE", "django.db.backends.mysql"),
-        'NAME': os.environ.get("DB_NAME", "yaayessdb"),
-        'USER': os.environ.get("DB_USER", "yaayessuser"),
-        'PASSWORD': os.environ.get("DB_PASSWORD", "Y@aY3$S!2025"),
-        'HOST': os.environ.get("DB_HOST", "168.231.117.6"),
-        'PORT': os.environ.get("DB_PORT", "3306"),
-        'OPTIONS': {
-            'init_command': os.environ.get(
-                "DB_INIT_COMMAND", "SET sql_mode='STRICT_TRANS_TABLES'"
-            ),
-            'charset': os.environ.get("DB_CHARSET", "utf8mb4"),
-        }
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'railway',
+        'USER': 'postgres',
+        'PASSWORD': 'iAXFNusZYoVVnwOYNhuSuiKfGuhOFLXz',
+        'HOST': 'hopper.proxy.rlwy.net',
+        'PORT': '13805',
     }
 }
+
+
 
 TEMPLATES = [
     {

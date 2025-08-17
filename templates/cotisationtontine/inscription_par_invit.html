@@ -17,12 +17,6 @@
     {% endfor %}
   {% endif %}
 
-  {% if message %}
-    <div class="alert alert-info" role="alert">
-      {{ message }}
-    </div>
-  {% endif %}
-
   <form method="post" class="needs-validation" novalidate>
     {% csrf_token %}
 
@@ -39,24 +33,6 @@
       >
       <div class="invalid-feedback">
         Veuillez saisir votre nom complet.
-      </div>
-    </div>
-
-    <div class="mb-3">
-      <label for="telephone" class="form-label">Téléphone</label>
-      <input
-        type="tel"
-        class="form-control"
-        id="telephone"
-        name="phone"
-        placeholder="+221770000000"
-        pattern="^\+?[0-9\s\-]{7,15}$"
-        required
-        autocomplete="tel"
-      >
-      <div class="form-text">Saisir le numéro complet avec indicatif, ex: +221770000000</div>
-      <div class="invalid-feedback">
-        Veuillez saisir un numéro de téléphone valide.
       </div>
     </div>
 

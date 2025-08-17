@@ -1,5 +1,6 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager, Group, Permission
+
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, phone, nom, password=None, **extra_fields):
@@ -13,13 +14,11 @@ class CustomUserManager(BaseUserManager):
     def create_superuser(self, phone, nom, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
         return self.create_user(phone, nom, password, **extra_fields)
 
-from django.contrib.auth.models import Group, Permission
-from django.db import models
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    # tes champs
     phone = models.CharField(max_length=20, unique=True)
     nom = models.CharField(max_length=150)
     is_active = models.BooleanField(default=True)
@@ -28,14 +27,14 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     groups = models.ManyToManyField(
         Group,
-        related_name='customuser_set',  # changer related_name pour éviter conflit
+        related_name='customuser_set',  # éviter conflit avec AbstractUser
         blank=True,
         help_text='Groupes auxquels appartient cet utilisateur.',
         verbose_name='groupes'
     )
     user_permissions = models.ManyToManyField(
         Permission,
-        related_name='customuser_set',  # changer related_name aussi
+        related_name='customuser_set',  # éviter conflit avec AbstractUser
         blank=True,
         help_text='Permissions spécifiques pour cet utilisateur.',
         verbose_name='permissions utilisateur'

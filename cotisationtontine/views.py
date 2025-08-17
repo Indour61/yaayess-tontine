@@ -736,7 +736,6 @@ from .models import Group, GroupMember
 import random
 import string
 
-
 def inscription_et_rejoindre(request, code):
     """
     1️⃣ Inscription du membre invité
@@ -747,29 +746,26 @@ def inscription_et_rejoindre(request, code):
 
     if request.method == 'POST':
         nom = request.POST.get('nom', '').strip()
-        phone = request.POST.get('phone', '').strip()
 
         if not nom:
             messages.error(request, "Le nom complet est obligatoire.")
-        elif not phone:
-            messages.error(request, "Le numéro de téléphone est obligatoire.")
         else:
             # Vérifie si l'utilisateur existe déjà
-            user, created = CustomUser.objects.get_or_create(phone=phone)
+            user, created = CustomUser.objects.get_or_create(nom=nom)
 
             if created:
-                user.nom = nom
+                # Génération d'un mot de passe aléatoire
                 password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
                 user.set_password(password)
                 user.save()
                 messages.success(
                     request,
-                    f"Compte créé avec succès. Vous pouvez vous connecter avec {phone}. Mot de passe: {password}"
+                    f"Compte créé avec succès. Vous pouvez vous connecter avec le nom '{nom}'. Mot de passe: {password}"
                 )
             else:
                 messages.info(
                     request,
-                    f"Le numéro {phone} est déjà enregistré. Vous serez ajouté au groupe automatiquement."
+                    f"Le nom {nom} est déjà enregistré. Vous serez ajouté au groupe automatiquement."
                 )
 
             # Ajout au groupe
