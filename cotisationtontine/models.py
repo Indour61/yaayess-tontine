@@ -62,7 +62,8 @@ class GroupMember(models.Model):
 
     def __str__(self):
         # Utilise username si le modèle User n'a pas de champ 'nom'
-        return getattr(self.user, 'nom', self.user.username)
+        return self.user.nom
+#        return getattr(self.user, 'nom', self.user.username)
 
 
 # ✅ Historique des tirages

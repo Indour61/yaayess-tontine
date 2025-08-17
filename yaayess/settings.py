@@ -11,11 +11,11 @@ SECRET_KEY = os.environ.get(
     "5)l#zeh#+4zu)iwd8*4bm2!+bf-%=5n9dpv4um2r(@e!(k(y%j"
 )
 
-#DEBUG = False
-#ALLOWED_HOSTS = ['168.231.117.6', 'yaayess.com', 'www.yaayess.com']
+DEBUG = False
+ALLOWED_HOSTS = ['168.231.117.6', 'yaayess.com', 'www.yaayess.com']
 
-DEBUG = True
-ALLOWED_HOSTS = ['*']
+#DEBUG = True
+#ALLOWED_HOSTS = ['*']
 
 
 
