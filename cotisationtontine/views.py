@@ -742,50 +742,63 @@ class InvitationSignupForm(forms.ModelForm):
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.contrib.auth import login, get_backends
-from .forms import InvitationSignupForm
-from .models import Group, GroupMember
+from django.contrib.auth import login
+from django.utils import timezone
+from django.contrib.auth.hashers import make_password
 from accounts.models import CustomUser
+from .models import Invitation, GroupMember
 
-def inscription_et_rejoindre(request, code):
-    group = get_object_or_404(Group, code_invitation=code)
+
+def inscription_et_rejoindre(request, token):
+    invitation = get_object_or_404(Invitation, token=token)
+
+    # Vérifier expiration
+    if invitation.expire_at < timezone.now():
+        messages.error(request, "❌ Ce lien d’invitation a expiré.")
+        return redirect("login")
 
     if request.method == "POST":
-        form = InvitationSignupForm(request.POST)
-        if form.is_valid():
-            nom = form.cleaned_data['nom']
-            phone = form.cleaned_data['phone']
-            password = form.cleaned_data['password1']
+        phone = request.POST.get("phone")
+        password = request.POST.get("password")
+        password2 = request.POST.get("password2")
 
-            # Création ou récupération de l'utilisateur
-            user, created = CustomUser.objects.get_or_create(
-                phone=phone,
-                defaults={'nom': nom}
-            )
-            if created:
-                user.set_password(password)
-                user.save()
-                messages.success(request, "Votre compte a été créé avec succès !")
-            else:
-                messages.info(request, "Vous avez déjà un compte, nous vous ajoutons au groupe.")
+        if not phone or not password or not password2:
+            messages.error(request, "⚠️ Tous les champs sont obligatoires.")
+            return redirect("inscription_et_rejoindre", token=token)
 
-            # Ajout au groupe
-            GroupMember.objects.get_or_create(group=group, user=user)
+        if password != password2:
+            messages.error(request, "⚠️ Les mots de passe ne correspondent pas.")
+            return redirect("inscription_et_rejoindre", token=token)
 
-            # 🔑 Connexion automatique compatible multi-backends
-            backend = get_backends()[0]
-            login(request, user, backend=f"{backend.__module__}.{backend.__class__.__name__}")
+        # Vérifier si l’utilisateur existe déjà
+        user, created = CustomUser.objects.get_or_create(
+            phone=phone,
+            defaults={
+                "password": make_password(password),
+                "choix_inscription": 2,  # 🚀 Tontine simple
+            },
+        )
 
-            return redirect('cotisationtontine:group_detail', group_id=group.id)
-        else:
-            messages.error(request, "Veuillez corriger les erreurs ci-dessous.")
-    else:
-        form = InvitationSignupForm()
+        if not created:
+            # si utilisateur existant mais pas encore dans le groupe
+            messages.info(request, "ℹ️ Vous avez déjà un compte. Connectez-vous directement.")
+            return redirect("login")
 
-    return render(request, 'cotisationtontine/inscription_par_invit.html', {
-        'group': group,
-        'form': form
-    })
+        # Ajouter comme membre du groupe
+        GroupMember.objects.create(
+            group=invitation.group,
+            user=user,
+        )
+
+        # Connecter l'utilisateur
+        login(request, user)
+        messages.success(
+            request,
+            f"✅ Bienvenue {phone}, vous avez rejoint le groupe {invitation.group.nom} avec succès !"
+        )
+        return redirect("dashboard_tontine_simple")
+
+    return render(request, "inscription_et_rejoindre.html", {"invitation": invitation})
 
 import logging
 import requests
