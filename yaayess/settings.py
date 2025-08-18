@@ -1,43 +1,47 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv  # Nouveau module
+
+# Charger les variables d'environnement dès le début
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ----------------------------------------------------
-# 🔐 SECURITY
+# 🔐 SECURITY - Version corrigée
 # ----------------------------------------------------
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY",
-    "5)l#zeh#+4zu)iwd8*4bm2!+bf-%=5n9dpv4um2r(@e!(k(y%j"
-)
 
-DEBUG = False
-ALLOWED_HOSTS = ['168.231.117.6', 'yaayess.com', 'www.yaayess.com']
+# SECRET_KEY doit TOUJOURS venir de l'environnement
+SECRET_KEY = os.environ["SECRET_KEY"]  # Pas de valeur par défaut!
 
-#DEBUG = True
-#ALLOWED_HOSTS = ['*']
+# Debug doit être conditionné par l'environnement
+DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
-
-
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
-SECURE_SSL_REDIRECT = True  # redirige HTTP vers HTTPS
-SECURE_HSTS_SECONDS = 31536000  # active HSTS
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
-
-
-# settings.py
-
-
-"""
+# Configuration des hosts dynamique
 ALLOWED_HOSTS = os.environ.get(
     "ALLOWED_HOSTS",
-    "yaayess.com,www.yaayess.com,168.231.117.6"
+    "localhost,127.0.0.1"
 ).split(",")
-"""
+
 # ----------------------------------------------------
-# 📦 INSTALLED APPS
+# 🔒 HTTPS Settings (seulement en production)
+# ----------------------------------------------------
+if not DEBUG:
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+else:
+    # Désactiver les flags HTTPS en développement
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = False
+
+# ----------------------------------------------------
+# 📦 INSTALLED APPS (inchangé)
 # ----------------------------------------------------
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -59,6 +63,7 @@ INSTALLED_APPS = [
     'sslserver',
 ]
 
+
 # ----------------------------------------------------
 # ⚙️ MIDDLEWARE
 # ----------------------------------------------------
@@ -78,24 +83,6 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'yaayess.urls'
 WSGI_APPLICATION = 'yaayess.wsgi.application'
 
-# ----------------------------------------------------
-# 🗄 DATABASE (MySQL)
-# ----------------------------------------------------
-
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'railway',
-        'USER': 'postgres',
-        'PASSWORD': 'iAXFNusZYoVVnwOYNhuSuiKfGuhOFLXz',
-        'HOST': 'hopper.proxy.rlwy.net',
-        'PORT': '13805',
-    }
-}
-
-
-
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -112,7 +99,39 @@ TEMPLATES = [
     },
 ]
 
+# ----------------------------------------------------
+# 🗄 DATABASE - Version sécurisée
+# ----------------------------------------------------
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ["DB_NAME"],
+        'USER': os.environ["DB_USER"],
+        'PASSWORD': os.environ["DB_PASSWORD"],
+        'HOST': os.environ["DB_HOST"],
+        'PORT': os.environ["DB_PORT"],
+    }
+}
 
+# ----------------------------------------------------
+# ✉️ EMAIL CONFIG - Version sécurisée
+# ----------------------------------------------------
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]        # Doit être défini
+EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"] # Doit être défini
+
+# ----------------------------------------------------
+# 💳 PAYDUNYA CONFIG - Version sécurisée
+# ----------------------------------------------------
+PAYDUNYA_KEYS = {
+    "master_key": os.environ["PAYDUNYA_MASTER_KEY"],
+    "private_key": os.environ["PAYDUNYA_PRIVATE_KEY"],
+    "public_key": os.environ["PAYDUNYA_PUBLIC_KEY"],
+    "token": os.environ["PAYDUNYA_TOKEN"],
+    "mode": os.environ.get("PAYDUNYA_MODE", "test"),
+}
 
 # ----------------------------------------------------
 # 🔑 AUTHENTICATION
@@ -141,32 +160,6 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# ----------------------------------------------------
-# ✉️ EMAIL CONFIG
-# ----------------------------------------------------
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
-EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
-EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
-
-# ----------------------------------------------------
-# 💳 PAYDUNYA CONFIG
-# ----------------------------------------------------
-"""
-PAYDUNYA = {
-    "MASTER_KEY": os.environ.get("PAYDUNYA_MASTER_KEY", "EWTNDBmX-0SOD-ZbSr-yoUd-Ir5sntAz6oPu"),
-    "PRIVATE_KEY": os.environ.get("PAYDUNYA_PRIVATE_KEY", "test_private_vrIpn4PNbHG5pv5XOrAZALAhOGc"),
-    "PUBLIC_KEY": os.environ.get("PAYDUNYA_PUBLIC_KEY", "krIuIZWRPez0Es6h6cHua6rodKy"),
-    "TOKEN": os.environ.get("PAYDUNYA_TOKEN", "LRWkyGfcnXSTvRAjUYN7"),
-}
-
-PAYDUNYA_MASTER_KEY="EWTNDBmX-0SOD-ZbSr-yoUd-Ir5sntAz6oPu"
-PAYDUNYA_PRIVATE_KEY="test_private_vrIpn4PNbHG5pv5XOrAZALAhOGc"
-PAYDUNYA_PUBLIC_KEY="krIuIZWRPez0Es6h6cHua6rodKy"
-PAYDUNYA_TOKEN="LRWkyGfcnXSTvRAjUYN7"
-"""
 
 
 
@@ -183,14 +176,6 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
 
 
-# === Clés API PayDunya ===
-PAYDUNYA_KEYS = {
-    "master_key": "EWTNDBmX-0SOD-ZbSr-yoUd-Ir5sntAz6oPu",
-    "private_key": "test_private_vrIpn4PNbHG5pv5XOrAZALAhOGc",
-    "public_key": "krIuIZWRPez0Es6h6cHua6rodKy",
-    "token": "LRWkyGfcnXSTvRAjUYN7",
-    "mode": "live",  # ou 'sandbox' selon l'environnement
-}
 
 AUTHENTICATION_BACKENDS = [
     'accounts.backends.NomBackend',          # connexion via nom
