@@ -4,66 +4,94 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 
 
-from django.shortcuts import render, redirect
-from django.contrib.auth import login, authenticate, get_backends
+
+from django.shortcuts import redirect, render, get_object_or_404
+from django.contrib.auth import login, get_backends
 from django.contrib import messages
 from .forms import CustomUserCreationForm
-
-from django.contrib.auth import login
-from django.contrib.auth import get_backends
+from cotisationtontine.models import Group, GroupMember
 
 
 def signup_view(request):
     """
-    Crée un compte CustomUser et connecte automatiquement l'utilisateur.
+    Crée un compte CustomUser et ajoute automatiquement l'utilisateur à un groupe
+    si 'group_id' est présent dans GET (invitation) ou POST (formulaire admin).
     """
+    # Récupérer group_id depuis GET ou POST
+    group_id = request.GET.get('group_id') or request.POST.get('group_id')
+    group = None
+    if group_id:
+        group = get_object_or_404(Group, id=group_id)
+
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
 
-            # Récupérer le backend compatible
-            backend = get_backends()[0]  # prend le premier backend
+            # Connexion automatique
+            backend = get_backends()[0]
             login(request, user, backend=f'{backend.__module__}.{backend.__class__.__name__}')
 
+            # Ajout automatique au groupe si group_id fourni
+            if group:
+                GroupMember.objects.get_or_create(group=group, user=user)
+
             messages.success(request, f"Bienvenue {user.nom} ! Votre compte a été créé.")
-            return redirect('cotisationtontine:dashboard_tontine_simple')
+
+            # Redirection selon la présence du groupe
+            if group:
+                return redirect('cotisationtontine:group_detail', group_id=group.id)
+            else:
+                return redirect('cotisationtontine:dashboard_tontine_simple')
         else:
             messages.error(request, "Veuillez corriger les erreurs ci-dessous.")
     else:
         form = CustomUserCreationForm()
-    return render(request, 'accounts/signup.html', {'form': form})
 
+    return render(request, 'accounts/signup.html', {
+        'form': form,
+        'group': group,  # Permet de passer group_id dans le template pour un champ caché si besoin
+    })
+
+from django.contrib.auth import authenticate, login
 from django.shortcuts import render, redirect
-from django.contrib.auth import login, authenticate, get_backends
 from django.contrib import messages
-from cotisationtontine.models import GroupMember, Group
+from django.urls import reverse
+from cotisationtontine.models import GroupMember
 
 def login_view(request):
     """
-    Connexion avec nom + mot de passe et redirection selon rôle :
-    - membre : vers son groupe
-    - admin : vers la liste des groupes
+    Connexion des utilisateurs via nom et mot de passe.
+    Redirection vers group_detail du groupe auquel il appartient.
     """
     if request.method == "POST":
-        nom = request.POST.get('nom')
-        password = request.POST.get('password')
-        user = authenticate(request, username=nom, password=password)
-        if user is not None:
-            login(request, user)
-            messages.success(request, f"Bienvenue {user.nom} !")
+        nom_input = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "").strip()
 
-            # Vérifier si l'utilisateur est membre d'un groupe
-            try:
-                group_member = GroupMember.objects.get(user=user)
-                return redirect('cotisationtontine:group_detail', group_id=group_member.group.id)
-            except GroupMember.DoesNotExist:
-                # Sinon, redirection admin / liste des groupes
-                return redirect('cotisationtontine:group_list')
+        if not nom_input or not password:
+            messages.error(request, "Nom et mot de passe requis.")
+            return render(request, "accounts/login.html")
+
+        user = authenticate(request, username=nom_input, password=password)
+        if user:
+            # ⚠️ Important : définir backend pour login si nécessaire
+            if not hasattr(user, 'backend'):
+                user.backend = 'accounts.backend.NomBackend'
+
+            login(request, user)
+
+            # Redirection vers le premier groupe du membre
+            group_member = GroupMember.objects.filter(user=user).first()
+            if group_member:
+                return redirect(reverse("cotisationtontine:group_detail", args=[group_member.group.id]))
+            else:
+                messages.info(request, "Vous n'êtes membre d'aucun groupe pour l'instant.")
+                return redirect("accounts:login")
         else:
             messages.error(request, "Nom ou mot de passe incorrect.")
+            return render(request, "accounts/login.html")
 
-    return render(request, 'accounts/login.html')
+    return render(request, "accounts/login.html")
 
 
 # ✅ Vue de déconnexion
@@ -112,3 +140,94 @@ def dashboard_membre(request):
     # vue réservée aux membres
     ...
 
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
+from django.contrib.auth import login, authenticate
+from django.urls import reverse
+from .models import CustomUser
+from cotisationtontine.models import Group, GroupMember
+
+def inscription_et_rejoindre(request, code):
+    """
+    1️⃣ Affiche le formulaire d'inscription via un lien d'invitation
+    2️⃣ Crée un compte utilisateur ou utilise un compte existant
+    3️⃣ Ajoute l'utilisateur automatiquement au groupe
+    4️⃣ Connecte automatiquement l'utilisateur après inscription
+    5️⃣ Redirige vers la page group_detail
+    """
+    # Vérifier si le groupe existe
+    group = get_object_or_404(Group, code_invitation=code)
+
+    if request.method == "POST":
+        nom = request.POST.get("nom", "").strip()
+        phone = request.POST.get("phone", "").strip()
+        password = request.POST.get("password", "").strip()
+        confirm_password = request.POST.get("confirm_password", "").strip()
+
+        # Validation des champs obligatoires
+        if not nom or not phone or not password or not confirm_password:
+            messages.error(request, "Tous les champs sont requis.")
+            return render(request, "accounts/inscription_par_invit.html", {"group": group})
+
+        # Vérification des mots de passe
+        if password != confirm_password:
+            messages.error(request, "Les mots de passe ne correspondent pas.")
+            return render(request, "accounts/inscription_par_invit.html", {"group": group})
+
+        # Vérifier si l'utilisateur existe déjà par téléphone (unique)
+        user = CustomUser.objects.filter(phone=phone).first()
+        if not user:
+            # Création du nouvel utilisateur
+            user = CustomUser.objects.create_user(
+                phone=phone,
+                nom=nom,
+                password=password
+            )
+            messages.success(request, f"Compte créé avec succès. Bienvenue {nom} !")
+        else:
+            messages.info(request, f"Le numéro {phone} existe déjà. Connexion en cours...")
+
+        # Authentification via backend NomBackend
+        user = authenticate(request, username=nom, password=password)
+        if user:
+            login(request, user, backend='accounts.backend.NomBackend')
+        else:
+            messages.error(request, "Impossible de vous connecter automatiquement.")
+            return render(request, "accounts/inscription_par_invit.html", {"group": group})
+
+        # Ajouter l'utilisateur au groupe s'il n'y est pas déjà
+        group_member, created_member = GroupMember.objects.get_or_create(
+            group=group,
+            user=user,
+            defaults={'montant': 0}
+        )
+        if created_member:
+            messages.success(request, f"Vous avez été ajouté au groupe {group.nom} !")
+        else:
+            messages.info(request, f"Vous êtes déjà membre du groupe {group.nom}.")
+
+        # Simulation WhatsApp/log
+        print(f"📲 Simulé WhatsApp : Bonjour {nom}, vous avez été ajouté au groupe {group.nom}.")
+
+        # Redirection vers la page du groupe
+        return redirect(reverse("cotisationtontine:group_detail", args=[group.id]))
+
+    # Si GET : afficher formulaire
+    return render(request, "accounts/inscription_par_invit.html", {"group": group})
+
+
+from django.contrib.auth.models import BaseUserManager
+
+class CustomUserManager(BaseUserManager):
+    def create_user(self, phone, password=None, **extra_fields):
+        if not phone:
+            raise ValueError('Le numéro de téléphone est obligatoire')
+        user = self.model(phone=phone, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, phone, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(phone, password, **extra_fields)

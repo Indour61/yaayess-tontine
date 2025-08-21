@@ -47,8 +47,6 @@ urlpatterns = [
     path('versement/merci/', views.versement_merci, name='versement_merci'),
 
     # --- Invitations ---
-    path('invitation/<uuid:token>/', views.accepter_invitation, name='accepter_invitation'),
-    path('<int:group_id>/invitation/creer/', views.creer_invitation_view, name='creer_invitation'),
 
     # --- Tirage ---
     path('<int:group_id>/tirage-au-sort/', views.tirage_au_sort_view, name='tirage_au_sort'),
@@ -57,9 +55,6 @@ urlpatterns = [
     # --- Cycle ---
     path('<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
     path('<int:group_id>/lancer-tirage/', views.tirage_au_sort_view, name='lancer_tirage'),
-
-    # --- Rejoindre groupe ---
-    path('rejoindre/<uuid:code>/', views.inscription_et_rejoindre, name='inscription_et_rejoindre'),
 
     # --- Paiement gagnant ---
     path('<int:group_id>/payer-gagnant/', views.payer_gagnant, name='payer_gagnant'),

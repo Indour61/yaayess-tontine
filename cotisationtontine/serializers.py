@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Group, GroupMember, Invitation, Versement, ActionLog
+from .models import Group, GroupMember, Versement, ActionLog
 
 
 class GroupSerializer(serializers.ModelSerializer):
@@ -16,17 +16,6 @@ class GroupMemberSerializer(serializers.ModelSerializer):
         model = GroupMember
         fields = ['id', 'group', 'user', 'user_nom', 'user_phone', 'role', 'actif', 'date_ajout']
 
-
-class InvitationSerializer(serializers.ModelSerializer):
-    group_nom = serializers.CharField(source='group.nom', read_only=True)
-    est_valide = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Invitation
-        fields = ['id', 'group', 'group_nom', 'phone', 'token', 'expire_at', 'used', 'est_valide']
-
-    def get_est_valide(self, obj):
-        return obj.est_valide()
 
 
 class VersementSerializer(serializers.ModelSerializer):

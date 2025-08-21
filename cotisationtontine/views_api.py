@@ -2,9 +2,9 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
-from .models import Group, GroupMember, Invitation, Versement, ActionLog
+from .models import Group, GroupMember, Versement, ActionLog
 from .serializers import (
-    GroupSerializer, GroupMemberSerializer, InvitationSerializer,
+    GroupSerializer, GroupMemberSerializer,
     VersementSerializer, ActionLogSerializer
 )
 
@@ -60,14 +60,6 @@ class GroupMemberViewSet(viewsets.ModelViewSet):
         ActionLog.objects.create(user=self.request.user, action=f"Suppression membre {instance.user.nom} du groupe {instance.group.nom}")
         instance.delete()
 
-class InvitationViewSet(viewsets.ModelViewSet):
-    queryset = Invitation.objects.all()
-    serializer_class = InvitationSerializer
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrReadOnly]
-
-    def perform_create(self, serializer):
-        invitation = serializer.save()
-        ActionLog.objects.create(user=self.request.user, action=f"Invitation envoyée à {invitation.phone} pour {invitation.group.nom}")
 
 class VersementViewSet(viewsets.ModelViewSet):
     queryset = Versement.objects.select_related('member').all()

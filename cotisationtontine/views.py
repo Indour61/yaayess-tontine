@@ -23,40 +23,56 @@ def dashboard_tontine_simple(request):
         'action_logs': action_logs,
     })
 
+
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
-from django.urls import reverse
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect
-from .forms import GroupForm
-from .models import Group, GroupMember, Invitation
-from .utils import envoyer_invitation  # si défini ailleurs
+from cotisationtontine.forms import GroupForm
+from cotisationtontine.models import Group, GroupMember, Invitation
+from accounts.utils import envoyer_invitation  # Assurez-vous que cette fonction existe
 
 @login_required
 def ajouter_groupe_view(request):
+    """
+    Création d'un nouveau groupe par un utilisateur connecté :
+    1️⃣ Création du groupe avec l'utilisateur comme admin
+    2️⃣ Ajout de l'admin comme membre
+    3️⃣ Génération d'un lien d'invitation
+    4️⃣ Envoi de l'invitation (simulation WhatsApp ou SMS)
+    """
     if request.method == "POST":
         form = GroupForm(request.POST)
         if form.is_valid():
+            # ✅ Créer le groupe
             group = form.save(commit=False)
             group.admin = request.user
             group.save()
 
-            # ✅ Ajoute le créateur comme membre du groupe
-            GroupMember.objects.create(group=group, user=request.user)
+            # ✅ Ajoute l'admin comme membre du groupe
+            GroupMember.objects.get_or_create(group=group, user=request.user)
 
-            # ✅ Crée une invitation pour l’admin (optionnel ici mais logique si le système l’exige)
+            # ✅ Génère une invitation avec expiration (48h)
             invitation = Invitation.objects.create(
                 group=group,
                 phone=request.user.phone,
                 expire_at=timezone.now() + timedelta(days=2)
             )
-            lien = request.build_absolute_uri(
-                reverse("accounts:login")
-            ) + f"?token={invitation.token}"
-            envoyer_invitation(request.user.phone, lien)
 
-            messages.success(request, f"Groupe « {group.nom} » créé et vous êtes membre.")
+            # ✅ Crée un lien d'invitation sécurisé
+            lien_invitation = request.build_absolute_uri(
+                reverse("accounts:inscription_et_rejoindre", args=[invitation.token])
+            )
+
+            # ✅ Simule l'envoi de l'invitation (WhatsApp ou SMS)
+            envoyer_invitation(request.user.phone, lien_invitation)
+
+            # ✅ Message de confirmation
+            messages.success(request, f"Groupe « {group.nom} » créé avec succès et vous avez été ajouté comme membre.")
+
+            # ✅ Redirection vers le dashboard Tontine
             return redirect("cotisationtontine:dashboard_tontine_simple")
     else:
         form = GroupForm()
@@ -67,33 +83,7 @@ def ajouter_groupe_view(request):
         {"form": form, "title": "Créer un groupe"}
     )
 
-
 from cotisationtontine.utils import envoyer_invitation
-from django.urls import reverse
-from django.utils import timezone
-from datetime import timedelta
-from cotisationtontine.models import Invitation
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.urls import reverse
-from django.utils import timezone
-from datetime import timedelta
-
-from .models import Group, Invitation, GroupMember
-from .utils import envoyer_invitation
-
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.urls import reverse
-from django.utils import timezone
-from datetime import timedelta
-
-from .models import Group, GroupMember, Invitation
-from .utils import envoyer_invitation
-
-
 from django.utils import timezone
 from django.urls import reverse
 from django.contrib import messages
@@ -101,76 +91,52 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
 from datetime import timedelta
 
-from cotisationtontine.models import Group, GroupMember, Invitation
-from accounts.models import CustomUser  # modèle utilisateur
 from .utils import envoyer_invitation  # fonction d’envoi
+
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from .models import Group, GroupMember
+from accounts.models import CustomUser  # ou le modèle utilisateur que tu utilises
 
 @login_required
 def ajouter_membre_view(request, group_id):
-    """
-    Ajoute un membre en créant une invitation liée au groupe.
-    Crée aussi un CustomUser s'il n'existe pas encore pour le numéro donné
-    et ajoute ce membre dans GroupMember pour qu'il apparaisse immédiatement.
-    """
     group = get_object_or_404(Group, id=group_id)
 
-    # Vérification des droits : seul un ADMIN du groupe peut ajouter
-    is_admin = GroupMember.objects.filter(group=group, user=request.user ).exists()
-    if not is_admin:
+    # Vérification des droits : seul l'admin du groupe peut ajouter
+    if group.admin != request.user:
         messages.error(request, "⚠️ Vous n'avez pas les droits pour ajouter un membre à ce groupe.")
         return redirect("cotisationtontine:dashboard_tontine_simple")
 
     if request.method == "POST":
         phone = request.POST.get("phone")
-        nom = request.POST.get("nom")  # tu peux ajouter un champ nom dans ton formulaire
+        nom = request.POST.get("nom")
+
         if not phone:
             messages.error(request, "Veuillez renseigner un numéro de téléphone.")
             return redirect("cotisationtontine:ajouter_membre", group_id=group_id)
 
-        # Vérifier si un utilisateur existe déjà pour ce téléphone
+        # Vérifier si un utilisateur existe déjà
         user, created = CustomUser.objects.get_or_create(
             phone=phone,
-            defaults={"nom": nom or phone}  # nom par défaut si non fourni
+            defaults={"nom": nom or phone}
         )
 
         # Ajouter dans GroupMember si pas déjà présent
         group_member, gm_created = GroupMember.objects.get_or_create(
             group=group,
             user=user,
-        #    defaults={'role": "MEMBRE"}  # rôle par défaut
         )
 
-        # Créer l'invitation
-        invitation = Invitation.objects.create(
-            group=group,
-            phone=phone,
-            expire_at=timezone.now() + timedelta(days=2)
-        )
+        if gm_created:
+            messages.success(request, f"✅ {user.nom} a bien été ajouté au groupe {group.nom}.")
+        else:
+            messages.info(request, f"ℹ️ {user.nom} est déjà membre de ce groupe.")
 
-        # Générer le lien d’invitation
-        lien_invitation = request.build_absolute_uri(reverse("accounts:login")) + f"?token={invitation.token}"
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-        # Envoyer l’invitation (WhatsApp/SMS simulé)
-        try:
-            envoyer_invitation(phone, lien_invitation)
-            messages.success(
-                request,
-                f"✅ Invitation envoyée à {phone}.<br>🔗 <a href='{lien_invitation}' target='_blank'>{lien_invitation}</a>"
-            )
-        except Exception as e:
-            messages.error(
-                request,
-                f"❌ Impossible d’envoyer l’invitation : {e}"
-            )
-
-        # Rediriger vers le détail du groupe : le nouveau membre apparaîtra dans la liste
-        return redirect("cotisationtontine:group_detail", group_id=group_id)
-
-    # GET : afficher le formulaire d’ajout
-    return render(request, "cotisationtontine/ajouter_membre.html", {
-        "group": group
-    })
-
+    return render(request, "cotisationtontine/ajouter_membre.html", {"group": group})
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
@@ -207,14 +173,16 @@ from django.contrib.auth.decorators import login_required
 from django.urls import reverse
 from .models import Group, GroupMember, Versement, ActionLog
 
+
 @login_required
 def group_detail(request, group_id):
+    # Récupérer le groupe
     group = get_object_or_404(Group, id=group_id)
 
     # Tous les membres du groupe
     membres = group.membres.select_related('user')
 
-    # ✅ Récupération des versements
+    # ✅ Récupération des versements du groupe
     versements = Versement.objects.filter(member__group=group)
     total_montant = versements.aggregate(total=Sum('montant'))['total'] or 0
 
@@ -222,7 +190,7 @@ def group_detail(request, group_id):
     versements_par_membre = versements.values('member').annotate(total_montant=Sum('montant'))
     montants_membres_dict = {v['member']: v['total_montant'] for v in versements_par_membre}
 
-    # Ajout du montant à chaque membre
+    # Ajouter le montant à chaque membre
     for membre in membres:
         membre.montant = montants_membres_dict.get(membre.id, 0)
 
@@ -233,16 +201,16 @@ def group_detail(request, group_id):
     # ✅ Historique des actions
     actions = ActionLog.objects.filter(group=group).order_by('-date') if hasattr(ActionLog, "group") else []
 
-    # ✅ Lien d'invitation absolu pour partager sur WhatsApp ou email
+    # ✅ Lien d'invitation absolu correct pour WhatsApp ou email
     invite_url = request.build_absolute_uri(
-        reverse('cotisationtontine:inscription_et_rejoindre', args=[group.code_invitation])
+        reverse('accounts:inscription_et_rejoindre', args=[group.code_invitation])
     )
 
-    # Stocker dernier lien généré dans la session pour affichage dans le template (optionnel)
+    # Stocker dernier lien généré dans la session (optionnel)
     if user_is_admin:
         request.session['last_invitation_link'] = invite_url
 
-    return render(request, 'cotisationtontine/group_detail.html', {
+    context = {
         'group': group,
         'membres': membres,
         'versements': versements,
@@ -251,8 +219,10 @@ def group_detail(request, group_id):
         'actions': actions,
         'user_is_admin': user_is_admin,
         'invite_url': invite_url,
-        'last_invitation_link': request.session.get('last_invitation_link', None),
-    })
+        'last_invitation_link': request.session.get('last_invitation_link'),
+    }
+
+    return render(request, 'cotisationtontine/group_detail.html', context)
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
@@ -430,88 +400,6 @@ def versement_callback(request):
 
 def versement_merci(request):
     return render(request, "cotisationtontine/versement_merci.html")
-
-
-from django.utils import timezone
-from .models import Invitation, GroupMember
-
-@login_required
-def accepter_invitation(request, token):
-    invitation = get_object_or_404(Invitation, token=token)
-
-    if not invitation.est_valide():
-        messages.error(request, "Lien d'invitation expiré ou déjà utilisé.")
-        return redirect('cotisationtontine:dashboard_tontine_simple')
-
-    group = invitation.group
-
-    # Vérifie si l'utilisateur est déjà membre
-    membre_existant = GroupMember.objects.filter(group=group, user=request.user).exists()
-    if not membre_existant:
-        GroupMember.objects.create(group=group, user=request.user, role='MEMBRE')
-
-    # Marquer comme utilisée
-    invitation.used = True
-    invitation.save()
-
-    messages.success(request, f"Bienvenue dans le groupe {group.nom} !")
-    return redirect('cotisationtontine:group_detail', group_id=group.id)
-
-from datetime import timedelta
-from django.utils import timezone
-from .models import Invitation
-
-def creer_invitation(group, phone):
-    expiration = timezone.now() + timedelta(days=7)
-    invitation = Invitation.objects.create(
-        group=group,
-        phone=phone,
-        expire_at=expiration
-    )
-    return invitation
-
-from datetime import timedelta
-from django.utils import timezone
-from django.views.decorators.http import require_POST
-from django.shortcuts import get_object_or_404, redirect
-from django.contrib import messages
-from django.urls import reverse
-from django.contrib.auth.decorators import login_required
-from .models import Invitation, Group
-
-@require_POST
-@login_required
-def creer_invitation_view(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-
-    # Vérifie que l'utilisateur est admin du groupe
-    if request.user != group.admin:
-        messages.error(request, "Vous n'avez pas l'autorisation de générer une invitation pour ce groupe.")
-        return redirect('cotisationtontine:group_detail', group_id=group.id)
-
-    phone = request.POST.get('phone')
-    if not phone:
-        messages.error(request, "Numéro de téléphone requis.")
-        return redirect('cotisationtontine:group_detail', group_id=group.id)
-
-    # Créer une nouvelle invitation valide 7 jours
-    expiration = timezone.now() + timedelta(days=7)
-    invitation = Invitation.objects.create(
-        group=group,
-        phone=phone,
-        expire_at=expiration
-    )
-
-    # Générer le lien d'invitation
-    invitation_link = request.build_absolute_uri(
-        reverse('cotisationtontine:accepter_invitation', args=[str(invitation.token)])
-    )
-
-    # Stocker temporairement dans session pour affichage dans group_detail
-    request.session['last_invitation_link'] = invitation_link
-
-    messages.success(request, f"Lien d'invitation généré pour {phone}")
-    return redirect('cotisationtontine:group_detail', group_id=group.id)
 
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
@@ -712,93 +600,6 @@ def historique_cycles_view(request, group_id):
     }
     return render(request, "cotisationtontine/historique_cycles.html", context)
 
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib import messages
-from django.contrib.auth import login, authenticate
-from accounts.models import CustomUser
-from .models import Group, GroupMember
-from django import forms
-
-# views.py
-class InvitationSignupForm(forms.ModelForm):
-    password1 = forms.CharField(
-        label="Mot de passe",
-        widget=forms.PasswordInput(attrs={'class':'form-control', 'required': True}),
-        min_length=6
-    )
-    password2 = forms.CharField(
-        label="Confirmez le mot de passe",
-        widget=forms.PasswordInput(attrs={'class':'form-control', 'required': True}),
-        min_length=6
-    )
-
-    class Meta:
-        model = CustomUser
-        fields = ['nom', 'phone']
-        widgets = {
-            'nom': forms.TextInput(attrs={'class':'form-control','placeholder':'Ex: Fatou Diop','required': True}),
-            'phone': forms.TextInput(attrs={'class':'form-control','placeholder':'Ex: 77xxxxxxx','required': True}),
-        }
-
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from django.contrib.auth import login
-from django.utils import timezone
-from django.contrib.auth.hashers import make_password
-from accounts.models import CustomUser
-from .models import Invitation, GroupMember
-
-
-def inscription_et_rejoindre(request, token):
-    invitation = get_object_or_404(Invitation, token=token)
-
-    # Vérifier expiration
-    if invitation.expire_at < timezone.now():
-        messages.error(request, "❌ Ce lien d’invitation a expiré.")
-        return redirect("login")
-
-    if request.method == "POST":
-        phone = request.POST.get("phone")
-        password = request.POST.get("password")
-        password2 = request.POST.get("password2")
-
-        if not phone or not password or not password2:
-            messages.error(request, "⚠️ Tous les champs sont obligatoires.")
-            return redirect("inscription_et_rejoindre", token=token)
-
-        if password != password2:
-            messages.error(request, "⚠️ Les mots de passe ne correspondent pas.")
-            return redirect("inscription_et_rejoindre", token=token)
-
-        # Vérifier si l’utilisateur existe déjà
-        user, created = CustomUser.objects.get_or_create(
-            phone=phone,
-            defaults={
-                "password": make_password(password),
-                "choix_inscription": 2,  # 🚀 Tontine simple
-            },
-        )
-
-        if not created:
-            # si utilisateur existant mais pas encore dans le groupe
-            messages.info(request, "ℹ️ Vous avez déjà un compte. Connectez-vous directement.")
-            return redirect("login")
-
-        # Ajouter comme membre du groupe
-        GroupMember.objects.create(
-            group=invitation.group,
-            user=user,
-        )
-
-        # Connecter l'utilisateur
-        login(request, user)
-        messages.success(
-            request,
-            f"✅ Bienvenue {phone}, vous avez rejoint le groupe {invitation.group.nom} avec succès !"
-        )
-        return redirect("dashboard_tontine_simple")
-
-    return render(request, "inscription_et_rejoindre.html", {"invitation": invitation})
 
 import logging
 import requests

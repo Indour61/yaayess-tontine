@@ -97,3 +97,15 @@ class CustomUserChangeFormAdmin(forms.ModelForm):
         # Retourne la valeur initiale du mot de passe
         return self.initial["password"]
 
+# accounts/forms.py
+from django import forms
+from django.contrib.auth.forms import UserCreationForm
+from accounts.models import CustomUser
+
+class InscriptionParInvitationForm(UserCreationForm):
+    nom = forms.CharField(max_length=150, required=True, label="Nom complet")
+    telephone = forms.CharField(max_length=20, required=True, label="Téléphone")
+
+    class Meta:
+        model = CustomUser
+        fields = ("nom", "telephone", "password1", "password2")

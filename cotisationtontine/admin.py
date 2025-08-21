@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Group, GroupMember, Invitation, ActionLog
+from .models import Group, GroupMember, ActionLog
 
 
 @admin.register(Group)
@@ -16,12 +16,6 @@ class GroupMemberAdmin(admin.ModelAdmin):
     search_fields = ('user__nom', 'user__phone', 'group__nom')
     autocomplete_fields = ('user', 'group')
 
-
-@admin.register(Invitation)
-class InvitationAdmin(admin.ModelAdmin):
-    list_display = ('phone', 'group', 'expire_at', 'used')
-    list_filter = ('used',)
-    search_fields = ('phone', 'group__nom')
 
 
 @admin.register(ActionLog)

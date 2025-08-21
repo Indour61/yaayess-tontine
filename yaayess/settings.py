@@ -182,6 +182,7 @@ AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',  # fallback standard
 ]
 
+
 # settings.py
 LOGIN_URL = '/accounts/login/'          # redirection pour utilisateurs non connectés
 LOGIN_REDIRECT_URL = '/groups/'         # redirection après login réussi

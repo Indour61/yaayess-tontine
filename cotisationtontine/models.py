@@ -140,18 +140,7 @@ class Tirage(models.Model):
         return f"Tirage {self.date_tirage} - {self.group.nom}"
 
 # ✅ Invitation pour rejoindre un groupe
-class Invitation(models.Model):
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='invitations')
-    phone = models.CharField(max_length=50)
-    token = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
-    expire_at = models.DateTimeField()
-    used = models.BooleanField(default=False)
 
-    def est_valide(self):
-        return timezone.now() < self.expire_at and not self.used
-
-    def __str__(self):
-        return f"Invitation {self.phone} pour {self.group.nom}"
 
 from django.db import models
 from django.conf import settings
@@ -268,3 +257,21 @@ class PaiementGagnant(models.Model):
     def __str__(self):
         return f"{self.gagnant.user.nom} - {self.montant} FCFA - {self.statut}"
 
+import uuid
+from django.db import models
+from django.utils import timezone
+from datetime import timedelta
+from django.conf import settings
+
+class Invitation(models.Model):
+    group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name="invitations")
+    phone = models.CharField(max_length=20)
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expire_at = models.DateTimeField()
+
+    def is_expired(self):
+        return timezone.now() > self.expire_at
+
+    def __str__(self):
+        return f"Invitation for {self.phone} to join {self.group.nom}"
