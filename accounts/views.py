@@ -140,22 +140,26 @@ def dashboard_membre(request):
     # vue réservée aux membres
     ...
 
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib import messages
-from django.contrib.auth import login, authenticate
+from django.contrib.auth import authenticate, login
+from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
-from .models import CustomUser
+from django.contrib import messages
+from django.contrib.auth.hashers import make_password
+from accounts.models import CustomUser
 from cotisationtontine.models import Group, GroupMember
+from accounts.backends import NomBackend
+
 
 def inscription_et_rejoindre(request, code):
     """
-    1️⃣ Affiche le formulaire d'inscription via un lien d'invitation
-    2️⃣ Crée un compte utilisateur ou utilise un compte existant
-    3️⃣ Ajoute l'utilisateur automatiquement au groupe
-    4️⃣ Connecte automatiquement l'utilisateur après inscription
-    5️⃣ Redirige vers la page group_detail
+    Inscription via un lien d'invitation :
+    1️⃣ Vérifie le groupe par code d'invitation
+    2️⃣ Crée ou réutilise un compte basé sur le nom
+    3️⃣ Authentifie via NomBackend
+    4️⃣ Ajoute l'utilisateur au groupe
+    5️⃣ Redirige vers la page détail du groupe
     """
-    # Vérifier si le groupe existe
+    # Vérifier que le groupe existe
     group = get_object_or_404(Group, code_invitation=code)
 
     if request.method == "POST":
@@ -164,55 +168,57 @@ def inscription_et_rejoindre(request, code):
         password = request.POST.get("password", "").strip()
         confirm_password = request.POST.get("confirm_password", "").strip()
 
-        # Validation des champs obligatoires
+        # ✅ Vérification des champs
         if not nom or not phone or not password or not confirm_password:
             messages.error(request, "Tous les champs sont requis.")
             return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
-        # Vérification des mots de passe
         if password != confirm_password:
             messages.error(request, "Les mots de passe ne correspondent pas.")
             return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
-        # Vérifier si l'utilisateur existe déjà par téléphone (unique)
-        user = CustomUser.objects.filter(phone=phone).first()
+        # ✅ Vérifier si un utilisateur avec ce nom existe
+        user = CustomUser.objects.filter(nom=nom).first()
+
         if not user:
             # Création du nouvel utilisateur
-            user = CustomUser.objects.create_user(
+            user = CustomUser.objects.create(
                 phone=phone,
                 nom=nom,
-                password=password
+                password=make_password(password)  # hashage du mot de passe
             )
-            messages.success(request, f"Compte créé avec succès. Bienvenue {nom} !")
+            messages.success(request, f"Compte créé avec succès pour {nom}.")
         else:
-            messages.info(request, f"Le numéro {phone} existe déjà. Connexion en cours...")
+            messages.info(request, f"Un compte existe déjà pour le nom {nom}. Tentative de connexion...")
 
-        # Authentification via backend NomBackend
+        # ✅ Authentification via NomBackend
         user = authenticate(request, username=nom, password=password)
         if user:
             login(request, user, backend='accounts.backend.NomBackend')
+            messages.success(request, f"Bienvenue {nom}, vous êtes connecté.")
         else:
-            messages.error(request, "Impossible de vous connecter automatiquement.")
+            messages.error(request, "Échec de l'authentification. Vérifiez vos identifiants.")
             return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
-        # Ajouter l'utilisateur au groupe s'il n'y est pas déjà
+        # ✅ Ajout au groupe
         group_member, created_member = GroupMember.objects.get_or_create(
             group=group,
             user=user,
             defaults={'montant': 0}
         )
+
         if created_member:
-            messages.success(request, f"Vous avez été ajouté au groupe {group.nom} !")
+            messages.success(request, f"Vous avez été ajouté au groupe {group.nom}.")
         else:
             messages.info(request, f"Vous êtes déjà membre du groupe {group.nom}.")
 
-        # Simulation WhatsApp/log
+        # ✅ Simulation d'envoi WhatsApp
         print(f"📲 Simulé WhatsApp : Bonjour {nom}, vous avez été ajouté au groupe {group.nom}.")
 
-        # Redirection vers la page du groupe
+        # ✅ Redirection vers la page du groupe
         return redirect(reverse("cotisationtontine:group_detail", args=[group.id]))
 
-    # Si GET : afficher formulaire
+    # Si méthode GET → Afficher le formulaire
     return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
 

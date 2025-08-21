@@ -175,12 +175,15 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
-
-
 AUTHENTICATION_BACKENDS = [
-    'accounts.backends.NomBackend',          # connexion via nom
-    'django.contrib.auth.backends.ModelBackend',  # fallback standard
+    'accounts.backends.NomBackend',
 ]
+"""
+AUTHENTICATION_BACKENDS = [
+    'accounts.backend.NomBackend',
+    'django.contrib.auth.backends.ModelBackend',  # fallback par défaut
+]
+"""
 
 
 # settings.py

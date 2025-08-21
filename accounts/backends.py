@@ -1,19 +1,19 @@
 from django.contrib.auth.backends import BaseBackend
 from .models import CustomUser
+from django.contrib.auth.hashers import check_password
 
 class NomBackend(BaseBackend):
     """
-    Authentifie un utilisateur via son nom et mot de passe.
+    Authentification par nom uniquement
     """
     def authenticate(self, request, username=None, password=None, **kwargs):
+        # Ici, username correspond en fait au nom
         try:
             user = CustomUser.objects.get(nom=username)
+            if user.check_password(password):
+                return user
         except CustomUser.DoesNotExist:
             return None
-
-        if user.check_password(password) and user.is_active:
-            return user
-        return None
 
     def get_user(self, user_id):
         try:
