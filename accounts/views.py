@@ -191,14 +191,6 @@ def inscription_et_rejoindre(request, code):
         else:
             messages.info(request, f"Un compte existe déjà pour le nom {nom}. Tentative de connexion...")
 
-        # ✅ Authentification via NomBackend
-        user = authenticate(request, username=nom, password=password)
-        if user:
-            login(request, user, backend='accounts.backend.NomBackend')
-            messages.success(request, f"Bienvenue {nom}, vous êtes connecté.")
-        else:
-            messages.error(request, "Échec de l'authentification. Vérifiez vos identifiants.")
-            return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
         # ✅ Ajout au groupe
         group_member, created_member = GroupMember.objects.get_or_create(
