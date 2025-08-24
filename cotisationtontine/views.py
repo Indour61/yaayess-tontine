@@ -1,40 +1,109 @@
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
-from django.urls import reverse
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.db.models import Sum, Count
 from django.utils import timezone
+from datetime import timedelta
 
-from .utils import envoyer_invitation  # à implémenter pour Twilio/SMS
-from django.db import models
+from cotisationtontine.models import Group, GroupMember, Versement, ActionLog
 
 
-# ✅ Page d’accueil qui redirige vers le dashboard
 def landing_view(request):
-    # Ici tu peux mettre du contenu statique ou rediriger
-    return render(request, 'cotisationtontine/dashboard.html')
+    """
+    Page d'accueil qui redirige vers le dashboard si l'utilisateur est connecté,
+    ou affiche une page de présentation sinon.
+    """
+    # Si l'utilisateur est déjà connecté, rediriger vers le dashboard
+    if request.user.is_authenticated:
+        return redirect('cotisationtontine:dashboard_tontine_simple')
+
+    # Sinon, afficher la page d'accueil publique
+    return render(request, 'cotisationtontine/landing.html')
 
 
-# ✅ Dashboard principal
 @login_required
 def dashboard_tontine_simple(request):
-    # Si tu veux des données spécifiques au dashboard, tu peux les passer ici
-    action_logs = []  # exemple, charge tes logs réels si tu en as
-    return render(request, 'cotisationtontine/dashboard.html', {
-        'action_logs': action_logs,
-    })
+    """
+    Dashboard principal avec aperçu des groupes, activités récentes et statistiques.
+    """
+    # Groupes dont l'utilisateur est administrateur
+    groupes_admin = Group.objects.filter(admin=request.user)
+
+    # Groupes dont l'utilisateur est membre (mais pas admin)
+    groupes_membre = Group.objects.filter(
+        membres__user=request.user
+    ).exclude(admin=request.user).distinct()
+
+    # Dernières actions de l'utilisateur
+    dernieres_actions = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
+
+    # Total des versements de l'utilisateur - CORRECTION ICI
+    # On passe par GroupMember pour accéder aux versements
+    total_versements = Versement.objects.filter(
+        member__user=request.user
+    ).aggregate(total=Sum('montant'))['total'] or 0
+
+    # Nombre total de groupes où l'utilisateur est membre
+    total_groupes = Group.objects.filter(
+        membres__user=request.user
+    ).distinct().count()
+
+    # Récupérer les versements récents (30 derniers jours)
+    date_limite = timezone.now() - timedelta(days=30)
+    versements_recents = Versement.objects.filter(
+        member__user=request.user,
+        date__gte=date_limite  # Utilisez le nom correct du champ date
+    ).select_related('member__user', 'member__group').order_by('-date')[:5]
+
+    # Statistiques des groupes administrés
+    stats_groupes_admin = []
+    for groupe in groupes_admin:
+        total_membres = groupe.membres.count()
+        total_versements_groupe = Versement.objects.filter(
+            member__group=groupe
+        ).aggregate(total=Sum('montant'))['total'] or 0
+        stats_groupes_admin.append({
+            'groupe': groupe,
+            'membres_count': total_membres,
+            'versements_total': total_versements_groupe
+        })
+
+    context = {
+        "groupes_admin": groupes_admin,
+        "groupes_membre": groupes_membre,
+        "dernieres_actions": dernieres_actions,
+        "total_versements": total_versements,
+        "total_groupes": total_groupes,
+        "versements_recents": versements_recents,
+        "stats_groupes_admin": stats_groupes_admin,
+    }
+
+    return render(request, "cotisationtontine/dashboard.html", context)
 
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
-from cotisationtontine.forms import GroupForm
-from cotisationtontine.models import Group, GroupMember, Invitation
-from accounts.utils import envoyer_invitation  # Assurez-vous que cette fonction existe
+from django.db import transaction, IntegrityError
+from django.db.models import Sum
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
+import json
+import requests
+from decimal import Decimal
+
+from cotisationtontine.forms import GroupForm, GroupMemberForm, VersementForm
+from cotisationtontine.models import Group, GroupMember, Invitation, Versement, ActionLog
+from accounts.models import CustomUser
+from accounts.utils import envoyer_invitation
+
 
 @login_required
+@transaction.atomic
 def ajouter_groupe_view(request):
     """
     Création d'un nouveau groupe par un utilisateur connecté :
@@ -46,34 +115,36 @@ def ajouter_groupe_view(request):
     if request.method == "POST":
         form = GroupForm(request.POST)
         if form.is_valid():
-            # ✅ Créer le groupe
-            group = form.save(commit=False)
-            group.admin = request.user
-            group.save()
+            try:
+                # ✅ Créer le groupe
+                group = form.save(commit=False)
+                group.admin = request.user
+                group.save()
 
-            # ✅ Ajoute l'admin comme membre du groupe
-            GroupMember.objects.get_or_create(group=group, user=request.user)
+                # ✅ Ajoute l'admin comme membre du groupe
+                GroupMember.objects.create(
+                    group=group,
+                    user=request.user,
+                    montant=0
+                )
 
-            # ✅ Génère une invitation avec expiration (48h)
-            invitation = Invitation.objects.create(
-                group=group,
-                phone=request.user.phone,
-                expire_at=timezone.now() + timedelta(days=2)
-            )
+                # ✅ Crée un lien d'invitation sécurisé (utilise le code_invitation du groupe)
+                lien_invitation = request.build_absolute_uri(
+                    reverse("accounts:inscription_et_rejoindre", args=[str(group.code_invitation)])
+                )
 
-            # ✅ Crée un lien d'invitation sécurisé
-            lien_invitation = request.build_absolute_uri(
-                reverse("accounts:inscription_et_rejoindre", args=[invitation.token])
-            )
+                # ✅ Simule l'envoi de l'invitation (WhatsApp ou SMS)
+                envoyer_invitation(request.user.phone, lien_invitation)
 
-            # ✅ Simule l'envoi de l'invitation (WhatsApp ou SMS)
-            envoyer_invitation(request.user.phone, lien_invitation)
+                # ✅ Message de confirmation
+                messages.success(request,
+                                 f"Groupe « {group.nom} » créé avec succès et vous avez été ajouté comme membre.")
 
-            # ✅ Message de confirmation
-            messages.success(request, f"Groupe « {group.nom} » créé avec succès et vous avez été ajouté comme membre.")
+                # ✅ Redirection vers le dashboard Tontine
+                return redirect("cotisationtontine:dashboard_tontine_simple")
 
-            # ✅ Redirection vers le dashboard Tontine
-            return redirect("cotisationtontine:dashboard_tontine_simple")
+            except Exception as e:
+                messages.error(request, f"Erreur lors de la création du groupe: {str(e)}")
     else:
         form = GroupForm()
 
@@ -83,25 +154,14 @@ def ajouter_groupe_view(request):
         {"form": form, "title": "Créer un groupe"}
     )
 
-from cotisationtontine.utils import envoyer_invitation
-from django.utils import timezone
-from django.urls import reverse
-from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect, render
-from django.contrib.auth.decorators import login_required
-from datetime import timedelta
-
-from .utils import envoyer_invitation  # fonction d’envoi
-
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from .models import Group, GroupMember
-from accounts.models import CustomUser  # ou le modèle utilisateur que tu utilises
 
 @login_required
+@transaction.atomic
 def ajouter_membre_view(request, group_id):
+    """
+    Ajouter un membre à un groupe existant.
+    Seul l'administrateur du groupe peut ajouter des membres.
+    """
     group = get_object_or_404(Group, id=group_id)
 
     # Vérification des droits : seul l'admin du groupe peut ajouter
@@ -110,74 +170,85 @@ def ajouter_membre_view(request, group_id):
         return redirect("cotisationtontine:dashboard_tontine_simple")
 
     if request.method == "POST":
-        phone = request.POST.get("phone")
-        nom = request.POST.get("nom")
+        form = GroupMemberForm(request.POST)
+        if form.is_valid():
+            try:
+                phone = form.cleaned_data.get("phone")
+                nom = form.cleaned_data.get("nom")
 
-        if not phone:
-            messages.error(request, "Veuillez renseigner un numéro de téléphone.")
-            return redirect("cotisationtontine:ajouter_membre", group_id=group_id)
+                # Vérifier si un utilisateur existe déjà
+                user, created = CustomUser.objects.get_or_create(
+                    phone=phone,
+                    defaults={"nom": nom or f"Utilisateur {phone}"}
+                )
 
-        # Vérifier si un utilisateur existe déjà
-        user, created = CustomUser.objects.get_or_create(
-            phone=phone,
-            defaults={"nom": nom or phone}
-        )
+                if created:
+                    messages.info(request, f"Un compte a été créé pour {user.nom}.")
 
-        # Ajouter dans GroupMember si pas déjà présent
-        group_member, gm_created = GroupMember.objects.get_or_create(
-            group=group,
-            user=user,
-        )
+                # Ajouter dans GroupMember si pas déjà présent
+                group_member, created = GroupMember.objects.get_or_create(
+                    group=group,
+                    user=user,
+                    defaults={"montant": 0}
+                )
 
-        if gm_created:
-            messages.success(request, f"✅ {user.nom} a bien été ajouté au groupe {group.nom}.")
-        else:
-            messages.info(request, f"ℹ️ {user.nom} est déjà membre de ce groupe.")
+                if created:
+                    messages.success(request, f"✅ {user.nom} a bien été ajouté au groupe {group.nom}.")
+                else:
+                    messages.info(request, f"ℹ️ {user.nom} est déjà membre de ce groupe.")
 
-        return redirect("cotisationtontine:group_detail", group_id=group.id)
+                return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-    return render(request, "cotisationtontine/ajouter_membre.html", {"group": group})
+            except IntegrityError:
+                messages.error(request, "Ce membre est déjà dans le groupe ou une erreur s'est produite.")
+            except Exception as e:
+                messages.error(request, f"Erreur lors de l'ajout du membre: {str(e)}")
+    else:
+        form = GroupMemberForm()
 
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from .models import Group, GroupMember, Versement, ActionLog
-from .forms import GroupForm, GroupMemberForm, VersementForm
-
-@login_required
-def dashboard(request):
-    action_logs = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
-    return render(request, 'cotisationtontine/dashboard.html', {
-        'action_logs': action_logs
+    return render(request, "cotisationtontine/ajouter_membre.html", {
+        "group": group,
+        "form": form
     })
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
-from .models import Group  # ton modèle de groupe
+
+
+from django.db.models import Q  # Ajoutez cette importation en haut du fichier
 
 @login_required
-def group_list(request):
-    # Selon ton modèle, adapte le filtre :
-    # Si tu as un champ ManyToMany via GroupMember :
-    groups = Group.objects.filter(membres__user=request.user).distinct()
+def group_list_view(request):
+    """
+    Affiche la liste des groupes :
+    - Tous les groupes si super admin
+    - Sinon, seulement ceux créés par l'utilisateur ou ceux où l'utilisateur est membre
+    """
+    if request.user.is_super_admin:
+        groupes = Group.objects.all()
+    else:
+        # Groupes dont l'utilisateur est admin OU membre
+        groupes = Group.objects.filter(
+            Q(admin=request.user) |  # Utilisez Q directement sans le préfixe models
+            Q(membres__user=request.user)
+        ).distinct()
 
     return render(request, 'cotisationtontine/group_list.html', {
-        'groups': groups
+        'groupes': groupes
     })
-
-
-
-# ✅ Vue à garder
-from django.db.models import Sum
-from django.shortcuts import render, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.urls import reverse
-from .models import Group, GroupMember, Versement, ActionLog
 
 
 @login_required
 def group_detail(request, group_id):
+    """
+    Détails d'un groupe spécifique avec ses membres et versements
+    """
     # Récupérer le groupe
     group = get_object_or_404(Group, id=group_id)
+
+    # Vérifier si l'utilisateur a accès à ce groupe
+    if not (group.admin == request.user or
+            GroupMember.objects.filter(group=group, user=request.user).exists() or
+            request.user.is_super_admin):
+        messages.error(request, "Vous n'avez pas accès à ce groupe.")
+        return redirect("cotisationtontine:group_list")
 
     # Tous les membres du groupe
     membres = group.membres.select_related('user')
@@ -199,11 +270,11 @@ def group_detail(request, group_id):
     user_is_admin = request.user == admin_user or getattr(request.user, "is_super_admin", False)
 
     # ✅ Historique des actions
-    actions = ActionLog.objects.filter(group=group).order_by('-date') if hasattr(ActionLog, "group") else []
+    actions = ActionLog.objects.filter(group=group).order_by('-date')[:10] if hasattr(ActionLog, "group") else []
 
     # ✅ Lien d'invitation absolu correct pour WhatsApp ou email
     invite_url = request.build_absolute_uri(
-        reverse('accounts:inscription_et_rejoindre', args=[group.code_invitation])
+        reverse('accounts:inscription_et_rejoindre', args=[str(group.code_invitation)])
     )
 
     # Stocker dernier lien généré dans la session (optionnel)
@@ -224,70 +295,43 @@ def group_detail(request, group_id):
 
     return render(request, 'cotisationtontine/group_detail.html', context)
 
+
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
-from .models import Group
+from django.contrib import messages
+from django.db import transaction
+from django.utils import timezone
+from django.conf import settings
+from decimal import Decimal
+import requests
+import json
 
-@login_required
-def group_list_view(request):
-    """
-    Affiche la liste des groupes :
-    - Tous les groupes si super admin
-    - Sinon, seulement ceux créés par l'utilisateur
-    """
-    if request.user.is_super_admin:
-        groupes = Group.objects.all()
-    else:
-        groupes = Group.objects.filter(admin=request.user)
-
-    return render(request, 'cotisationtontine/group_list.html', {
-        'groupes': groupes
-    })
-
-
-
-from django.http import HttpResponse
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
-from .models import ActionLog
-
-@login_required
-def dashboard_epargne_credit(request):
-    # Récupérer les dernières actions de l’utilisateur connecté
-    action_logs = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
-
-    return render(request, 'cotisationtontine/dashboard.html', {
-        'action_logs': action_logs
-    })
-
-
-
-def editer_membre_view(request, group_id, membre_id):
-    return HttpResponse(f"Éditer membre {membre_id} du groupe {group_id}")
-
-def supprimer_membre_view(request, group_id, membre_id):
-    return HttpResponse(f"Supprimer membre {membre_id} du groupe {group_id}")
-
-
-def reset_cycle_view(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-    # Ici tu réinitialises les versements/crédits selon ta logique
-    messages.info(request, f"Cycle réinitialisé pour le groupe {group.nom} (à implémenter).")
-    return redirect("cotisationtontine:group_detail", group_id=group.id)
+from cotisationtontine.models import GroupMember, Versement
 
 
 @login_required
+@transaction.atomic
 def initier_versement(request, member_id):
+    """
+    Initier un versement pour un membre d'un groupe
+    """
     member = get_object_or_404(GroupMember, id=member_id)
-    group_id = member.group.id  # ID du groupe pour la redirection
+    group_id = member.group.id
+
+    # Vérifier que l'utilisateur a le droit d'effectuer un versement pour ce membre
+    if request.user != member.user and request.user != member.group.admin and not request.user.is_super_admin:
+        messages.error(request, "Vous n'avez pas les droits pour effectuer un versement pour ce membre.")
+        return redirect("cotisationtontine:group_detail", group_id=group_id)
 
     if request.method == 'POST':
         try:
             montant_saisi = float(request.POST.get('montant', 0))
             if montant_saisi <= 0:
-                return JsonResponse({"error": "Montant doit être supérieur à 0"}, status=400)
+                messages.error(request, "Le montant doit être supérieur à 0.")
+                return redirect("cotisationtontine:initier_versement", member_id=member_id)
         except (TypeError, ValueError):
-            return JsonResponse({"error": "Montant invalide"}, status=400)
+            messages.error(request, "Montant invalide.")
+            return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
         methode = request.POST.get('methode', 'paydunya').lower()
 
@@ -297,13 +341,12 @@ def initier_versement(request, member_id):
                 montant=montant_saisi,
                 frais=0,
                 methode="CAISSE",
-                transaction_id="CAISSE-" + str(member.id)
+                transaction_id=f"CAISSE-{member.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
             )
             member.montant += Decimal(montant_saisi)
             member.save()
 
             messages.success(request, f"Versement de {montant_saisi} FCFA enregistré via Caisse.")
-            # 🔹 Redirection vers le détail du groupe
             return redirect('cotisationtontine:group_detail', group_id=group_id)
 
         # --- PayDunya ---
@@ -337,7 +380,6 @@ def initier_versement(request, member_id):
                 }],
                 "description": f"Paiement épargne (+{frais_total} FCFA de frais)",
                 "total_amount": montant_total,
-                # 🔹 Callback et return vers la page du groupe
                 "callback_url": f"{base_url}groups/versement/callback/",
                 "return_url": f"{base_url}groups/{group_id}/"
             },
@@ -362,28 +404,63 @@ def initier_versement(request, member_id):
                 timeout=15
             )
 
-            data = response.json()
-            if data.get("response_code") == "00":
+            # Vérifier que la réponse est valide avant de parser le JSON
+            if response.status_code != 200:
+                messages.error(request, f"Erreur PayDunya (HTTP {response.status_code}): {response.text}")
+                return redirect("cotisationtontine:initier_versement", member_id=member_id)
+
+            # CORRECTION ICI : Vérifier que la réponse est bien du JSON
+            try:
+                data = response.json()
+            except json.JSONDecodeError:
+                messages.error(request, "Réponse invalide de PayDunya (format JSON incorrect)")
+                return redirect("cotisationtontine:initier_versement", member_id=member_id)
+
+            # CORRECTION ICI : Vérifier que data est un dictionnaire
+            if not isinstance(data, dict):
+                messages.error(request, "Réponse invalide de PayDunya (format de données incorrect)")
+                return redirect("cotisationtontine:initier_versement", member_id=member_id)
+
+            # CORRECTION ICI : Accès sécurisé aux champs de la réponse
+            response_code = data.get("response_code")
+            if response_code == "00":
+                # Créer le versement
                 Versement.objects.create(
                     member=member,
                     montant=montant_saisi,
                     frais=frais_total,
                     methode="PAYDUNYA",
-                    transaction_id=data.get("token")
+                    transaction_id=data.get("token", "")
                 )
-                # 🔹 Redirection vers la page du groupe après PayDunya
-                return redirect(f"/groups/{group_id}/")
+
+                # CORRECTION ICI : Accès sécurisé à l'URL de redirection
+                response_text = data.get("response_text", {})
+                if isinstance(response_text, dict):
+                    invoice_url = response_text.get("invoice_url", f"/groups/{group_id}/")
+                else:
+                    invoice_url = f"/groups/{group_id}/"
+
+                return redirect(invoice_url)
             else:
-                return JsonResponse({"error": "Échec du paiement", "details": data.get("response_text")}, status=400)
+                error_message = data.get("response_text", "Erreur inconnue")
+                messages.error(request, f"Échec du paiement: {error_message}")
+                return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
         except requests.exceptions.RequestException as e:
-            return JsonResponse({"error": "Erreur réseau PayDunya", "details": str(e)}, status=500)
+            messages.error(request, f"Erreur réseau PayDunya: {str(e)}")
+            return redirect("cotisationtontine:initier_versement", member_id=member_id)
+        except Exception as e:
+            messages.error(request, f"Erreur inattendue: {str(e)}")
+            return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
     return render(request, "cotisationtontine/initier_versement.html", {"member": member})
 
 
-#@csrf_exempt
+@csrf_exempt
 def versement_callback(request):
+    """
+    Callback pour les paiements PayDunya
+    """
     try:
         data = json.loads(request.body)
         token = data.get("token")
@@ -394,12 +471,47 @@ def versement_callback(request):
         versement = Versement.objects.get(transaction_id=token)
         versement.statut = "valide"
         versement.save()
+
+        # Mettre à jour le montant du membre
+        member = versement.member
+        member.montant += versement.montant
+        member.save()
+
         return JsonResponse({"message": "✅ Versement confirmé"})
     except Versement.DoesNotExist:
         return JsonResponse({"error": "❌ Versement introuvable"}, status=404)
 
+
 def versement_merci(request):
+    """
+    Page de remerciement après un versement
+    """
     return render(request, "cotisationtontine/versement_merci.html")
+
+
+
+@login_required
+def dashboard(request):
+    action_logs = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
+    return render(request, 'cotisationtontine/dashboard.html', {
+        'action_logs': action_logs
+    })
+
+
+
+
+def editer_membre_view(request, group_id, membre_id):
+    return HttpResponse(f"Éditer membre {membre_id} du groupe {group_id}")
+
+def supprimer_membre_view(request, group_id, membre_id):
+    return HttpResponse(f"Supprimer membre {membre_id} du groupe {group_id}")
+
+
+def reset_cycle_view(request, group_id):
+    group = get_object_or_404(Group, id=group_id)
+    # Ici tu réinitialises les versements/crédits selon ta logique
+    messages.info(request, f"Cycle réinitialisé pour le groupe {group.nom} (à implémenter).")
+    return redirect("cotisationtontine:group_detail", group_id=group.id)
 
 from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required

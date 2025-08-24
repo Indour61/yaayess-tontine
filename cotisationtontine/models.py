@@ -43,23 +43,63 @@ class Group(models.Model):
     def __str__(self):
         return f"{self.nom} (admin : {self.admin})"
 
+from django.db import models
+from django.conf import settings
+from django.utils import timezone
 
 class GroupMember(models.Model):
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='membres')
+    group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name='membres')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     montant = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     actif = models.BooleanField(default=True)
     exit_liste = models.BooleanField(default=False)
     date_ajout = models.DateTimeField(auto_now_add=True)
-    date_joined = models.DateTimeField(default=timezone.now, verbose_name="Date d'adhésion")  # Champ ajouté
+    date_joined = models.DateTimeField(default=timezone.now)
 
     class Meta:
         unique_together = ('group', 'user')
-        verbose_name = "Membre du groupe"
-        verbose_name_plural = "Membres du groupe"
 
     def __str__(self):
-        return self.user.nom
+        return f"{self.user.nom} - {self.group.nom}"
+
+"""
+class Versement(models.Model):
+    METHODE_CHOICES = [
+        ('PAYDUNYA', 'PayDunya'),
+        ('CASH', 'Caisse'),
+    ]
+
+    member = models.ForeignKey(
+        GroupMember,
+        on_delete=models.CASCADE,
+        related_name='versements'
+    )
+    montant = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Montant net du versement (hors frais)."
+    )
+    frais = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text="Frais appliqués sur le paiement."
+    )
+    date = models.DateTimeField(auto_now_add=True)
+    methode = models.CharField(
+        max_length=50,
+        choices=METHODE_CHOICES,
+        default='PAYDUNYA'
+    )
+    transaction_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+
+    def __str__(self):
+        return f"Versement {self.montant} FCFA (+{self.frais} FCFA frais) par {self.member.user.nom}"
+"""
 
 # ✅ Historique des tirages
 class TirageHistorique(models.Model):
