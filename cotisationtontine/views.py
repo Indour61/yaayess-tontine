@@ -18,7 +18,7 @@ def landing_view(request):
         return redirect('cotisationtontine:dashboard_tontine_simple')
 
     # Sinon, afficher la page d'accueil publique
-    return render(request, 'cotisationtontine/landing.html')
+    return render(request, 'landing.html')
 
 
 @login_required

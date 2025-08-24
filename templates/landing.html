@@ -13,7 +13,8 @@
           <p class="lead mb-4 fs-5">Gérez facilement vos Cotisations & Tontine communautaire.</p>
 
           {% if user.is_authenticated %}
-            <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard</a>
+            <!-- Correction ici : dashboard_tontine_simple au lieu de dashboard -->
+            <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard</a>
           {% else %}
             <div class="d-flex flex-column flex-md-row justify-content-center gap-3">
               <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-lg px-4 py-3 fs-5 mb-2 mb-md-0">Connexion</a>
@@ -122,7 +123,8 @@
           <p class="lead mb-4">Rejoignez des milliers d'utilisateurs qui gèrent déjà leurs tontines avec YaayESS</p>
 
           {% if user.is_authenticated %}
-            <a href="{% url 'cotisationtontine:dashboard' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard</a>
+            <!-- Correction ici aussi : dashboard_tontine_simple au lieu de dashboard -->
+            <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard</a>
           {% else %}
             <div class="d-flex flex-column flex-md-row justify-content-center gap-3">
               <a href="{% url 'accounts:signup' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Créer un compte</a>
@@ -172,3 +174,5 @@
   }
 </style>
 {% endblock %}
+
+
