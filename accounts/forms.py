@@ -32,29 +32,88 @@ class CustomUserCreationForm(forms.ModelForm):
 # ----------------------------------------------------
 # Formulaire de connexion
 # ----------------------------------------------------
-class CustomAuthenticationForm(forms.Form):
-    phone = forms.CharField(label="Numéro de téléphone")
-    password = forms.CharField(label="Mot de passe", widget=forms.PasswordInput)
+from django import forms
+from django.contrib.auth import authenticate
+from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.forms import AuthenticationForm
+
+class CustomAuthenticationForm(AuthenticationForm):
+    """
+    Formulaire d'authentification personnalisé utilisant le nom comme identifiant.
+    """
+    username = forms.CharField(
+        label=_("Nom d'utilisateur"),
+        widget=forms.TextInput(attrs={
+            'autofocus': True,
+            'placeholder': 'Votre nom',
+            'class': 'form-control'
+        })
+    )
+    password = forms.CharField(
+        label=_("Mot de passe"),
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Votre mot de passe',
+            'class': 'form-control'
+        }),
+        strip=False
+    )
+
+    error_messages = {
+        'invalid_login': _(
+            "Veuillez saisir un nom et un mot de passe valides. "
+            "Notez que les deux champs peuvent être sensibles à la casse."
+        ),
+        'inactive': _("Ce compte est inactif."),
+    }
 
     def __init__(self, request=None, *args, **kwargs):
+        """
+        Initialise le formulaire avec la requête optionnelle.
+        """
         self.request = request
         self.user_cache = None
         super().__init__(*args, **kwargs)
 
     def clean(self):
-        phone = self.cleaned_data.get('phone')
+        """
+        Valide les données du formulaire et authentifie l'utilisateur.
+        """
+        username = self.cleaned_data.get('username')
         password = self.cleaned_data.get('password')
 
-        if phone and password:
-            self.user_cache = authenticate(self.request, phone=phone, password=password)
+        if username and password:
+            self.user_cache = authenticate(
+                self.request,
+                username=username,
+                password=password
+            )
             if self.user_cache is None:
-                raise forms.ValidationError("Numéro ou mot de passe incorrect.")
-            if not self.user_cache.is_active:
-                raise forms.ValidationError("Ce compte est désactivé.")
+                raise forms.ValidationError(
+                    self.error_messages['invalid_login'],
+                    code='invalid_login',
+                    params={'username': self.username_field.verbose_name},
+                )
+            else:
+                self.confirm_login_allowed(self.user_cache)
+
         return self.cleaned_data
 
+    def confirm_login_allowed(self, user):
+        """
+        Vérifie si l'utilisateur est autorisé à se connecter.
+        """
+        if not user.is_active:
+            raise forms.ValidationError(
+                self.error_messages['inactive'],
+                code='inactive',
+            )
+
     def get_user(self):
+        """
+        Retourne l'utilisateur authentifié.
+        """
         return self.user_cache
+
 
 
 # ----------------------------------------------------

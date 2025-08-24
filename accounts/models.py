@@ -1,52 +1,145 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager, Group, Permission
+from django.core.validators import RegexValidator
+from django.utils.translation import gettext_lazy as _
 
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, phone, nom, password=None, **extra_fields):
+        """
+        Crée et enregistre un utilisateur avec le numéro de téléphone, le nom et le mot de passe.
+        """
         if not phone:
-            raise ValueError('Le numéro de téléphone est obligatoire')
-        user = self.model(phone=phone, nom=nom, **extra_fields)
+            raise ValueError(_('Le numéro de téléphone est obligatoire'))
+        if not nom:
+            raise ValueError(_('Le nom est obligatoire'))
+
+        user = self.model(
+            phone=phone,
+            nom=nom,
+            **extra_fields
+        )
         user.set_password(password)
         user.save(using=self._db)
         return user
 
     def create_superuser(self, phone, nom, password=None, **extra_fields):
+        """
+        Crée et enregistre un superutilisateur avec les privilèges d'administration.
+        """
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('is_super_admin', True)
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError(_('Le superutilisateur doit avoir is_staff=True.'))
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError(_('Le superutilisateur doit avoir is_superuser=True.'))
+
         return self.create_user(phone, nom, password, **extra_fields)
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    phone = models.CharField(max_length=20, unique=True)
-    nom = models.CharField(max_length=150)
-    is_active = models.BooleanField(default=True)
-    is_staff = models.BooleanField(default=False)
-    is_super_admin = models.BooleanField(default=False)
+    # Validateur pour le format de numéro de téléphone
+    phone_regex = RegexValidator(
+        regex=r'^\+?1?\d{9,15}$',
+        message=_("Le numéro de téléphone doit être au format: '+999999999'. Jusqu'à 15 chiffres autorisés.")
+    )
 
+    phone = models.CharField(
+        _('numéro de téléphone'),
+        max_length=17,
+        unique=True,
+        validators=[phone_regex],
+        help_text=_('Numéro de téléphone au format international')
+    )
+
+    nom = models.CharField(
+        _('nom complet'),
+        max_length=150,
+        help_text=_('Votre nom complet')
+    )
+
+    email = models.EmailField(
+        _('adresse email'),
+        blank=True,
+        null=True,
+        help_text=_('Adresse email (optionnelle)')
+    )
+
+    date_joined = models.DateTimeField(
+        _("date d'inscription"),
+        auto_now_add=True
+    )
+
+    is_active = models.BooleanField(
+        _('actif'),
+        default=True,
+        help_text=_('Désigne si cet utilisateur doit être traité comme actif.')
+    )
+
+    is_staff = models.BooleanField(
+        _('membre du staff'),
+        default=False,
+        help_text=_('Désigne si l\'utilisateur peut se connecter à l\'interface d\'administration.')
+    )
+
+    is_super_admin = models.BooleanField(
+        _('super administrateur'),
+        default=False,
+        help_text=_('Désigne si l\'utilisateur a tous les droits sans limitation.')
+    )
+
+    # Relations avec les groupes et permissions
     groups = models.ManyToManyField(
         Group,
-        related_name='customuser_set',  # éviter conflit avec AbstractUser
+        verbose_name=_('groupes'),
         blank=True,
-        help_text='Groupes auxquels appartient cet utilisateur.',
-        verbose_name='groupes'
-    )
-    user_permissions = models.ManyToManyField(
-        Permission,
-        related_name='customuser_set',  # éviter conflit avec AbstractUser
-        blank=True,
-        help_text='Permissions spécifiques pour cet utilisateur.',
-        verbose_name='permissions utilisateur'
+        help_text=_(
+            'Les groupes auxquels appartient cet utilisateur. Un utilisateur obtiendra '
+            'toutes les permissions accordées à chacun de ses groupes.'
+        ),
+        related_name="customuser_groups",
+        related_query_name="customuser",
     )
 
+    user_permissions = models.ManyToManyField(
+        Permission,
+        verbose_name=_('permissions utilisateur'),
+        blank=True,
+        help_text=_('Permissions spécifiques pour cet utilisateur.'),
+        related_name="customuser_permissions",
+        related_query_name="customuser",
+    )
+
+    # Champs requis pour le modèle d'utilisateur personnalisé
     USERNAME_FIELD = 'phone'
     REQUIRED_FIELDS = ['nom']
 
     objects = CustomUserManager()
 
+    class Meta:
+        verbose_name = _('utilisateur')
+        verbose_name_plural = _('utilisateurs')
+        ordering = ['nom', 'phone']
+
     def __str__(self):
         return f"{self.nom} ({self.phone})"
+
+    def get_full_name(self):
+        """
+        Retourne le nom complet de l'utilisateur.
+        """
+        return self.nom
+
+    def get_short_name(self):
+        """
+        Retourne une version courte du nom de l'utilisateur.
+        """
+        return self.nom.split()[0] if self.nom else self.phone
+
+
 
 from django.db import models
 from django.contrib.auth import get_user_model

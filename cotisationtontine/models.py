@@ -3,8 +3,6 @@ from django.conf import settings
 from django.utils import timezone
 import uuid
 
-# ... tes modèles ...
-
 class Group(models.Model):
     nom = models.CharField(max_length=255, verbose_name="Nom du groupe")
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
@@ -20,7 +18,7 @@ class Group(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, verbose_name="Code d'invitation")
     montant_base = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Montant de base")
 
-    montant_fixe_gagnant = models.DecimalField(  # 💡 Nouveau champ
+    montant_fixe_gagnant = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         null=True,
@@ -46,14 +44,14 @@ class Group(models.Model):
         return f"{self.nom} (admin : {self.admin})"
 
 
-# ✅ Membre du groupe
 class GroupMember(models.Model):
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='membres')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    montant = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # Montant épargné
+    montant = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     actif = models.BooleanField(default=True)
-    exit_liste = models.BooleanField(default=False)  # Exclu du tirage
+    exit_liste = models.BooleanField(default=False)
     date_ajout = models.DateTimeField(auto_now_add=True)
+    date_joined = models.DateTimeField(default=timezone.now, verbose_name="Date d'adhésion")  # Champ ajouté
 
     class Meta:
         unique_together = ('group', 'user')
@@ -61,10 +59,7 @@ class GroupMember(models.Model):
         verbose_name_plural = "Membres du groupe"
 
     def __str__(self):
-        # Utilise username si le modèle User n'a pas de champ 'nom'
         return self.user.nom
-#        return getattr(self.user, 'nom', self.user.username)
-
 
 # ✅ Historique des tirages
 class TirageHistorique(models.Model):
