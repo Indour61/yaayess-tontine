@@ -6,25 +6,41 @@ from django.contrib.auth.forms import UserCreationForm
 
 User = get_user_model()
 
+from django import forms
+from .models import Group
+
 # ✅ Formulaire de création de groupe
 class GroupForm(forms.ModelForm):
     class Meta:
         model = Group
-        fields = ['nom', 'montant_base']  # Ajout du champ montant_base
+        fields = ['nom', 'montant_base']  # Champs inclus dans le formulaire
         widgets = {
             'nom': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'Nom du groupe'
+                'placeholder': 'Nom du groupe',
+                'required': True,
+                'autofocus': True,
             }),
             'montant_base': forms.NumberInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'Montant de base (ex: 5000)'
+                'placeholder': 'Montant de base (ex: 5000)',
+                'min': 0,
+                'required': True,
             }),
         }
         labels = {
             'nom': 'Nom du groupe',
             'montant_base': 'Montant de base du groupe (FCFA)',
         }
+        help_texts = {
+            'montant_base': 'Indiquez le montant minimal que chaque membre doit verser.'
+        }
+
+    def clean_montant_base(self):
+        montant = self.cleaned_data.get('montant_base')
+        if montant is not None and montant <= 0:
+            raise forms.ValidationError("Le montant de base doit être supérieur à zéro.")
+        return montant
 
 # ✅ Formulaire d’ajout de membre
 class GroupMemberForm(forms.ModelForm):
@@ -66,11 +82,25 @@ class VersementForm(forms.ModelForm):
             ('caisse', 'Caisse (sans frais)'),
         ]
 
-# ✅ Formulaire d’inscription utilisateur
+from django import forms
+from django.contrib.auth.forms import UserCreationForm
+from accounts.models import CustomUser
+
+
+# ✅ Formulaire d’inscription utilisateur avec alias optionnel
 class RegisterForm(UserCreationForm):
+    alias = forms.CharField(
+        required=False,
+        label="Alias (facultatif)",
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Alias (facultatif)'
+        })
+    )
+
     class Meta:
         model = CustomUser
-        fields = ['nom', 'phone', 'password1', 'password2']
+        fields = ['nom', 'alias', 'phone', 'password1', 'password2']
         widgets = {
             'nom': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -82,3 +112,9 @@ class RegisterForm(UserCreationForm):
             }),
         }
 
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.alias = self.cleaned_data.get('alias', '')
+        if commit:
+            user.save()
+        return user

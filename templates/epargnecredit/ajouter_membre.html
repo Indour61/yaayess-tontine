@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block title %}Ajouter un membre{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-3">
+        Ajouter un membre au groupe <strong>{{ group.nom }}</strong>
+    </h2>
+
+    <!-- Messages flash -->
+    {% if messages %}
+        <div class="mb-3">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <form method="post" class="shadow p-4 rounded bg-light needs-validation" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+
+        <!-- Champ pour le nom -->
+        <div class="mb-3">
+            <label for="{{ form.nom.id_for_label }}" class="form-label">Nom du membre</label>
+            {{ form.nom|add_class:"form-control"|attr:"placeholder:Ex: Fatou Diop,required,autofocus,aria-label:Nom du membre" }}
+            {% for error in form.nom.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+            {% endfor %}
+        </div>
+
+        <!-- Champ pour le téléphone -->
+        <div class="mb-3">
+            <label for="{{ form.phone.id_for_label }}" class="form-label">Numéro de téléphone</label>
+            {{ form.phone|add_class:"form-control"|attr:"placeholder:+221770000000,pattern:^\\+?\\d{7,15}$,required,aria-label:Numéro de téléphone" }}
+            <div class="form-text">
+                Saisir le numéro complet avec indicatif international.
+            </div>
+            {% for error in form.phone.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+            {% endfor %}
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-success">Envoyer l'invitation</button>
+            <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-secondary ms-2">Annuler</a>
+        </div>
+    </form>
+</div>
+
+<!-- Validation JS Bootstrap 5 -->
+<script>
+(() => {
+    'use strict'
+    const forms = document.querySelectorAll('.needs-validation')
+    Array.from(forms).forEach(form => {
+        form.addEventListener('submit', event => {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+        }, false)
+    })
+})();
+</script>
+{% endblock %}

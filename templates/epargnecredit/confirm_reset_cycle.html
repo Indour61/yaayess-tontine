@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block title %}Réinitialiser le cycle{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <h2 class="text-danger mb-4">⚠️ Réinitialisation du cycle</h2>
+
+  <div class="alert alert-warning" role="alert">
+    <p>Vous êtes sur le point de <strong>supprimer toutes les cotisations et versements</strong> du groupe <strong>{{ group.nom }}</strong>.</p>
+    <p>Cette action est <strong>irréversible</strong>. Confirmez-vous ?</p>
+  </div>
+
+  <form method="post" class="d-flex gap-2">
+    {% csrf_token %}
+    <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-secondary flex-grow-1">
+      Annuler
+    </a>
+    <button type="submit" class="btn btn-danger flex-grow-1">
+      ✅ Oui, réinitialiser
+    </button>
+  </form>
+</div>
+{% endblock %}
+

@@ -6,15 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
   <meta name="description" content="YaayESS - Plateforme de gestion de tontines et d'épargne collective" />
   <meta name="keywords" content="tontine, épargne, gestion, groupe, finance, yaayess" />
-  <title>{% block title %}YaayESS - Gestion de Tontines{% endblock %}</title>
+  <title>{% block title %}YaayESS{% endblock %}</title>
 
-  <!-- Favicon -->
   <link rel="icon" href="{% static 'images/favicon.ico' %}" type="image/x-icon">
-
-  <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-
-  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
   <style>
@@ -24,185 +19,90 @@
       --yaayess-light: #f8f9fa;
       --yaayess-dark: #212529;
     }
-
     body {
       display: flex;
       flex-direction: column;
       min-height: 100vh;
       padding-top: 76px;
-      background-color: #f8f9fa;
+      background-color: var(--yaayess-light);
     }
-
-    main {
-      flex: 1 0 auto;
-    }
-
-    footer {
-      flex-shrink: 0;
-    }
-
-    .accordion-button:not(.collapsed) {
-      color: #155724;
-      background-color: #d4edda;
-    }
-
-    .navbar-brand {
-      font-weight: 700;
-      font-size: 1.5rem;
-    }
-
-    .nav-link {
-      font-weight: 500;
-      transition: all 0.3s ease;
-    }
-
-    .nav-link:hover {
-      transform: translateY(-2px);
-    }
-
-    .alert {
-      border: none;
-      border-radius: 0.5rem;
-    }
-
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
-      body {
-        padding-top: 66px;
-      }
-
-      .navbar-brand {
-        font-size: 1.3rem;
-      }
-
-      .container {
-        padding-left: 15px;
-        padding-right: 15px;
-      }
-
-      /* Amélioration pour les petits écrans */
-      .navbar-nav {
-        text-align: center;
-      }
-
-      .dropdown-menu {
-        text-align: center;
-      }
-    }
-
-    @media (max-width: 576px) {
-      body {
-        padding-top: 56px;
-      }
-
-      .navbar-brand {
-        font-size: 1.2rem;
-      }
-
-      /* Ajustement de l'espacement pour les très petits écrans */
-      main.container {
-        padding-left: 10px;
-        padding-right: 10px;
-      }
-    }
+    main { flex: 1 0 auto; }
+    footer { flex-shrink: 0; }
+    .accordion-button:not(.collapsed) { color: #155724; background-color: #d4edda; }
+    .navbar-brand { font-weight: 700; font-size: 1.5rem; }
+    .nav-link { font-weight: 500; transition: all 0.3s ease; }
+    .nav-link:hover { transform: translateY(-2px); }
+    .alert { border-radius: 0.5rem; }
+    @media (max-width: 768px) { body { padding-top: 66px; } .navbar-brand { font-size: 1.3rem; } }
+    @media (max-width: 576px) { body { padding-top: 56px; } .navbar-brand { font-size: 1.2rem; } }
   </style>
 
   {% block extra_css %}{% endblock %}
 </head>
 <body>
   <!-- Navbar -->
-  <!-- Navbar -->
   <nav class="navbar navbar-expand-lg navbar-dark bg-success fixed-top shadow">
     <div class="container">
-      <!-- Modification ici : ajout du lien vers la landing page -->
       <a class="navbar-brand d-flex align-items-center" href="{% url 'landing' %}">
-        <i class="fas fa-hand-holding-usd me-2"></i>
-        YaayESS
+        <i class="fas fa-hand-holding-usd me-2"></i>YaayESS
       </a>
-
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-              aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
           {% if user.is_authenticated %}
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'cotisationtontine:dashboard_tontine_simple' %}">
-                <i class="fas fa-tachometer-alt me-1"></i>Dashboard
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'cotisationtontine:group_list' %}">
-                <i class="fas fa-users me-1"></i>Mes Groupes
-              </a>
-            </li>
+            {% if user.type_adhesion == 1 %}
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'epargnecredit:dashboard_epargne_credit' %}">
+                  <i class="fas fa-tachometer-alt me-1"></i>Dashboard Épargne
+                </a>
+              </li>
+            {% elif user.type_adhesion == 2 %}
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'cotisationtontine:dashboard_tontine_simple' %}">
+                  <i class="fas fa-tachometer-alt me-1"></i>Dashboard Tontine
+                </a>
+              </li>
+            {% endif %}
             <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button"
-                 data-bs-toggle="dropdown" aria-expanded="false">
+              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                 <i class="fas fa-user-circle me-1"></i>{{ user.nom|default:user.phone }}
               </a>
-              <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-                <li><a class="dropdown-item" href="#">
-                  <i class="fas fa-user me-2"></i>Profil
-                </a></li>
-                <li><a class="dropdown-item" href="#">
-                  <i class="fas fa-cog me-2"></i>Paramètres
-                </a></li>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i>Profil</a></li>
+                <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i>Paramètres</a></li>
                 <li><hr class="dropdown-divider"></li>
-                <li>
-                  <a class="dropdown-item" href="{% url 'accounts:logout' %}">
-                    <i class="fas fa-sign-out-alt me-2"></i>Déconnexion
-                  </a>
-                </li>
+                <li><a class="dropdown-item" href="{% url 'accounts:logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
               </ul>
             </li>
           {% else %}
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'accounts:login' %}">
-                <i class="fas fa-sign-in-alt me-1"></i>Connexion
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'accounts:signup' %}">
-                <i class="fas fa-user-plus me-1"></i>Inscription
-              </a>
-            </li>
+            <li class="nav-item"><a class="nav-link" href="{% url 'accounts:login' %}"><i class="fas fa-sign-in-alt me-1"></i>Connexion</a></li>
+            <li class="nav-item"><a class="nav-link" href="{% url 'accounts:signup' %}"><i class="fas fa-user-plus me-1"></i>Inscription</a></li>
           {% endif %}
         </ul>
       </div>
     </div>
   </nav>
 
-  <!-- Main content -->
   <main class="container mt-4 mb-5">
     {% if messages %}
-      <div class="mb-3">
-        {% for message in messages %}
-          <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
-            <div class="d-flex align-items-center">
-              {% if message.tags == 'success' %}
-                <i class="fas fa-check-circle me-2"></i>
-              {% elif message.tags == 'error' or message.tags == 'danger' %}
-                <i class="fas fa-exclamation-circle me-2"></i>
-              {% elif message.tags == 'warning' %}
-                <i class="fas fa-exclamation-triangle me-2"></i>
-              {% elif message.tags == 'info' %}
-                <i class="fas fa-info-circle me-2"></i>
-              {% endif %}
-              <div>{{ message|safe }}</div>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+          <div class="d-flex align-items-center">
+            {% if message.tags == 'success' %}<i class="fas fa-check-circle me-2"></i>
+            {% elif message.tags in 'error danger' %}<i class="fas fa-exclamation-circle me-2"></i>
+            {% elif message.tags == 'warning' %}<i class="fas fa-exclamation-triangle me-2"></i>
+            {% elif message.tags == 'info' %}<i class="fas fa-info-circle me-2"></i>{% endif %}
+            <div>{{ message|safe }}</div>
           </div>
-        {% endfor %}
-      </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
     {% endif %}
-
-    {% block content %}
-    {% endblock %}
+    {% block content %}{% endblock %}
   </main>
 
-  <!-- Footer -->
   <footer class="bg-dark text-white py-4 mt-auto">
     <div class="container">
       <div class="row">
@@ -214,9 +114,6 @@
           <h6 class="fw-bold">Liens rapides</h6>
           <ul class="list-unstyled">
             <li><a href="{% url 'landing' %}" class="text-white text-decoration-none">Accueil</a></li>
-            {% if user.is_authenticated %}
-              <li><a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="text-white text-decoration-none">Dashboard</a></li>
-            {% endif %}
           </ul>
         </div>
         <div class="col-md-3">
@@ -224,38 +121,23 @@
           <ul class="list-unstyled">
             <li><a href="mailto:contact@yaayess.com" class="text-white text-decoration-none">contact@yaayess.com</a></li>
             <li><a href="tel:+221773456789" class="text-white text-decoration-none">+221 77 557 32 37</a></li>
-            <li><a href="tel:+221777273079" class="text-white text-decoration-none">+221 77 727 30 79</a></li>
           </ul>
         </div>
       </div>
       <hr class="my-3 bg-light">
-      <div class="row align-items-center">
-        <div class="col-md-6 text-center text-md-start">
-          <small>&copy; 2025 YaayESS. Tous droits réservés.</small>
-        </div>
-        <div class="col-md-6 text-center text-md-end">
-          <a href="#" class="text-white me-2"><i class="fab fa-facebook-f"></i></a>
-          <a href="#" class="text-white me-2"><i class="fab fa-twitter"></i></a>
-          <a href="#" class="text-white me-2"><i class="fab fa-instagram"></i></a>
-          <a href="#" class="text-white"><i class="fab fa-linkedin-in"></i></a>
-        </div>
+      <div class="row">
+        <div class="col text-center">&copy; 2025 YaayESS. Tous droits réservés.</div>
       </div>
     </div>
   </footer>
 
-  <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-  <!-- Custom JS -->
   <script>
-    // Activer les tooltips partout
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
       return new bootstrap.Tooltip(tooltipTriggerEl)
     })
   </script>
-
   {% block extra_js %}{% endblock %}
 </body>
 </html>
-

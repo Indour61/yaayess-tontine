@@ -154,7 +154,6 @@ def ajouter_groupe_view(request):
         {"form": form, "title": "Créer un groupe"}
     )
 
-
 @login_required
 @transaction.atomic
 def ajouter_membre_view(request, group_id):
@@ -172,37 +171,59 @@ def ajouter_membre_view(request, group_id):
     if request.method == "POST":
         form = GroupMemberForm(request.POST)
         if form.is_valid():
-            try:
-                phone = form.cleaned_data.get("phone")
-                nom = form.cleaned_data.get("nom")
+            phone = form.cleaned_data.get("phone")
+            nom = form.cleaned_data.get("nom")
 
-                # Vérifier si un utilisateur existe déjà
-                user, created = CustomUser.objects.get_or_create(
-                    phone=phone,
-                    defaults={"nom": nom or f"Utilisateur {phone}"}
+            # Vérifier si un utilisateur existe déjà avec ce numéro
+            user, created_user = CustomUser.objects.get_or_create(
+                phone=phone,
+                defaults={"nom": nom or f"Utilisateur {phone}"}
+            )
+
+            # Si le user existait déjà mais avec un autre nom → prévenir
+            if not created_user and user.nom != nom:
+                messages.warning(
+                    request,
+                    f"⚠️ Ce numéro est déjà associé à {user.nom}. Le nom fourni ({nom}) a été ignoré."
                 )
+                nom = user.nom  # Utiliser le nom existant
 
-                if created:
-                    messages.info(request, f"Un compte a été créé pour {user.nom}.")
-
-                # Ajouter dans GroupMember si pas déjà présent
-                group_member, created = GroupMember.objects.get_or_create(
-                    group=group,
-                    user=user,
-                    defaults={"montant": 0}
-                )
-
-                if created:
-                    messages.success(request, f"✅ {user.nom} a bien été ajouté au groupe {group.nom}.")
-                else:
-                    messages.info(request, f"ℹ️ {user.nom} est déjà membre de ce groupe.")
-
+            # Vérifier si le membre est déjà dans ce groupe
+            if GroupMember.objects.filter(group=group, user=user).exists():
+                messages.info(request, f"ℹ️ {user.nom} est déjà membre du groupe {group.nom}.")
                 return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-            except IntegrityError:
-                messages.error(request, "Ce membre est déjà dans le groupe ou une erreur s'est produite.")
-            except Exception as e:
-                messages.error(request, f"Erreur lors de l'ajout du membre: {str(e)}")
+            # ✅ Vérifier si le nom existe déjà dans ce groupe avec un autre numéro
+            existing_members_same_name = GroupMember.objects.filter(group=group, user__nom=nom).exclude(user__phone=phone)
+            alias = None
+            if existing_members_same_name.exists():
+                # ✅ Message explicite avant l'ajout
+                messages.warning(
+                    request,
+                    f"⚠️ Le nom '{nom}' existe déjà dans le groupe avec un autre numéro. "
+                    f"Un alias sera créé pour éviter la confusion."
+                )
+                alias = f"{nom} ({phone})"
+
+            # Ajouter le membre
+            group_member = GroupMember.objects.create(
+                group=group,
+                user=user,
+                montant=0,
+                alias=alias
+            )
+
+            # Message de confirmation
+            if alias:
+                messages.success(request, f"✅ {alias} a été ajouté au groupe {group.nom}.")
+            else:
+                messages.success(request, f"✅ {user.nom} a été ajouté au groupe {group.nom}.")
+
+            # TODO: Simuler envoi WhatsApp
+            # message = f"Bonjour {user.nom}, vous avez été ajouté au groupe {group.nom} sur YaayESS. Connectez-vous avec votre numéro {phone}."
+            # simulate_whatsapp_send(phone, message)
+
+            return redirect("cotisationtontine:group_detail", group_id=group.id)
     else:
         form = GroupMemberForm()
 
@@ -210,7 +231,6 @@ def ajouter_membre_view(request, group_id):
         "group": group,
         "form": form
     })
-
 
 from django.db.models import Q  # Ajoutez cette importation en haut du fichier
 
@@ -234,64 +254,62 @@ def group_list_view(request):
         'groupes': groupes
     })
 
+from django.shortcuts import get_object_or_404, render, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.db.models import Sum
+from django.urls import reverse
+from .models import Group, GroupMember, Versement, ActionLog
 
 @login_required
 def group_detail(request, group_id):
-    """
-    Détails d'un groupe spécifique avec ses membres et versements
-    """
-    # Récupérer le groupe
     group = get_object_or_404(Group, id=group_id)
 
-    # Vérifier si l'utilisateur a accès à ce groupe
+    # Vérifier accès
     if not (group.admin == request.user or
             GroupMember.objects.filter(group=group, user=request.user).exists() or
-            request.user.is_super_admin):
+            getattr(request.user, "is_super_admin", False)):
         messages.error(request, "Vous n'avez pas accès à ce groupe.")
         return redirect("cotisationtontine:group_list")
 
-    # Tous les membres du groupe
     membres = group.membres.select_related('user')
 
-    # ✅ Récupération des versements du groupe
-    versements = Versement.objects.filter(member__group=group)
-    total_montant = versements.aggregate(total=Sum('montant'))['total'] or 0
+    # Tous les versements du groupe
+    versements = Versement.objects.filter(member__group=group).order_by('date')
 
     # Total des versements par membre
     versements_par_membre = versements.values('member').annotate(total_montant=Sum('montant'))
     montants_membres_dict = {v['member']: v['total_montant'] for v in versements_par_membre}
 
-    # Ajouter le montant à chaque membre
+    # Dernier versement par membre
+    dernier_versement_membres_dict = {}
     for membre in membres:
+        dernier = versements.filter(member=membre).order_by('-date').first()
+        dernier_versement_membres_dict[membre.id] = dernier
         membre.montant = montants_membres_dict.get(membre.id, 0)
 
-    # ✅ Vérification admin
-    admin_user = group.admin
-    user_is_admin = request.user == admin_user or getattr(request.user, "is_super_admin", False)
-
-    # ✅ Historique des actions
+    user_is_admin = request.user == group.admin or getattr(request.user, "is_super_admin", False)
     actions = ActionLog.objects.filter(group=group).order_by('-date')[:10] if hasattr(ActionLog, "group") else []
 
-    # ✅ Lien d'invitation absolu correct pour WhatsApp ou email
     invite_url = request.build_absolute_uri(
         reverse('accounts:inscription_et_rejoindre', args=[str(group.code_invitation)])
     )
-
-    # Stocker dernier lien généré dans la session (optionnel)
     if user_is_admin:
         request.session['last_invitation_link'] = invite_url
 
     context = {
         'group': group,
         'membres': membres,
-        'versements': versements,
-        'total_montant': total_montant,
-        'admin_user': admin_user,
+        'dernier_versement_membres_dict': dernier_versement_membres_dict,
+        'total_montant': versements.aggregate(total=Sum('montant'))['total'] or 0,
+        'admin_user': group.admin,
         'actions': actions,
         'user_is_admin': user_is_admin,
         'invite_url': invite_url,
         'last_invitation_link': request.session.get('last_invitation_link'),
     }
+
+    return render(request, 'cotisationtontine/group_detail.html', context)
 
     return render(request, 'cotisationtontine/group_detail.html', context)
 

@@ -10,28 +10,47 @@ from django.core.exceptions import ValidationError
 from .forms import CustomUserCreationForm, CustomAuthenticationForm
 from cotisationtontine.models import Group, GroupMember
 
+from django.contrib.auth import login, authenticate
+from django.contrib import messages
+from django.db import transaction, IntegrityError
+from django.shortcuts import render, redirect, get_object_or_404
+from django.utils import timezone
+from django.urls import reverse
+from accounts.forms import CustomUserCreationForm, CustomAuthenticationForm
+from accounts.models import CustomUser
+from cotisationtontine.models import Group, GroupMember
 
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import login, authenticate, logout
+from django.contrib import messages
+from django.db import transaction
+from django.urls import reverse
+from .forms import CustomUserCreationForm, CustomAuthenticationForm
+from .models import CustomUser
+from epargnecredit.models import Group, GroupMember
+
+# ----------------------------------------------------
+# Vue d'inscription
+# ----------------------------------------------------
+@transaction.atomic
 def signup_view(request):
     """
-    Crée un compte CustomUser et ajoute automatiquement l'utilisateur à un groupe
-    si 'group_id' est présent dans GET (invitation) ou POST (formulaire admin).
+    Création d'un compte CustomUser avec champ 'option'.
+    - Si 'group_id' dans GET ou POST : ajout automatique au groupe (invitation)
+    - Redirection vers le dashboard correspondant à l'option choisie
     """
-    # Vérifier si l'utilisateur est déjà connecté
     if request.user.is_authenticated:
         messages.info(request, "Vous êtes déjà connecté.")
-        return redirect('cotisationtontine:dashboard_tontine_simple')
+        if request.user.option == '1':
+            return redirect('cotisationtontine:dashboard_tontine_simple')
+        else:
+            return redirect('epargnecredit:dashboard_epargne_credit')
 
-    # Récupérer group_id depuis GET ou POST
     group_id = request.GET.get('group_id') or request.POST.get('group_id')
-    group = None
-    if group_id:
-        try:
-            group = get_object_or_404(Group, id=group_id)
-        except (ValueError, Group.DoesNotExist):
-            messages.error(request, "Le groupe spécifié n'existe pas.")
-            group = None
+    group = get_object_or_404(Group, id=group_id) if group_id else None
 
-    if request.method == 'POST':
+    if request.method == "POST":
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             try:
@@ -40,83 +59,77 @@ def signup_view(request):
                 # Connexion automatique
                 login(request, user)
 
-                # Ajout automatique au groupe si group_id fourni
+                # Ajout automatique au groupe si fourni
                 if group:
-                    try:
-                        GroupMember.objects.get_or_create(
-                            group=group,
-                            user=user,
-                            defaults={'date_joined': timezone.now()}
-                        )
+                    _, created = GroupMember.objects.get_or_create(
+                        group=group,
+                        user=user,
+                        defaults={'date_joined': timezone.now()}
+                    )
+                    if created:
                         messages.success(request, f"Vous avez été ajouté au groupe {group.nom}.")
-                    except IntegrityError:
+                    else:
                         messages.info(request, f"Vous êtes déjà membre du groupe {group.nom}.")
 
                 messages.success(request, f"Bienvenue {user.nom} ! Votre compte a été créé.")
 
-                # Redirection selon la présence du groupe
-                if group:
-                    return redirect('cotisationtontine:group_detail', group_id=group.id)
+                # Redirection selon l'option
+                if user.option == '1':
+                    return redirect(
+                        reverse('cotisationtontine:group_detail', args=[group.id])
+                    ) if group else redirect('cotisationtontine:dashboard_tontine_simple')
                 else:
-                    return redirect('cotisationtontine:dashboard_tontine_simple')
+                    return redirect('epargnecredit:dashboard_epargne_credit')
 
             except Exception as e:
-                messages.error(request, f"Une erreur s'est produite lors de la création du compte: {str(e)}")
+                messages.error(request, f"Erreur lors de la création du compte : {str(e)}")
         else:
             messages.error(request, "Veuillez corriger les erreurs ci-dessous.")
     else:
         form = CustomUserCreationForm()
 
-    return render(request, 'accounts/signup.html', {
-        'form': form,
-        'group': group,
-    })
+    return render(request, "accounts/signup.html", {"form": form, "group": group})
 
-
+# ----------------------------------------------------
+# Vue de connexion
+# ----------------------------------------------------
 def login_view(request):
     """
-    Connexion des utilisateurs via nom et mot de passe.
-    Redirection vers group_detail du groupe auquel il appartient.
+    Connexion avec validation de l'option.
+    - Redirection vers le dashboard selon l'option
+    - Si utilisateur membre d'un groupe, redirection vers ce groupe
     """
-    # Vérifier si l'utilisateur est déjà connecté
     if request.user.is_authenticated:
         messages.info(request, "Vous êtes déjà connecté.")
-        # Rediriger vers le tableau de bord ou le groupe approprié
-        group_member = GroupMember.objects.filter(user=request.user).first()
-        if group_member:
-            return redirect(reverse("cotisationtontine:group_detail", args=[group_member.group.id]))
+        if request.user.option == '1':
+            member = GroupMember.objects.filter(user=request.user).first()
+            return redirect(
+                reverse("cotisationtontine:group_detail", args=[member.group.id])
+            ) if member else redirect("cotisationtontine:dashboard_tontine_simple")
         else:
-            return redirect("cotisationtontine:dashboard_tontine_simple")
+            return redirect("epargnecredit:dashboard_epargne_credit")
 
     if request.method == "POST":
-        # Utiliser le formulaire d'authentification personnalisé
         form = CustomAuthenticationForm(request, data=request.POST)
         if form.is_valid():
-            nom = form.cleaned_data.get('username')  # Le champ s'appelle username mais contient le nom
-            password = form.cleaned_data.get('password')
+            user = form.get_user()
+            login(request, user)
+            messages.success(request, f"Connexion réussie. Bienvenue {user.nom} !")
 
-            # Authentifier avec le nom
-            user = authenticate(request, username=nom, password=password)
-
-            if user is not None:
-                login(request, user)
-                messages.success(request, f"Connexion réussie. Bienvenue {user.nom} !")
-
-                # Redirection vers le premier groupe du membre
-                group_member = GroupMember.objects.filter(user=user).first()
-                if group_member:
-                    return redirect(reverse("cotisationtontine:group_detail", args=[group_member.group.id]))
-                else:
-                    return redirect("cotisationtontine:dashboard_tontine_simple")
+            # Redirection selon l'option
+            if user.option == '1':
+                member = GroupMember.objects.filter(user=user).first()
+                return redirect(
+                    reverse("cotisationtontine:group_detail", args=[member.group.id])
+                ) if member else redirect("cotisationtontine:dashboard_tontine_simple")
             else:
-                messages.error(request, "Nom ou mot de passe incorrect.")
+                return redirect("epargnecredit:dashboard_epargne_credit")
         else:
-            messages.error(request, "Veuillez corriger les erreurs ci-dessous.")
+            messages.error(request, "Numéro/nom ou mot de passe incorrect, ou option invalide.")
     else:
         form = CustomAuthenticationForm()
 
-    return render(request, "accounts/login.html", {'form': form})
-
+    return render(request, "accounts/login.html", {"form": form})
 
 @login_required
 def logout_view(request):
@@ -171,22 +184,42 @@ from django.contrib import messages
 from django.urls import reverse
 from django.utils import timezone
 from django.db import IntegrityError
-from django.core.exceptions import ValidationError
+import random
+import string
 
-# Assurez-vous d'importer CustomUser
 from .models import CustomUser
 from cotisationtontine.models import Group, GroupMember
 
 
+def generate_alias(nom):
+    """
+    Génère un alias unique basé sur le nom + un suffixe aléatoire.
+    Exemple: Fatou Diop → fatou.diop.8372
+    """
+    base_alias = nom.lower().replace(" ", ".")
+    suffix = "".join(random.choices(string.digits, k=4))
+    return f"{base_alias}.{suffix}"
+
+
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
+from django.contrib.auth import login, authenticate
+from django.db import IntegrityError, transaction
+from django.urls import reverse
+from django.utils import timezone
+from .models import CustomUser
+from epargnecredit.models import Group, GroupMember
+from .utils import generate_alias  # ta fonction pour créer un alias unique
+
+@transaction.atomic
 def inscription_et_rejoindre(request, code):
     """
     Inscription via un lien d'invitation :
     1️⃣ Vérifie le groupe par code d'invitation
-    2️⃣ Crée ou réutilise un compte basé sur le nom
+    2️⃣ Crée ou réutilise un compte basé sur le nom et option
     3️⃣ Ajoute l'utilisateur au groupe
-    4️⃣ Redirige vers la page détail du groupe
+    4️⃣ Redirige vers le dashboard approprié selon l'option
     """
-    # Vérifier que le groupe existe
     group = get_object_or_404(Group, code_invitation=code)
 
     if request.method == "POST":
@@ -194,61 +227,64 @@ def inscription_et_rejoindre(request, code):
         phone = request.POST.get("phone", "").strip()
         password = request.POST.get("password", "").strip()
         confirm_password = request.POST.get("confirm_password", "").strip()
+        option = request.POST.get("option", "").strip()  # Récupère l'option
 
-        # ✅ Vérification des champs obligatoires
-        if not nom or not phone or not password or not confirm_password:
-            messages.error(request, "Tous les champs sont requis.")
+        if not all([nom, phone, password, confirm_password, option]):
+            messages.error(request, "Tous les champs sont requis, y compris le choix de l'option.")
             return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
         if password != confirm_password:
             messages.error(request, "Les mots de passe ne correspondent pas.")
             return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
-        # ✅ Vérifier si un utilisateur avec ce nom existe déjà
-        user = None
-        try:
-            user = CustomUser.objects.get(nom=nom)
-        except CustomUser.DoesNotExist:
-            pass  # L'utilisateur n'existe pas, nous le créerons plus tard
+        # Chercher si l'utilisateur existe déjà par nom et téléphone
+        user = CustomUser.objects.filter(nom=nom).first()
 
         if user:
-            # Authentifier l'utilisateur existant
-            auth_user = authenticate(request, username=nom, password=password)
+            # Authentification si le compte existe
+            auth_user = authenticate(request, username=user.phone, password=password)
             if auth_user is None:
                 messages.error(request, "Mot de passe incorrect pour ce nom.")
                 return render(request, "accounts/inscription_par_invit.html", {"group": group})
-
-            messages.info(request, f"Connexion réussie pour {nom}. Vous allez être ajouté au groupe.")
             user = auth_user
+            messages.info(request, f"Connexion réussie pour {nom}. Vous allez être ajouté au groupe.")
+            # Mettre à jour l'option si ce n'est pas défini
+            if not user.option:
+                user.option = option
+                user.save(update_fields=['option'])
         else:
-            # Vérifier si le téléphone est déjà utilisé
             if CustomUser.objects.filter(phone=phone).exists():
                 messages.error(request, "Ce numéro de téléphone est déjà utilisé par un autre utilisateur.")
                 return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
-            # Création d'un nouvel utilisateur
+            # Générer un alias unique
+            alias_unique = generate_alias(nom)
+            while CustomUser.objects.filter(alias=alias_unique).exists():
+                alias_unique = generate_alias(nom)
+
             try:
                 user = CustomUser.objects.create_user(
                     nom=nom,
                     phone=phone,
-                    password=password
+                    password=password,
+                    alias=alias_unique,
+                    option=option  # sauvegarde de l'option
                 )
-                messages.success(request, f"Compte créé avec succès pour {nom}.")
+                messages.success(request, f"Compte créé avec succès pour {nom} (alias: {alias_unique}).")
             except IntegrityError:
-                messages.error(request, "Ce nom est déjà utilisé par un autre utilisateur.")
+                messages.error(request, "Ce nom ou numéro est déjà utilisé.")
                 return render(request, "accounts/inscription_par_invit.html", {"group": group})
             except Exception as e:
                 messages.error(request, f"Erreur lors de la création du compte: {str(e)}")
                 return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
-        # ✅ Ajout de l'utilisateur au groupe (si pas déjà membre)
+        # Ajouter au groupe
         try:
             group_member, created_member = GroupMember.objects.get_or_create(
                 group=group,
                 user=user,
                 defaults={'montant': 0, 'date_joined': timezone.now()}
             )
-
             if created_member:
                 messages.success(request, f"Vous avez été ajouté au groupe {group.nom}.")
             else:
@@ -257,18 +293,18 @@ def inscription_et_rejoindre(request, code):
             messages.error(request, f"Erreur lors de l'ajout au groupe: {str(e)}")
             return render(request, "accounts/inscription_par_invit.html", {"group": group})
 
-        # ✅ Connecter l'utilisateur
+        # Connexion de l'utilisateur
         login(request, user)
-
-        # ✅ Simulation d'envoi WhatsApp
         print(f"📲 Simulé WhatsApp : Bonjour {nom}, vous avez été ajouté au groupe {group.nom}.")
 
-        # ✅ Redirection vers la page du groupe
-        return redirect(reverse("cotisationtontine:group_detail", args=[group.id]))
+        # Redirection selon l'option
+        if user.option == '1':
+            return redirect("cotisationtontine:dashboard_tontine_simple")
+        else:  # '2'
+            return redirect("epargnecredit:dashboard_epargne_credit")
 
-    # Si méthode GET → Afficher le formulaire
+    # GET : affichage du formulaire
     return render(request, "accounts/inscription_par_invit.html", {"group": group})
-
 
 from django.core.exceptions import PermissionDenied
 
@@ -295,21 +331,3 @@ def dashboard_membre(request):
     # vue réservée aux membres
     ...
 
-
-"""
-from django.contrib.auth.models import BaseUserManager
-
-class CustomUserManager(BaseUserManager):
-    def create_user(self, phone, password=None, **extra_fields):
-        if not phone:
-            raise ValueError('Le numéro de téléphone est obligatoire')
-        user = self.model(phone=phone, **extra_fields)
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
-
-    def create_superuser(self, phone, password=None, **extra_fields):
-        extra_fields.setdefault('is_staff', True)
-        extra_fields.setdefault('is_superuser', True)
-        return self.create_user(phone, password, **extra_fields)
-"""

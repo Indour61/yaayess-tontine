@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="text-center mt-5">
+    <h2 class="text-success">Tirage au sort - Étape {{ etape.numero }}</h2>
+    <div id="roulette" class="my-5" style="font-size: 2rem; animation: spin 3s ease-out;">
+        🎉 {{ gagnant.nom }}
+    </div>
+    <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-primary mt-3">Retour au tableau de bord</a>
+</div>
+
+<style>
+@keyframes spin {
+  0% { transform: rotateX(0deg); opacity: 0; }
+  50% { transform: rotateX(360deg); opacity: 0.7; }
+  100% { transform: rotateX(720deg); opacity: 1; }
+}
+</style>
+{% endblock %}

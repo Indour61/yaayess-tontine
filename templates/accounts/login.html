@@ -9,7 +9,6 @@
     <div class="card-body">
       <h2 class="card-title text-center mb-4">🔐 Connexion</h2>
 
-      <!-- Messages Django -->
       {% if messages %}
         {% for message in messages %}
           <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
@@ -39,6 +38,18 @@
           <input type="password" name="password" class="form-control" id="password" placeholder="Mot de passe" required>
           <div class="invalid-feedback">
             Veuillez saisir votre mot de passe.
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="option" class="form-label">Option</label>
+          <select name="option" id="option" class="form-select" required>
+            <option value="">-- Sélectionnez votre option --</option>
+            <option value="1" {% if request.POST.option == "1" %}selected{% endif %}>Cotisation & Tontine</option>
+            <option value="2" {% if request.POST.option == "2" %}selected{% endif %}>Épargne & Crédit</option>
+          </select>
+          <div class="invalid-feedback">
+            Veuillez sélectionner une option.
           </div>
         </div>
 

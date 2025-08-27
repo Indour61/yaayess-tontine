@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}🔁 Cycle Réinitialisé{% endblock %}
+
+{% block content %}
+<div class="container mt-5 text-center" style="max-width: 600px;">
+    <h1 class="text-success fw-bold mb-4">✅ Cycle réinitialisé avec succès</h1>
+    <p class="fs-5">
+        Toutes les cotisations et les anciens tirages du groupe
+        <strong class="text-primary">{{ group.nom }}</strong> ont été supprimés.
+    </p>
+
+    <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-outline-primary mt-4 px-4">
+        ⬅ Retour au groupe
+    </a>
+</div>
+{% endblock %}

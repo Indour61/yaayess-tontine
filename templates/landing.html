@@ -10,11 +10,19 @@
       <div class="row align-items-center min-vh-50 py-5">
         <div class="col-12 col-md-8 col-lg-6 mx-auto text-center">
           <h1 class="display-4 fw-bold text-success mb-3">Bienvenue sur YaayESS</h1>
-          <p class="lead mb-4 fs-5">Gérez facilement vos Cotisations & Tontine communautaire.</p>
+          <p class="lead mb-4 fs-5">Gérez facilement vos Cotisations, Tontine ou Épargne collective.</p>
 
           {% if user.is_authenticated %}
-            <!-- Correction ici : dashboard_tontine_simple au lieu de dashboard -->
-            <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard</a>
+            {% if user.type_adhesion == 1 %}
+              <!-- Utilisateur epargnecredit -->
+              <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard Épargne & Crédit</a>
+            {% elif user.type_adhesion == 2 %}
+              <!-- Utilisateur tontine simple -->
+              <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard Tontine</a>
+            {% else %}
+              <!-- Cas générique -->
+              <a href="#" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard</a>
+            {% endif %}
           {% else %}
             <div class="d-flex flex-column flex-md-row justify-content-center gap-3">
               <a href="{% url 'accounts:login' %}" class="btn btn-primary btn-lg px-4 py-3 fs-5 mb-2 mb-md-0">Connexion</a>
@@ -32,7 +40,7 @@
       <div class="row justify-content-center mb-5">
         <div class="col-12 text-center">
           <h2 class="fw-bold mb-3">Pourquoi choisir YaayESS ?</h2>
-          <p class="lead text-muted">Une plateforme complète pour gérer vos tontines en toute simplicité</p>
+          <p class="lead text-muted">Une plateforme complète pour gérer vos tontines, cotisations et épargne en toute simplicité</p>
         </div>
       </div>
 
@@ -44,7 +52,7 @@
                 <i class="fas fa-users fs-2"></i>
               </div>
               <h5 class="card-title fw-bold">Gestion de groupe</h5>
-              <p class="card-text text-muted">Créez et gérez facilement vos groupes de tontine avec des outils intuitifs.</p>
+              <p class="card-text text-muted">Créez et gérez facilement vos groupes pour tontine ou épargne avec des outils intuitifs.</p>
             </div>
           </div>
         </div>
@@ -56,7 +64,7 @@
                 <i class="fas fa-chart-line fs-2"></i>
               </div>
               <h5 class="card-title fw-bold">Suivi financier</h5>
-              <p class="card-text text-muted">Visualisez en temps réel l'état de vos cotisations et versements.</p>
+              <p class="card-text text-muted">Visualisez en temps réel l'état de vos cotisations, versements et prêts.</p>
             </div>
           </div>
         </div>
@@ -99,7 +107,7 @@
           <div class="d-flex flex-column align-items-center text-center">
             <div class="step-number bg-success text-white rounded-circle d-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">2</div>
             <h5 class="fw-bold mb-2">Créez un groupe</h5>
-            <p class="text-muted">Définissez les paramètres de votre tontine ou cotisation.</p>
+            <p class="text-muted">Définissez les paramètres de votre tontine ou épargne collective.</p>
           </div>
         </div>
 
@@ -120,11 +128,16 @@
       <div class="row justify-content-center">
         <div class="col-12 col-md-8 text-center">
           <h2 class="fw-bold mb-3">Prêt à commencer ?</h2>
-          <p class="lead mb-4">Rejoignez des milliers d'utilisateurs qui gèrent déjà leurs tontines avec YaayESS</p>
+          <p class="lead mb-4">Rejoignez des milliers d'utilisateurs qui gèrent déjà leurs groupes et épargnes avec YaayESS</p>
 
           {% if user.is_authenticated %}
-            <!-- Correction ici aussi : dashboard_tontine_simple au lieu de dashboard -->
-            <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard</a>
+            {% if user.type_adhesion == 1 %}
+              <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard Épargne & Crédit</a>
+            {% elif user.type_adhesion == 2 %}
+              <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard Tontine</a>
+            {% else %}
+              <a href="#" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard</a>
+            {% endif %}
           {% else %}
             <div class="d-flex flex-column flex-md-row justify-content-center gap-3">
               <a href="{% url 'accounts:signup' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Créer un compte</a>
@@ -174,5 +187,3 @@
   }
 </style>
 {% endblock %}
-
-

@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load humanize %}
+{% load my_tags %}
 
 {% block title %}Détails du groupe{% endblock %}
 
@@ -10,11 +11,9 @@
     <!-- Lien d'invitation -->
     <div class="alert alert-success mb-4">
         🔗 Lien d'invitation à partager :
-
         <input type="text" readonly
                value="{{ request.scheme }}://{{ request.get_host }}{% url 'accounts:inscription_et_rejoindre' code=group.code_invitation %}"
                class="form-control mb-2">
-
         <a href="https://wa.me/?text=Rejoins notre groupe YaayESS ici 👉 {{ request.scheme }}://{{ request.get_host }}{% url 'accounts:inscription_et_rejoindre' code=group.code_invitation %}"
            target="_blank" class="btn btn-outline-success btn-sm">
             📤 Partager sur WhatsApp
@@ -66,12 +65,14 @@
 
     <!-- Tableau des membres -->
     <div class="table-responsive shadow-sm rounded">
+
         <table class="table table-bordered align-middle mb-0">
             <thead class="table-light">
-                <tr>
+                 <tr>
                     <th>Nom</th>
                     <th style="min-width: 180px;">Actions</th>
                     <th>Montant</th>
+                    <th>Dernier versement</th>
                     <th>Téléphone</th>
                 </tr>
             </thead>
@@ -79,7 +80,13 @@
                 {% for m in membres %}
                 <tr>
                     <td>
-                        {{ m.user.nom }}
+                        <!-- Afficher l'alias s'il existe, sinon le nom normal -->
+                        {% if m.alias %}
+                            {{ m.alias }}
+                        {% else %}
+                            {{ m.user.nom }}
+                        {% endif %}
+
                         {% if m.user == group.admin %}
                         <span class="badge bg-success ms-2">Admin</span>
                         {% endif %}
@@ -92,16 +99,26 @@
                         {% endif %}
 
                         {% if user_is_admin %}
-                        <a href="{% url 'cotisationtontine:editer_membre' group.id m.id %}" class="btn btn-sm btn-warning flex-fill">✏️</a>
-                        <a href="{% url 'cotisationtontine:supprimer_membre' group.id m.id %}" class="btn btn-sm btn-danger flex-fill" onclick="return confirm('Confirmer la suppression ?');">🗑️</a>
+
                         {% endif %}
                     </td>
                     <td>{{ m.montant|intcomma }} FCFA</td>
+                    <td>
+
+                            {% with v=dernier_versement_membres_dict|get_item:m.id %}
+                                {% if v %}
+                                    {{ v.date|date:"d/m/Y H:i" }} : {{ v.montant|intcomma }} FCFA
+                                {% else %}
+                                    -
+                                {% endif %}
+                            {% endwith %}
+
+                    </td>
                     <td>{{ m.user.phone }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4" class="text-center text-muted">Aucun membre pour l'instant</td>
+                    <td colspan="5" class="text-center text-muted">Aucun membre pour l'instant</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -109,7 +126,7 @@
                 <tr class="fw-bold table-light">
                     <td colspan="2" class="text-end">Total cotisations</td>
                     <td>{{ total_montant|intcomma }} FCFA</td>
-                    <td></td>
+                    <td colspan="2"></td>
                 </tr>
             </tfoot>
         </table>

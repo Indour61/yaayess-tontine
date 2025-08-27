@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     # Apps locales
     'accounts',
     'cotisationtontine',
+    'epargnecredit',
     'rest_framework',
     'widget_tweaks',
 

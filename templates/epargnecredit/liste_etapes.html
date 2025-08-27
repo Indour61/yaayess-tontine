@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Historique des étapes{% endblock %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 720px;">
+  <h2>Historique des cycles - {{ group.nom }}</h2>
+
+  {% for bloc in data %}
+    <div class="card mt-4 shadow-sm">
+      <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <div>
+          Cycle du {{ bloc.cycle.date_debut|date:"d/m/Y" }}
+          {% if bloc.cycle.date_fin %} au {{ bloc.cycle.date_fin|date:"d/m/Y" }}{% endif %}
+        </div>
+        <button
+          class="btn btn-sm btn-light"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#cycle{{ bloc.cycle.id }}"
+          aria-expanded="false"
+          aria-controls="cycle{{ bloc.cycle.id }}"
+        >
+          ⬇️ Détails
+        </button>
+      </div>
+
+      <div id="cycle{{ bloc.cycle.id }}" class="collapse card-body">
+        <ul class="list-group">
+          {% for item in bloc.etapes %}
+            <li class="list-group-item">
+              <strong>Étape {{ item.etape.numero }} - {{ item.etape.date|date:"d/m/Y" }}</strong>
+              {% if item.tirages %}
+                <ul class="list-group list-group-flush mt-2 ps-3">
+                  {% for tirage in item.tirages %}
+                    <li class="list-group-item py-1">
+                      {{ tirage.membre.nom }} tiré le {{ tirage.date_tirage|date:"d/m/Y H:i" }}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <em class="text-muted d-block mt-2">Aucun tirage effectué</em>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted">Aucun cycle trouvé pour ce groupe.</p>
+  {% endfor %}
+</div>
+{% endblock %}

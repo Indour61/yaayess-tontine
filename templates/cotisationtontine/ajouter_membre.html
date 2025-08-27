@@ -9,44 +9,42 @@
     Ajouter un membre au groupe <strong>{{ group.nom }}</strong>
   </h2>
 
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
   <form method="post" class="shadow p-4 rounded bg-light needs-validation" novalidate>
     {% csrf_token %}
+    {{ form.non_field_errors }}
 
     <!-- Champ pour le nom -->
     <div class="mb-3">
-      <label for="nom" class="form-label">Nom du membre</label>
-      <input
-        type="text"
-        class="form-control"
-        name="nom"
-        id="nom"
-        placeholder="Ex: Fatou Diop"
-        required
-        autofocus
-      >
-      <div class="invalid-feedback">
-        Veuillez saisir le nom du membre.
-      </div>
+      <label for="{{ form.nom.id_for_label }}" class="form-label">Nom du membre</label>
+      {{ form.nom|add_class:"form-control"|attr:"placeholder:Ex: Fatou Diop,required,autofocus" }}
+      {% for error in form.nom.errors %}
+        <div class="invalid-feedback d-block">
+          {{ error }}
+        </div>
+      {% endfor %}
     </div>
 
     <!-- Champ pour le téléphone -->
     <div class="mb-3">
-      <label for="phone" class="form-label">Numéro de téléphone</label>
-      <input
-        type="tel"
-        class="form-control"
-        name="phone"
-        id="phone"
-        placeholder="+221770000000"
-        pattern="^\+?\d{7,15}$"
-        required
-      >
+      <label for="{{ form.phone.id_for_label }}" class="form-label">Numéro de téléphone</label>
+      {{ form.phone|add_class:"form-control"|attr:"placeholder:+221770000000,pattern:^\\+?\\d{7,15}$,required" }}
       <div class="form-text">
         Saisir le numéro complet avec indicatif.
       </div>
-      <div class="invalid-feedback">
-        Veuillez saisir un numéro de téléphone valide.
-      </div>
+      {% for error in form.phone.errors %}
+        <div class="invalid-feedback d-block">
+          {{ error }}
+        </div>
+      {% endfor %}
     </div>
 
     <button type="submit" class="btn btn-success">Envoyer l'invitation</button>
@@ -73,5 +71,3 @@
   })()
 </script>
 {% endblock %}
-
-

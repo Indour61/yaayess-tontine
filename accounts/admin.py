@@ -3,9 +3,12 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import CustomUser
 from .forms import CustomUserCreationFormAdmin, CustomUserChangeFormAdmin
 
+from django.contrib import admin
+from .models import CustomUser
+from .forms import CustomUserCreationFormAdmin, CustomUserChangeFormAdmin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 class UserAdmin(BaseUserAdmin):
-    # Formulaires personnalisés pour l'admin
     add_form = CustomUserCreationFormAdmin
     form = CustomUserChangeFormAdmin
     model = CustomUser
@@ -29,6 +32,8 @@ class UserAdmin(BaseUserAdmin):
         }),
     )
 
-
-# Enregistrement du modèle dans l’admin
-admin.site.register(CustomUser, UserAdmin)
+# ✅ Enregistrement unique avec protection
+try:
+    admin.site.register(CustomUser, UserAdmin)
+except admin.sites.AlreadyRegistered:
+    pass

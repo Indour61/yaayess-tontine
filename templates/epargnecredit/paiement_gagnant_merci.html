@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Merci pour votre paiement{% endblock %}
+
+{% block content %}
+<div class="container mt-5 text-center">
+    <h1 class="text-success mb-4">✅ Merci pour votre paiement !</h1>
+
+    {% if group and gagnant and montant %}
+        <p class="fs-5">Le paiement de <strong>{{ montant|intcomma }} FCFA</strong> a bien été effectué.</p>
+        <p class="fs-5">Gagnant : <strong>{{ gagnant.user.nom }}</strong></p>
+        <p class="fs-5">Groupe : <strong>{{ group.nom }}</strong></p>
+    {% else %}
+        <p class="fs-5">Votre paiement a bien été pris en compte.</p>
+    {% endif %}
+
+    <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-primary mt-4 px-4">
+        Retour au tableau de bord
+    </a>
+</div>
+{% endblock %}
