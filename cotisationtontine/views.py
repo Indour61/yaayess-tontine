@@ -257,72 +257,116 @@ def group_list_view(request):
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Sum
+from django.db.models import Sum, OuterRef, Subquery, Q, Value, DecimalField
+from django.db.models.functions import Coalesce
 from django.urls import reverse
+
 from .models import Group, GroupMember, Versement, ActionLog
+
 
 @login_required
 def group_detail(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
-    # Vérifier accès
-    if not (group.admin == request.user or
-            GroupMember.objects.filter(group=group, user=request.user).exists() or
-            getattr(request.user, "is_super_admin", False)):
-        messages.error(request, "Vous n'avez pas accès à ce groupe.")
+    has_access = (
+        group.admin_id == getattr(request.user, "id", None)
+        or GroupMember.objects.filter(group=group, user=request.user).exists()
+        or getattr(request.user, "is_super_admin", False)
+    )
+    if not has_access:
+        messages.error(request, "⚠️ Vous n'avez pas accès à ce groupe.")
         return redirect("cotisationtontine:group_list")
 
-    membres = group.membres.select_related('user')
+    # --- Nom de la relation reverse GroupMember -> Versement ---
+    # D'après ton log, c'est bien "versements"
+    rel_lookup = "versements"
 
-    # Tous les versements du groupe
-    versements = Versement.objects.filter(member__group=group).order_by('date')
+    # --- Sous-requête : dernier versement (date + montant) depuis date_reset si définie ---
+    last_qs = Versement.objects.filter(member=OuterRef("pk"))
+    if getattr(group, "date_reset", None):
+        last_qs = last_qs.filter(date__gte=group.date_reset)
+    last_qs = last_qs.order_by("-date")
 
-    # Total des versements par membre
-    versements_par_membre = versements.values('member').annotate(total_montant=Sum('montant'))
-    montants_membres_dict = {v['member']: v['total_montant'] for v in versements_par_membre}
+    # --- Agrégations par membre ---
+    sum_filter = Q()
+    if getattr(group, "date_reset", None):
+        sum_filter &= Q(**{f"{rel_lookup}__date__gte": group.date_reset})
 
-    # Dernier versement par membre
-    dernier_versement_membres_dict = {}
-    for membre in membres:
-        dernier = versements.filter(member=membre).order_by('-date').first()
-        dernier_versement_membres_dict[membre.id] = dernier
-        membre.montant = montants_membres_dict.get(membre.id, 0)
-
-    user_is_admin = request.user == group.admin or getattr(request.user, "is_super_admin", False)
-    actions = ActionLog.objects.filter(group=group).order_by('-date')[:10] if hasattr(ActionLog, "group") else []
-
-    invite_url = request.build_absolute_uri(
-        reverse('accounts:inscription_et_rejoindre', args=[str(group.code_invitation)])
+    membres = (
+        GroupMember.objects.filter(group=group)
+        .select_related("user", "group")
+        .annotate(
+            total_montant=Coalesce(
+                Sum(f"{rel_lookup}__montant", filter=sum_filter),
+                Value(0, output_field=DecimalField(max_digits=12, decimal_places=2)),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            ),
+            last_amount=Subquery(last_qs.values("montant")[:1]),
+            last_date=Subquery(last_qs.values("date")[:1]),
+        )
+        .order_by("id")
     )
+
+    # --- Total groupe (filtré par reset si présent) ---
+    total_filter = Q(member__group=group)
+    if getattr(group, "date_reset", None):
+        total_filter &= Q(date__gte=group.date_reset)
+
+    total_montant = (
+        Versement.objects.filter(total_filter)
+        .aggregate(
+            total=Coalesce(
+                Sum("montant"),
+                Value(0, output_field=DecimalField(max_digits=12, decimal_places=2)),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            )
+        )["total"]
+    )
+
+    # --- Actions ---
+    try:
+        actions = ActionLog.objects.filter(group=group).order_by("-date")[:10]
+    except Exception:
+        actions = []
+
+    # --- Lien d'invitation robuste ---
+    code = None
+    for field in ("code_invitation", "invitation_code", "uuid", "code"):
+        if hasattr(group, field) and getattr(group, field):
+            code = str(getattr(group, field))
+            break
+    invite_arg = code if code else str(group.id)
+    invite_url = request.build_absolute_uri(
+        reverse("accounts:inscription_et_rejoindre", args=[invite_arg])
+    )
+
+    user_is_admin = (request.user == group.admin) or getattr(request.user, "is_super_admin", False)
     if user_is_admin:
-        request.session['last_invitation_link'] = invite_url
+        request.session["last_invitation_link"] = invite_url
 
     context = {
-        'group': group,
-        'membres': membres,
-        'dernier_versement_membres_dict': dernier_versement_membres_dict,
-        'total_montant': versements.aggregate(total=Sum('montant'))['total'] or 0,
-        'admin_user': group.admin,
-        'actions': actions,
-        'user_is_admin': user_is_admin,
-        'invite_url': invite_url,
-        'last_invitation_link': request.session.get('last_invitation_link'),
+        "group": group,
+        "membres": membres,                # total_montant / last_date / last_amount
+        "total_montant": total_montant,
+        "admin_user": group.admin,
+        "actions": actions,
+        "user_is_admin": user_is_admin,
+        "invite_url": invite_url,
+        "last_invitation_link": request.session.get("last_invitation_link"),
     }
-
-    return render(request, 'cotisationtontine/group_detail.html', context)
-
-    return render(request, 'cotisationtontine/group_detail.html', context)
+    return render(request, "cotisationtontine/group_detail.html", context)
 
 
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.db import transaction
-from django.utils import timezone
+from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
-from decimal import Decimal
-import requests
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
 import json
+import requests
 
 from cotisationtontine.models import GroupMember, Versement
 
@@ -331,147 +375,159 @@ from cotisationtontine.models import GroupMember, Versement
 @transaction.atomic
 def initier_versement(request, member_id):
     """
-    Initier un versement pour un membre d'un groupe
+    Initier un versement pour un membre d'un groupe.
+    - CAISSE : on crée immédiatement le Versement.
+    - PAYDUNYA : on crée la facture, puis on attend le callback pour créer le Versement.
     """
     member = get_object_or_404(GroupMember, id=member_id)
-    group_id = member.group.id
+    group = member.group
+    group_id = group.id
 
-    # Vérifier que l'utilisateur a le droit d'effectuer un versement pour ce membre
-    if request.user != member.user and request.user != member.group.admin and not request.user.is_super_admin:
+    # Permissions : soi-même, admin du groupe, ou super admin
+    if (
+        request.user != member.user
+        and request.user != group.admin
+        and not getattr(request.user, "is_super_admin", False)
+    ):
         messages.error(request, "Vous n'avez pas les droits pour effectuer un versement pour ce membre.")
         return redirect("cotisationtontine:group_detail", group_id=group_id)
 
-    if request.method == 'POST':
+    if request.method == "POST":
+        # --- Lecture & validation du montant ---
+        montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
         try:
-            montant_saisi = float(request.POST.get('montant', 0))
-            if montant_saisi <= 0:
-                messages.error(request, "Le montant doit être supérieur à 0.")
-                return redirect("cotisationtontine:initier_versement", member_id=member_id)
-        except (TypeError, ValueError):
+            montant = Decimal(montant_raw)
+        except Exception:
             messages.error(request, "Montant invalide.")
             return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
-        methode = request.POST.get('methode', 'paydunya').lower()
+        if montant <= 0:
+            messages.error(request, "Le montant doit être supérieur à 0.")
+            return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
-        if methode == 'caisse':
+        # Normalisation FCFA sans décimales (si tu veux forcer l'entier)
+        montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+        methode = (request.POST.get("methode") or "paydunya").lower()
+
+        # =====================================================
+        # 1) MÉTHODE : CAISSE
+        # =====================================================
+        if methode == "caisse":
             Versement.objects.create(
                 member=member,
-                montant=montant_saisi,
-                frais=0,
+                montant=montant,
+                frais=Decimal("0"),
                 methode="CAISSE",
-                transaction_id=f"CAISSE-{member.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                transaction_id=f"CAISSE-{member.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}",
             )
-            member.montant += Decimal(montant_saisi)
-            member.save()
+            # ⚠️ On ne touche pas à member.montant : les totaux sont calculés depuis Versement
+            messages.success(request, f"Versement de {montant} FCFA enregistré via Caisse.")
+            return redirect("cotisationtontine:group_detail", group_id=group_id)
 
-            messages.success(request, f"Versement de {montant_saisi} FCFA enregistré via Caisse.")
-            return redirect('cotisationtontine:group_detail', group_id=group_id)
+        # =====================================================
+        # 2) MÉTHODE : PAYDUNYA
+        # =====================================================
+        # Frais : 2% + 50 FCFA (arrondis au FCFA)
+        frais_total = (montant * Decimal("0.02") + Decimal("50")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        montant_total = (montant + frais_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-        # --- PayDunya ---
-        frais_pourcent = montant_saisi * 0.02
-        frais_fixe = 50
-        frais_total = int(round(frais_pourcent + frais_fixe))
-        montant_total = int(round(montant_saisi + frais_total))
+        # URLs absolues & correctes (respectent /tontine/…)
+        callback_url = request.build_absolute_uri(reverse("cotisationtontine:versement_callback"))
+        return_url = request.build_absolute_uri(reverse("cotisationtontine:group_detail", args=[group_id]))
 
-        if settings.DEBUG and getattr(settings, 'NGROK_BASE_URL', None):
-            base_url = settings.NGROK_BASE_URL.rstrip('/') + '/'
-        else:
-            base_url = request.build_absolute_uri('/')
-
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "PAYDUNYA-MASTER-KEY": settings.PAYDUNYA_KEYS["master_key"],
-            "PAYDUNYA-PRIVATE-KEY": settings.PAYDUNYA_KEYS["private_key"],
-            "PAYDUNYA-PUBLIC-KEY": settings.PAYDUNYA_KEYS["public_key"],
-            "PAYDUNYA-TOKEN": settings.PAYDUNYA_KEYS["token"],
-        }
+        # Clés PayDunya
+        try:
+            keys = settings.PAYDUNYA_KEYS
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "PAYDUNYA-MASTER-KEY": keys["master_key"],
+                "PAYDUNYA-PRIVATE-KEY": keys["private_key"],
+                "PAYDUNYA-PUBLIC-KEY": keys["public_key"],
+                "PAYDUNYA-TOKEN": keys["token"],
+            }
+        except Exception:
+            messages.error(request, "Configuration PayDunya manquante (PAYDUNYA_KEYS).")
+            return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
         payload = {
             "invoice": {
-                "items": [{
-                    "name": "Versement épargne",
-                    "quantity": 1,
-                    "unit_price": montant_total,
-                    "total_price": montant_total,
-                    "description": f"Versement membre {member.user.nom} (frais: {frais_total} FCFA)"
-                }],
-                "description": f"Paiement épargne (+{frais_total} FCFA de frais)",
-                "total_amount": montant_total,
-                "callback_url": f"{base_url}groups/versement/callback/",
-                "return_url": f"{base_url}groups/{group_id}/"
+                "items": [
+                    {
+                        "name": "Versement épargne",
+                        "quantity": 1,
+                        "unit_price": int(montant_total),  # PayDunya attend des entiers
+                        "total_price": int(montant_total),
+                        "description": f"Versement membre {member.user.nom or member.user.phone} (frais: {int(frais_total)} FCFA)",
+                    }
+                ],
+                "description": f"Paiement épargne (+{int(frais_total)} FCFA de frais)",
+                "total_amount": int(montant_total),
+                "callback_url": callback_url,
+                "return_url": return_url,
             },
             "store": {
                 "name": "YaayESS",
                 "tagline": "Plateforme de gestion financière",
-                "website_url": "https://yaayess.com"
+                "website_url": "https://yaayess.com",
             },
+            # On passe les infos nécessaires au callback pour créer le Versement à réception du paiement
             "custom_data": {
                 "member_id": member.id,
                 "user_id": request.user.id,
-                "montant_saisi": int(montant_saisi),
-                "frais_total": frais_total
-            }
+                "montant_saisi": int(montant),      # montant hors frais
+                "frais_total": int(frais_total),
+            },
         }
 
         try:
-            response = requests.post(
+            # Sandbox endpoint (garde-le en prod si nécessaire)
+            resp = requests.post(
                 "https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create",
                 headers=headers,
                 json=payload,
-                timeout=15
+                timeout=15,
             )
-
-            # Vérifier que la réponse est valide avant de parser le JSON
-            if response.status_code != 200:
-                messages.error(request, f"Erreur PayDunya (HTTP {response.status_code}): {response.text}")
-                return redirect("cotisationtontine:initier_versement", member_id=member_id)
-
-            # CORRECTION ICI : Vérifier que la réponse est bien du JSON
-            try:
-                data = response.json()
-            except json.JSONDecodeError:
-                messages.error(request, "Réponse invalide de PayDunya (format JSON incorrect)")
-                return redirect("cotisationtontine:initier_versement", member_id=member_id)
-
-            # CORRECTION ICI : Vérifier que data est un dictionnaire
-            if not isinstance(data, dict):
-                messages.error(request, "Réponse invalide de PayDunya (format de données incorrect)")
-                return redirect("cotisationtontine:initier_versement", member_id=member_id)
-
-            # CORRECTION ICI : Accès sécurisé aux champs de la réponse
-            response_code = data.get("response_code")
-            if response_code == "00":
-                # Créer le versement
-                Versement.objects.create(
-                    member=member,
-                    montant=montant_saisi,
-                    frais=frais_total,
-                    methode="PAYDUNYA",
-                    transaction_id=data.get("token", "")
-                )
-
-                # CORRECTION ICI : Accès sécurisé à l'URL de redirection
-                response_text = data.get("response_text", {})
-                if isinstance(response_text, dict):
-                    invoice_url = response_text.get("invoice_url", f"/groups/{group_id}/")
-                else:
-                    invoice_url = f"/groups/{group_id}/"
-
-                return redirect(invoice_url)
-            else:
-                error_message = data.get("response_text", "Erreur inconnue")
-                messages.error(request, f"Échec du paiement: {error_message}")
-                return redirect("cotisationtontine:initier_versement", member_id=member_id)
-
         except requests.exceptions.RequestException as e:
-            messages.error(request, f"Erreur réseau PayDunya: {str(e)}")
-            return redirect("cotisationtontine:initier_versement", member_id=member_id)
-        except Exception as e:
-            messages.error(request, f"Erreur inattendue: {str(e)}")
+            messages.error(request, f"Erreur réseau PayDunya: {e}")
             return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
+        if resp.status_code != 200:
+            messages.error(request, f"Erreur PayDunya (HTTP {resp.status_code}): {resp.text}")
+            return redirect("cotisationtontine:initier_versement", member_id=member_id)
+
+        try:
+            data = resp.json()
+        except json.JSONDecodeError:
+            messages.error(request, "Réponse invalide de PayDunya (JSON).")
+            return redirect("cotisationtontine:initier_versement", member_id=member_id)
+
+        if not isinstance(data, dict):
+            messages.error(request, "Réponse invalide de PayDunya (format inattendu).")
+            return redirect("cotisationtontine:initier_versement", member_id=member_id)
+
+        # response_code == "00" => facture créée (pas paiement confirmé !)
+        if data.get("response_code") == "00":
+            # Pas de Versement ici : on attend le callback pour créer l'écriture
+            invoice_url = None
+            rt = data.get("response_text")
+            if isinstance(rt, dict):
+                invoice_url = rt.get("invoice_url")
+
+            if not invoice_url:
+                # fallback : retourner au groupe si pas d'URL
+                return redirect("cotisationtontine:group_detail", group_id=group_id)
+
+            return redirect(invoice_url)
+
+        # Erreur côté PayDunya
+        messages.error(request, f"Échec du paiement: {data.get('response_text', 'Erreur inconnue')}")
+        return redirect("cotisationtontine:initier_versement", member_id=member_id)
+
+    # GET
     return render(request, "cotisationtontine/initier_versement.html", {"member": member})
+
 
 
 @csrf_exempt
