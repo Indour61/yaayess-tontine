@@ -1,7 +1,3 @@
-
-
-
-
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
@@ -46,9 +42,15 @@ urlpatterns = [
     path('<int:group_id>/membre/<int:membre_id>/supprimer/', views.supprimer_membre_view, name='supprimer_membre'),
 
     # --- Versements ---
-    path('versement/initier/<int:member_id>/', views.initier_versement, name='initier_versement'),
-    path('versement/callback/', views.versement_callback, name='versement_callback'),
-    path('versement/merci/', views.versement_merci, name='versement_merci'),
+#    path('versement/initier/<int:member_id>/', views.initier_versement, name='initier_versement'),
+#    path('versement/callback/', views.versement_callback, name='versement_callback'),
+#    path('versement/merci/', views.versement_merci, name='versement_merci'),
+
+    path("versement/<int:member_id>/initier/", views.initier_versement, name="initier_versement"),
+    path("versement/callback/", views.versement_callback, name="versement_callback"),
+    path("versement/merci/", views.versement_merci, name="versement_merci"),
+
+
 
     # --- Invitations ---
 

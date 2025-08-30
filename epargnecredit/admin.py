@@ -93,22 +93,4 @@ class ActionLogAdmin(admin.ModelAdmin):
     def formatted_date(self, obj):
         return obj.date.strftime('%d/%m/%Y %H:%M')
     formatted_date.short_description = 'Date formatée'
-# epargnecredit/admin.py
-from django.contrib import admin
-from .models import PaiementGagnant
 
-
-@admin.register(PaiementGagnant)
-class PaiementGagnantAdmin(admin.ModelAdmin):
-    list_display = ('gagnant_nom', 'groupe_nom', 'montant', 'statut', 'date_paiement')
-    list_filter = ('statut', 'group')
-    search_fields = ('gagnant__user__nom', 'group__nom', 'transaction_id')
-    readonly_fields = ('date_paiement',)
-
-    def gagnant_nom(self, obj):
-        return obj.gagnant.user.nom
-    gagnant_nom.short_description = "Gagnant"
-
-    def groupe_nom(self, obj):
-        return obj.group.nom
-    groupe_nom.short_description = "Groupe"

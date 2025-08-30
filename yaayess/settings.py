@@ -126,13 +126,26 @@ EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"] # Doit être défini
 # ----------------------------------------------------
 # 💳 PAYDUNYA CONFIG - Version sécurisée
 # ----------------------------------------------------
-PAYDUNYA_KEYS = {
-    "master_key": os.environ["PAYDUNYA_MASTER_KEY"],
-    "private_key": os.environ["PAYDUNYA_PRIVATE_KEY"],
-    "public_key": os.environ["PAYDUNYA_PUBLIC_KEY"],
-    "token": os.environ["PAYDUNYA_TOKEN"],
-    "mode": os.environ.get("PAYDUNYA_MODE", "test"),
+# settings.py
+
+import os
+
+PAYDUNYA = {
+    "master_key": os.environ.get("PAYDUNYA_MASTER_KEY", "test_master_key"),
+    "private_key": os.environ.get("PAYDUNYA_PRIVATE_KEY", "test_private_key"),
+    "public_key": os.environ.get("PAYDUNYA_PUBLIC_KEY", "test_public_key"),
+    "token": os.environ.get("PAYDUNYA_TOKEN", "test_token"),
+    # "sandbox" => True si mode=test, False si mode=live
+    "sandbox": os.environ.get("PAYDUNYA_MODE", "test").lower() != "live",
+
+    # Métadonnées de la boutique (facultatif mais conseillé)
+    "store_name": os.environ.get("PAYDUNYA_STORE_NAME", "YaayESS"),
+    "store_tagline": os.environ.get("PAYDUNYA_STORE_TAGLINE", "Plateforme de gestion financière"),
+    "website_url": os.environ.get("PAYDUNYA_STORE_URL", "https://yaayess.com"),
 }
+
+
+
 
 # ----------------------------------------------------
 # 🔑 AUTHENTICATION
@@ -160,7 +173,6 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
-
 
 
 

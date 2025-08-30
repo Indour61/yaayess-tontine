@@ -1,7 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
-from .views import liste_paiements_gagnants
 from .views_api import GroupViewSet, GroupMemberViewSet, VersementViewSet, ActionLogViewSet
 
 app_name = 'epargnecredit'
@@ -38,19 +37,10 @@ urlpatterns = [
     # --- Invitations ---
 #    path('<int:group_id>/inviter/', views.inviter_membre_view, name='inviter_membre'),
 
-    # --- Tirage ---
-    path('<int:group_id>/tirage-au-sort/', views.tirage_au_sort_view, name='tirage_au_sort'),
-    path('<int:group_id>/tirage-resultat/', views.tirage_resultat_view, name='tirage_resultat'),
-    path('<int:group_id>/lancer-tirage/', views.tirage_au_sort_view, name='lancer_tirage'),
 
     # --- Cycle ---
     path('<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
 
-    # --- Paiement gagnant ---
-    path('<int:group_id>/payer-gagnant/', views.payer_gagnant, name='payer_gagnant'),
-    path('paiements-gagnants/', liste_paiements_gagnants, name='paiements_gagnants'),
-    path('paiement_gagnant/callback/', views.paiement_gagnant_callback, name='paiement_gagnant_callback'),
-    path('paiement_gagnant/merci/', views.paiement_gagnant_merci, name='paiement_gagnant_merci'),
 
     # --- Historique cycles & actions ---
     path('<int:group_id>/historique-cycles/', views.historique_cycles_view, name='historique_cycles'),

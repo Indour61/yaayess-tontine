@@ -87,20 +87,6 @@ class GroupMember(models.Model):
         return f"{self.user} - {self.group.nom}"
 
 
-# ✅ Historique des tirages
-class TirageHistorique(models.Model):
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='tirages_historiques_ec')
-    gagnant = models.ForeignKey(GroupMember, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Gagnant")
-    montant = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    date_tirage = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "epargnecredit_tirage_historique"
-
-    def __str__(self):
-        return f"Tirage {self.date_tirage.strftime('%d/%m/%Y')} - {self.gagnant} - {self.montant} FCFA"
-
-
 # ✅ Cotisation par membre
 class EpargneCredit(models.Model):
     member = models.ForeignKey(GroupMember, on_delete=models.CASCADE, related_name='cotisations_ec')
@@ -121,26 +107,6 @@ class EpargneCredit(models.Model):
 
     def __str__(self):
         return f"{self.member.user} - {self.montant} FCFA - {self.get_statut_display()}"
-
-
-# ✅ Tirage
-class Tirage(models.Model):
-    group = models.ForeignKey(
-        Group,
-        on_delete=models.CASCADE,
-        related_name="tirages_ec",
-        verbose_name="Groupe"
-    )
-    date_tirage = models.DateField(auto_now_add=True, verbose_name="Date du tirage")
-    montant = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Montant du tirage")
-    gagnant = models.ForeignKey(GroupMember, on_delete=models.CASCADE, related_name="tirages_gagnes_ec", verbose_name="Membre gagnant")
-    membre = models.ForeignKey(GroupMember, on_delete=models.CASCADE, related_name="tirages_participes_ec", verbose_name="Membre tiré")
-
-    class Meta:
-        db_table = "epargnecredit_tirage"
-
-    def __str__(self):
-        return f"Tirage {self.date_tirage} - {self.group.nom}"
 
 
 # ✅ Versement
@@ -204,30 +170,6 @@ class HistoriqueAction(models.Model):
 
     def __str__(self):
         return f"{self.get_action_display()} - {self.group.nom} - {self.date.strftime('%d/%m/%Y %H:%M')}"
-
-
-# ✅ Paiement gagnant
-class PaiementGagnant(models.Model):
-    STATUT_CHOICES = [
-        ('SUCCES', 'Succès'),
-        ('ECHEC', 'Échec'),
-    ]
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="paiements_ec")
-    gagnant = models.ForeignKey(GroupMember, on_delete=models.CASCADE, related_name="paiements_reçus_ec")
-    montant = models.DecimalField(max_digits=10, decimal_places=2)
-    statut = models.CharField(max_length=10, choices=STATUT_CHOICES)
-    message = models.TextField(blank=True, null=True)
-    transaction_id = models.CharField(max_length=100, blank=True, null=True)
-    date_paiement = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-date_paiement']
-        verbose_name = "Paiement gagnant"
-        verbose_name_plural = "Paiements des gagnants"
-        db_table = "epargnecredit_paiementgagnant"
-
-    def __str__(self):
-        return f"{self.gagnant.user} - {self.montant} FCFA - {self.statut}"
 
 
 # ✅ Invitation

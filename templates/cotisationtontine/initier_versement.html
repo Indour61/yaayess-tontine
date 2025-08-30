@@ -3,103 +3,173 @@
 
 {% block content %}
 <div class="container mt-4">
-  <h2 class="mb-4">
-    Effectuer un versement pour
-    <strong>{{ member.user.nom|default:member.user.phone }}</strong>
-  </h2>
+  <!-- Messages Django -->
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <h2 class="mb-0">
+      Effectuer un versement pour
+      <strong>{{ member.user.nom|default:member.user.phone }}</strong>
+    </h2>
+    <a href="{% url 'cotisationtontine:group_detail' member.group.id %}" class="btn btn-outline-secondary">
+      ← Retour au groupe
+    </a>
+  </div>
+
+  <p class="text-muted mb-4">
+    Groupe : <strong>{{ member.group.nom }}</strong> • Montant de base : <strong>{{ member.group.montant_base|floatformat:0 }} FCFA</strong>
+  </p>
 
   <form method="post" id="versement-form" class="needs-validation" novalidate>
     {% csrf_token %}
 
-    <!-- Champ montant -->
-    <div class="mb-3">
-      <label for="montant" class="form-label">Montant à verser (FCFA)</label>
-      <input
-        type="number"
-        class="form-control"
-        name="montant"
-        id="montant"
-        min="1"
-        step="1"
-        required
-        placeholder="Ex: 5000"
-      >
-      <div class="invalid-feedback">
-        Veuillez saisir un montant valide supérieur à 0.
+    <div class="row g-3">
+      <!-- Montant -->
+      <div class="col-12 col-md-6">
+        <label for="montant" class="form-label">Montant à verser (FCFA)</label>
+        <div class="input-group">
+          <span class="input-group-text">FCFA</span>
+          <input
+            type="number"
+            class="form-control"
+            name="montant"
+            id="montant"
+            min="1"
+            step="1"
+            required
+            placeholder="Ex: 5000"
+            inputmode="numeric"
+            autocomplete="off"
+          >
+        </div>
+        <div class="form-text">Saisissez un montant positif. Les décimales seront arrondies automatiquement.</div>
+        <div class="invalid-feedback">Veuillez saisir un montant valide supérieur à 0.</div>
+      </div>
+
+      <!-- Méthode de paiement -->
+      <div class="col-12 col-md-6">
+        <label for="methode" class="form-label">Méthode de paiement</label>
+        <select name="methode" id="methode" class="form-select" required>
+          <option value="paydunya" selected>PayDunya (avec frais)</option>
+          <option value="caisse">Caisse (sans frais)</option>
+        </select>
+        <div class="invalid-feedback">Veuillez sélectionner une méthode de paiement.</div>
       </div>
     </div>
 
-    <!-- Champ méthode de paiement -->
-    <div class="mb-3">
-      <label for="methode" class="form-label">Méthode de paiement</label>
-      <select name="methode" id="methode" class="form-select" required>
-        <option value="paydunya" selected>PayDunya</option>
-        <option value="caisse">Caisse (sans frais)</option>
-      </select>
-      <div class="invalid-feedback">
-        Veuillez sélectionner une méthode de paiement.
+    <!-- Récap frais -->
+    <div class="card mt-3" id="frais-card" style="display:none;">
+      <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center justify-content-between">
+          <div class="me-3">
+            <div class="mb-1">🧾 <strong>Frais estimés</strong> (2% + 50 FCFA) : <span id="frais" class="fw-semibold">0</span> FCFA</div>
+            <div>💳 <strong>Total à payer</strong> : <span id="total" class="fw-semibold">0</span> FCFA</div>
+          </div>
+          <div class="text-muted small">
+            * Le total affiché est calculé à titre indicatif avant redirection.
+          </div>
+        </div>
       </div>
-    </div>
-
-    <!-- Infos frais -->
-    <div class="mb-3" id="frais-section" style="display:none;">
-      <p class="mb-1">🧾 <strong>Frais :</strong> <span id="frais">0</span> FCFA</p>
-      <p class="mb-1">💳 <strong>Total à payer :</strong> <span id="total">0</span> FCFA</p>
     </div>
 
     <!-- Boutons -->
-    <button type="submit" class="btn btn-success" id="submit-btn">💳 Payer avec PayDunya</button>
-    <a href="{% url 'cotisationtontine:group_detail' member.group.id %}" class="btn btn-secondary ms-2">Annuler</a>
+    <div class="mt-3 d-flex align-items-center">
+      <button type="submit" class="btn btn-success" id="submit-btn">
+        💳 Payer avec PayDunya
+      </button>
+      <button type="button" class="btn btn-link d-none" id="loading-btn" disabled>
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        Traitement en cours…
+      </button>
+      <a href="{% url 'cotisationtontine:group_detail' member.group.id %}" class="btn btn-secondary ms-2">Annuler</a>
+    </div>
   </form>
 </div>
 
 <script>
-(() => {
-  'use strict'
-  const form = document.getElementById('versement-form');
-  form.addEventListener('submit', (event) => {
-    if (!form.checkValidity()) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    form.classList.add('was-validated');
-  }, false);
-})();
+(function () {
+  'use strict';
 
-document.addEventListener('DOMContentLoaded', function() {
+  const form = document.getElementById('versement-form');
   const montantInput = document.getElementById('montant');
   const methodeSelect = document.getElementById('methode');
+  const fraisCard = document.getElementById('frais-card');
   const fraisEl = document.getElementById('frais');
   const totalEl = document.getElementById('total');
-  const fraisSection = document.getElementById('frais-section');
   const submitBtn = document.getElementById('submit-btn');
+  const loadingBtn = document.getElementById('loading-btn');
+
+  // Formatage simple des nombres (séparateurs de milliers)
+  const fmt = new Intl.NumberFormat('fr-FR');
+
+  function arrondiFCFA(val) {
+    if (isNaN(val)) return 0;
+    return Math.round(Number(val));
+  }
 
   function updateFrais() {
     let montant = parseFloat(montantInput.value);
     if (isNaN(montant) || montant <= 0) {
-      montant = 0;
+      fraisCard.style.display = 'none';
+      setSubmitLabel();
+      return;
     }
-    const methode = methodeSelect.value;
 
-    if (methode === 'paydunya' && montant > 0) {
+    const methode = methodeSelect.value;
+    if (methode === 'paydunya') {
       const fraisPourcent = montant * 0.02;
       const fraisFixe = 50;
-      const fraisTotal = Math.round(fraisPourcent + fraisFixe);
-      const total = Math.round(montant + fraisTotal);
+      const fraisTotal = arrondiFCFA(fraisPourcent + fraisFixe);
+      const total = arrondiFCFA(montant + fraisTotal);
 
-      fraisEl.textContent = fraisTotal.toString();
-      totalEl.textContent = total.toString();
-      fraisSection.style.display = 'block';
-      submitBtn.textContent = '💳 Payer avec PayDunya';
+      fraisEl.textContent = fmt.format(fraisTotal);
+      totalEl.textContent = fmt.format(total);
+      fraisCard.style.display = 'block';
     } else {
-      fraisSection.style.display = 'none';
-      submitBtn.textContent = '✅ Enregistrer le versement';
+      fraisCard.style.display = 'none';
     }
+    setSubmitLabel();
   }
 
+  function setSubmitLabel() {
+    const methode = methodeSelect.value;
+    submitBtn.textContent = (methode === 'paydunya') ? '💳 Payer avec PayDunya' : '✅ Enregistrer le versement';
+  }
+
+  // Empêcher le double-submit + état chargement
+  form.addEventListener('submit', (event) => {
+    if (!form.checkValidity()) {
+      event.preventDefault();
+      event.stopPropagation();
+    } else {
+      // Verrouille l’UI si valide
+      submitBtn.disabled = true;
+      loadingBtn.classList.remove('d-none');
+    }
+    form.classList.add('was-validated');
+  });
+
+  // Arrondir automatiquement à la sortie du champ
+  montantInput.addEventListener('blur', () => {
+    const v = parseFloat(montantInput.value);
+    if (!isNaN(v) && v > 0) {
+      montantInput.value = arrondiFCFA(v);
+    }
+  });
+
+  // Interactions
   montantInput.addEventListener('input', updateFrais);
   methodeSelect.addEventListener('change', updateFrais);
+
+  // Init
   updateFrais();
-});
+})();
 </script>
 {% endblock %}

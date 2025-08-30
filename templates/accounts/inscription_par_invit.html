@@ -1,92 +1,39 @@
 {% extends "base.html" %}
-{% load static %}
-
-{% block title %}Inscription et rejoindre le groupe - {{ group.nom }}{% endblock %}
-
 {% block content %}
-<div class="container">
-    <h2>Rejoindre le groupe : {{ group.nom }}</h2>
+  <div class="container mt-4">
+    <h2>Rejoindre le groupe : {{ group.nom|default:"—" }}</h2>
 
-    <div class="group-info">
-        🔗 Lien d'invitation : <br>
-        <small>{{ request.build_absolute_uri }}</small><br>
-        📅 Créé le : {{ group.date_creation|date:"d/m/Y" }}<br>
-        💰 Montant de base : {{ group.montant_base|floatformat:0 }} FCFA
-    </div>
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
 
-    <div class="messages">
-        {% for message in messages %}
-            <div class="{% if message.tags %}{{ message.tags }}{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    </div>
-
-    <form method="POST">
-        {% csrf_token %}
-        <div class="form-group">
-            <label for="nom">Nom complet</label>
-            <input type="text" name="nom" id="nom" placeholder="Ex: Fatou Diop" value="{{ request.POST.nom }}">
-        </div>
-
-        <div class="form-group">
-            <label for="phone">Numéro de téléphone</label>
-            <input type="tel" name="phone" id="phone" placeholder="Ex: 77xxxxxxx" value="{{ request.POST.phone }}">
-        </div>
-
-        <div class="form-group">
-            <label for="password">Mot de passe</label>
-            <input type="password" name="password" id="password" placeholder="Mot de passe">
-        </div>
-
-        <div class="form-group">
-            <label for="confirm_password">Confirmer mot de passe</label>
-            <input type="password" name="confirm_password" id="confirm_password" placeholder="Confirmez le mot de passe">
-        </div>
-
-        <div class="form-group">
-            <label for="option">Option d'inscription</label>
-            <select name="option" id="option" class="form-select">
-                <option value="">-- Sélectionnez une option --</option>
-                <option value="1" {% if request.POST.option == "1" %}selected{% endif %}>Cotisation & Tontine</option>
-                <option value="2" {% if request.POST.option == "2" %}selected{% endif %}>Épargne & Crédit</option>
-            </select>
-        </div>
-
-        {% if user and user.alias %}
-        <div class="form-group">
-            <label>Votre alias interne</label>
-            <input type="text" class="form-control" value="{{ user.alias }}" readonly>
-            <small class="form-text text-muted">Utilisez cet alias pour vos interactions sur la plateforme.</small>
-        </div>
-        {% endif %}
-
-        <button type="submit" class="btn btn-primary">✅ Valider et rejoindre le groupe</button>
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label>Nom</label>
+        <input name="nom" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label>Téléphone</label>
+        <input name="phone" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label>Mot de passe</label>
+        <input type="password" name="password" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label>Confirmer mot de passe</label>
+        <input type="password" name="confirm_password" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label>Option</label>
+        <select name="option" class="form-control" required>
+          <option value="">— Choisir —</option>
+          <option value="1">Tontine</option>
+          <option value="2">Épargne / Crédit</option>
+        </select>
+      </div>
+      <button class="btn btn-success">Rejoindre</button>
     </form>
-
-    <div class="footer">
-        Déjà inscrit ? <a href="{% url 'accounts:login' %}">Connexion</a><br>
-        &copy; 2025 YaayESS. Tous droits réservés.
-    </div>
-</div>
-{% endblock %}
-
-{% block extra_style %}
-<style>
-    .container { max-width: 400px; margin: 50px auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    h2 { text-align: center; color: #333; margin-bottom: 20px; }
-    .form-group { margin-bottom: 15px; }
-    label { display: block; font-weight: bold; margin-bottom: 5px; }
-    input[type="text"], input[type="password"], input[type="tel"], select.form-select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-    .btn { width: 100%; padding: 10px; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
-    .btn:hover { background: #0056b3; }
-    .messages { margin-bottom: 15px; }
-    .messages .error { color: #b00020; margin-bottom: 5px; }
-    .messages .success { color: #007b00; margin-bottom: 5px; }
-    .info { color: #0056b3; margin-bottom: 5px; }
-    .group-info { text-align: center; margin-bottom: 20px; color: #555; font-size: 14px; }
-    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #999; }
-    .footer a { color: #007bff; text-decoration: none; }
-    .footer a:hover { text-decoration: underline; }
-</style>
+  </div>
 {% endblock %}

@@ -615,80 +615,13 @@ def reset_cycle_view(request, group_id):
     messages.info(request, f"Cycle réinitialisé pour le groupe {group.nom} (à implémenter).")
     return redirect("epargnecredit:group_detail", group_id=group.id)
 
-from django.shortcuts import get_object_or_404, render
-from django.contrib.auth.decorators import login_required
-from django.db import transaction
-import random
-from epargnecredit.models import Group, Tirage, GroupMember
-
-@login_required
-def tirage_au_sort_view(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-
-    # ✅ Vérifier que seul l'admin ou un superuser peut tirer au sort
-    if request.user != group.admin and not request.user.is_superuser:
-        return render(request, '403.html', status=403)
-
-    def membres_eligibles_pour_tirage(group):
-        membres = list(group.membres.filter(actif=True, exit_liste=False))
-        total = len(membres)
-
-        if total <= 1:
-            return membres  # tout le monde éligible
-
-        # Exclure le prochain gagnant s'il est défini et qu'il reste plus de 2 membres
-        if group.prochain_gagnant and total > 2:
-            membres = [m for m in membres if m.id != group.prochain_gagnant.id]
-
-        return membres
-
-    membres_eligibles = membres_eligibles_pour_tirage(group)
-
-    gagnant = None
-    montant_total = 0
-
-    if membres_eligibles:
-        gagnant = random.choice(membres_eligibles)
-
-        # 💡 Si c'est le premier tirage, on fixe le montant pour tous les gagnants
-        if group.montant_fixe_gagnant is None:
-            montant_total = group.montant_base * group.membres.filter(actif=True, exit_liste=False).count()
-            group.montant_fixe_gagnant = montant_total
-            group.save()
-        else:
-            montant_total = group.montant_fixe_gagnant
-
-        with transaction.atomic():
-            # Enregistrer le tirage
-            Tirage.objects.create(
-                group=group,
-                gagnant=gagnant,
-                membre=gagnant,
-                montant=montant_total,
-            )
-
-            # Déterminer le prochain gagnant à ignorer
-            total_apres_tirage = group.membres.filter(actif=True, exit_liste=False).count() - 1
-            if total_apres_tirage > 2:
-                group.prochain_gagnant = gagnant
-            else:
-                group.prochain_gagnant = None
-            group.save()
-
-    context = {
-        'group': group,
-        'gagnant': gagnant,
-        'montant_total': montant_total,
-    }
-    return render(request, 'epargnecredit/tirage_resultat.html', context)
-
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
 from django.utils import timezone
-from .models import Group, GroupMember, EpargneCredit, Tirage, TirageHistorique
+from .models import Group, GroupMember, EpargneCredit
 
 
 @login_required
@@ -746,7 +679,7 @@ def reset_cycle_view(request, group_id):
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
-from .models import Group, GroupMember, EpargneCredit, Tirage, TirageHistorique
+from .models import Group, GroupMember, EpargneCredit
 from django.contrib import messages
 from django.utils import timezone
 from django.urls import reverse
@@ -815,199 +748,6 @@ def historique_cycles_view(request, group_id):
     return render(request, "epargnecredit/historique_cycles.html", context)
 
 
-import logging
-import requests
-import json
-from decimal import Decimal, ROUND_HALF_UP
-from django.conf import settings
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import get_object_or_404, redirect, render
-
-from .models import Group, Tirage, PaiementGagnant
-
-logger = logging.getLogger(__name__)
-
-@login_required
-def payer_gagnant(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-
-    # Récupérer le dernier tirage gagnant
-    dernier_tirage = Tirage.objects.filter(group=group).order_by('-date_tirage').first()
-
-    if not dernier_tirage or not dernier_tirage.gagnant:
-        messages.error(request, "Aucun gagnant défini pour ce groupe.")
-        return redirect('group_detail', group_id=group.id)
-
-    gagnant = dernier_tirage.gagnant
-
-    # 💡 Utiliser le montant fixe si défini, sinon le calculer
-    if group.montant_fixe_gagnant is not None:
-        montant_total = group.montant_fixe_gagnant
-    else:
-        montant_total = group.montant_base * group.membres.filter(actif=True, exit_liste=False).count()
-
-    if request.method == 'POST':
-        montant_total = Decimal(montant_total)
-
-        frais_pourcent = montant_total * Decimal('0.02')
-        frais_fixe = Decimal('50')
-        frais_total = (frais_pourcent + frais_fixe).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-        montant_total_avec_frais = (montant_total + frais_total).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-
-        montant_total_avec_frais_int = int(montant_total_avec_frais)
-        frais_total_int = int(frais_total)
-
-        if settings.DEBUG and getattr(settings, 'NGROK_BASE_URL', None):
-            base_url = settings.NGROK_BASE_URL.rstrip('/') + '/'
-        else:
-            base_url = request.build_absolute_uri('/')
-
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "PAYDUNYA-MASTER-KEY": settings.PAYDUNYA_KEYS["master_key"],
-            "PAYDUNYA-PRIVATE-KEY": settings.PAYDUNYA_KEYS["private_key"],
-            "PAYDUNYA-PUBLIC-KEY": settings.PAYDUNYA_KEYS["public_key"],
-            "PAYDUNYA-TOKEN": settings.PAYDUNYA_KEYS["token"],
-        }
-
-        payload = {
-            "invoice": {
-                "items": [{
-                    "name": "Paiement gagnant epargnecredit",
-                    "quantity": 1,
-                    "unit_price": montant_total_avec_frais_int,
-                    "total_price": montant_total_avec_frais_int,
-                    "description": f"Paiement {gagnant.user.nom} - Frais {frais_total_int} FCFA"
-                }],
-                "description": f"Versement gagnant (+{frais_total_int} FCFA de frais)",
-                "total_amount": montant_total_avec_frais_int,
-                "callback_url": f"{base_url}epargnecredit/paiement_gagnant/callback/",
-                "return_url": f"{base_url}epargnecredit/paiement_gagnant/merci/"
-            },
-            "store": {
-                "name": "YaayESS",
-                "tagline": "Plateforme de gestion financière",
-                "website_url": "https://yaayess.com"
-            },
-            "custom_data": {
-                "group_id": group.id,
-                "gagnant_id": gagnant.id,
-                "montant_saisi": int(montant_total),
-                "frais_total": frais_total_int
-            }
-        }
-
-        try:
-            logger.info("⏳ Envoi requête PayDunya...")
-            response = requests.post(
-                "https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create",
-                headers=headers,
-                json=payload,
-                timeout=15
-            )
-            logger.info(f"✅ Statut HTTP PayDunya : {response.status_code}")
-
-            if response.status_code != 200:
-                messages.error(request, f"Erreur PayDunya : {response.text}")
-                return redirect('group_detail', group_id=group.id)
-
-            data = response.json()
-            logger.debug(f"🧾 Réponse JSON PayDunya : {json.dumps(data, indent=2)}")
-
-            if data.get("response_code") == "00":
-                PaiementGagnant.objects.create(
-                    group=group,
-                    gagnant=gagnant,
-                    montant=montant_total,
-                    statut='EN_ATTENTE',
-                    transaction_id=data.get("token"),
-                    message="Paiement en attente validation PayDunya"
-                )
-                return redirect(data.get("response_text"))  # Redirection vers PayDunya
-            else:
-                messages.error(request, f"Échec création paiement : {data.get('response_text')}")
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erreur réseau PayDunya: {e}")
-            messages.error(request, f"Erreur réseau PayDunya: {str(e)}")
-
-        return redirect('group_detail', group_id=group.id)
-
-    return render(request, 'epargnecredit/payer_gagnant.html', {
-        'group': group,
-        'gagnant': gagnant,
-        'montant_total': montant_total,
-    })
-
-import json
-import logging
-from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-
-from .models import PaiementGagnant
-
-logger = logging.getLogger(__name__)
-
-@csrf_exempt  # PayDunya ne peut pas envoyer le CSRF token
-def paiement_gagnant_callback(request):
-    if request.method != 'POST':
-        return JsonResponse({"error": "Méthode non autorisée"}, status=405)
-
-    try:
-        data = json.loads(request.body)
-        logger.info(f"Callback PayDunya reçu: {json.dumps(data)}")
-
-        token = data.get('token')
-        status = data.get('status')  # Ex: "PAID", "FAILED", etc.
-        response_code = data.get('response_code')
-        response_text = data.get('response_text', '')
-
-        if not token:
-            return JsonResponse({"error": "Token manquant"}, status=400)
-
-        # Chercher le PaiementGagnant par transaction_id (token)
-        paiement = PaiementGagnant.objects.filter(transaction_id=token).first()
-        if not paiement:
-            logger.error(f"PaiementGagnant introuvable pour token={token}")
-            return JsonResponse({"error": "Paiement introuvable"}, status=404)
-
-        # Mettre à jour le statut selon la réponse
-        if response_code == "00" and status == "PAID":
-            paiement.statut = 'SUCCES'
-        else:
-            paiement.statut = 'ECHEC'
-
-        paiement.message = response_text
-        paiement.save()
-
-        logger.info(f"PaiementGagnant {token} mis à jour avec statut {paiement.statut}")
-
-        return JsonResponse({"success": True})
-
-    except json.JSONDecodeError:
-        logger.error("Corps JSON invalide dans callback PayDunya")
-        return JsonResponse({"error": "JSON invalide"}, status=400)
-    except Exception as e:
-        logger.error(f"Erreur inattendue dans callback PayDunya: {e}")
-        return JsonResponse({"error": "Erreur serveur"}, status=500)
-
-from django.shortcuts import render
-
-def paiement_gagnant_merci(request):
-    return render(request, 'epargnecredit/paiement_gagnant_merci.html')
-
-
-from django.shortcuts import render
-from .models import PaiementGagnant
-
-def liste_paiements_gagnants(request):
-    paiements = PaiementGagnant.objects.select_related('gagnant__user', 'group').order_by('-date_paiement')
-    return render(request, 'epargnecredit/paiement_gagnant.html', {
-        'paiements': paiements
-    })
-
-# epargnecredit/views.py
 
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -1026,20 +766,3 @@ def historique_actions_view(request):
     })
 
 
-from django.db.models import Count
-
-
-def membres_eligibles_pour_tirage(group):
-    # Récupère le dernier tirage et son gagnant
-    dernier_tirage = group.tirages.order_by('-date').first()  # adapte selon ton related_name
-    membres = group.members.all()  # adapte selon ton related_name
-
-    # Si le groupe a 1 membre ou moins, tous sont éligibles (pas d'exclusion)
-    if membres.count() <= 1:
-        return membres
-
-    # Sinon, exclut le dernier gagnant du tirage
-    if dernier_tirage:
-        membres = membres.exclude(id=dernier_tirage.gagnant.id)
-
-    return membres

@@ -43,9 +43,8 @@
     <!-- Boutons administratifs -->
     {% if user_is_admin %}
     <div class="d-flex flex-wrap gap-2 mb-3">
-        <a href="{% url 'epargnecredit:tirage_au_sort' group.id %}" class="btn btn-outline-primary">
-            🎲 Lancer le tirage au sort
-        </a>
+        {# 🎲 Bouton tirage au sort retiré côté epargnecredit #}
+
         <form action="{% url 'epargnecredit:reset_cycle' group.id %}" method="post" onsubmit="return confirm('Confirmer la réinitialisation du cycle ?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline-danger">
@@ -65,7 +64,6 @@
 
     <!-- Tableau des membres -->
     <div class="table-responsive shadow-sm rounded">
-
         <table class="table table-bordered align-middle mb-0">
             <thead class="table-light">
                  <tr>
@@ -80,7 +78,6 @@
                 {% for m in membres %}
                 <tr>
                     <td>
-                        <!-- Afficher l'alias s'il existe, sinon le nom normal -->
                         {% if m.alias %}
                             {{ m.alias }}
                         {% else %}
@@ -99,20 +96,18 @@
                         {% endif %}
 
                         {% if user_is_admin %}
-
+                        {# autres actions admin si besoin #}
                         {% endif %}
                     </td>
                     <td>{{ m.montant|intcomma }} FCFA</td>
                     <td>
-
-                            {% with v=dernier_versement_membres_dict|get_item:m.id %}
-                                {% if v %}
-                                    {{ v.date|date:"d/m/Y H:i" }} : {{ v.montant|intcomma }} FCFA
-                                {% else %}
-                                    -
-                                {% endif %}
-                            {% endwith %}
-
+                        {% with v=dernier_versement_membres_dict|get_item:m.id %}
+                            {% if v %}
+                                {{ v.date|date:"d/m/Y H:i" }} : {{ v.montant|intcomma }} FCFA
+                            {% else %}
+                                -
+                            {% endif %}
+                        {% endwith %}
                     </td>
                     <td>{{ m.user.phone }}</td>
                 </tr>
@@ -133,3 +128,4 @@
     </div>
 </div>
 {% endblock %}
+
