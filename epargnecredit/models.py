@@ -173,18 +173,22 @@ class HistoriqueAction(models.Model):
 
 
 # ✅ Invitation
+import uuid
+from django.db import models
+from django.utils import timezone
+
 class Invitation(models.Model):
     group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name="invitations_ec")
     phone = models.CharField(max_length=20)
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    expire_at = models.DateTimeField()
 
     class Meta:
         db_table = "epargnecredit_invitation"
 
     def is_expired(self):
-        return timezone.now() > self.expire_at
+        # Exemple : expiration automatique 7 jours après création
+        return timezone.now() > self.created_at + timezone.timedelta(days=7)
 
     def __str__(self):
         return f"Invitation for {self.phone} to join {self.group.nom}"

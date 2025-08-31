@@ -228,7 +228,6 @@ class HistoriqueAction(models.Model):
         return f"{self.get_action_display()} - {self.group.nom} - {self.date.strftime('%d/%m/%Y %H:%M')}"
 
 
-# tontine/models.py
 from django.db import models
 from django.conf import settings
 from .models import Group, GroupMember  # Assure-toi que c’est bien dans le même fichier
@@ -258,18 +257,16 @@ class PaiementGagnant(models.Model):
 import uuid
 from django.db import models
 from django.utils import timezone
-from datetime import timedelta
-from django.conf import settings
 
 class Invitation(models.Model):
     group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name="invitations")
     phone = models.CharField(max_length=20)
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    expire_at = models.DateTimeField()
 
     def is_expired(self):
-        return timezone.now() > self.expire_at
+        # Si tu veux garder la logique d’expiration, par ex. après 7 jours
+        return timezone.now() > self.created_at + timezone.timedelta(days=7)
 
     def __str__(self):
         return f"Invitation for {self.phone} to join {self.group.nom}"
