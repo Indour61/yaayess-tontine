@@ -26,8 +26,6 @@ urlpatterns = [
 
     # --- Membres ---
     path('<int:group_id>/membre/ajouter/', views.ajouter_membre_view, name='ajouter_membre'),
-    path('<int:group_id>/membre/<int:membre_id>/editer/', views.editer_membre_view, name='editer_membre'),
-    path('<int:group_id>/membre/<int:membre_id>/supprimer/', views.supprimer_membre_view, name='supprimer_membre'),
 
     # --- Versements ---
     path('versement/initier/<int:member_id>/', views.initier_versement, name='initier_versement'),

@@ -824,137 +824,152 @@ def tirage_au_sort_view(request, group_id):
     }
     return render(request, 'cotisationtontine/tirage_resultat.html', context)
 
+# cotisationtontine/views.py
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
 from django.utils import timezone
+from django.urls import reverse
+from django.apps import apps
 
 from .models import Group, GroupMember, CotisationTontine, Tirage, TirageHistorique
+# Si Versement est dans l’app cotisationtontine, importe-le si nécessaire pour d’autres vues
+# from .models import Versement
 
+
+# ============================================================
+# Réinitialisation d’un cycle de tontine (fusion + durcissement)
+# ============================================================
 @login_required
 @transaction.atomic
 def reset_cycle_view(request, group_id):
+    """
+    Réinitialise le cycle d’un groupe :
+      - Permissions : admin du groupe ou superuser/super_admin.
+      - GET : page de confirmation (avec rappel des membres non gagnants).
+      - POST :
+          * Archive les tirages en cours -> TirageHistorique
+          * Supprime tirages actifs et cotisations du cycle
+          * Met à jour group.date_reset (+ cycle_en_cours=True si présent)
+      - NE SUPPRIME PAS les Versement (traçabilité).
+    """
     group = get_object_or_404(Group, id=group_id)
 
-    # ✅ Autoriser admin ou superuser
-    if request.user != group.admin and not request.user.is_superuser:
-        messages.error(request, "Seul l'administrateur ou un superutilisateur peut réinitialiser le cycle.")
-        return redirect('cotisationtontine:group_detail', group_id=group.id)
+    user = request.user
+    is_group_admin = (user == getattr(group, "admin", None))
+    is_superuser = getattr(user, "is_superuser", False) or getattr(user, "is_super_admin", False)
+    if not (is_group_admin or is_superuser):
+        messages.error(request, "Seul l’administrateur du groupe ou un superutilisateur peut réinitialiser le cycle.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-    # ✅ Afficher une confirmation avant la réinitialisation
-    if request.method != 'POST':
-        return render(request, 'cotisationtontine/confirm_reset.html', {'group': group})
-
-    # ✅ Vérifier que tous les membres ont déjà gagné
-    membres = set(group.membres.all())
-    gagnants_actuels = {tirage.gagnant for tirage in group.tirages.all() if tirage.gagnant}
-    gagnants_historiques = {tirage.gagnant for tirage in group.tirages_historiques.all() if tirage.gagnant}
-
+    # Prépare l’info des non-gagnants (utilisée en GET et vérifiée en POST)
+    membres = list(group.membres.select_related("user").all())  # GroupMember
+    gagnants_actuels = {t.gagnant for t in group.tirages.select_related("gagnant").all() if t.gagnant}
+    gagnants_historiques = {t.gagnant for t in group.tirages_historiques.select_related("gagnant").all() if t.gagnant}
     tous_les_gagnants = gagnants_actuels.union(gagnants_historiques)
-    membres_non_gagnants = membres - tous_les_gagnants
+    membres_non_gagnants = [m for m in membres if m not in tous_les_gagnants]
 
-    if membres_non_gagnants:
-        noms = ", ".join(m.user.username for m in membres_non_gagnants)
-        messages.warning(request, f"Les membres suivants n'ont pas encore gagné : {noms}.")
-        return redirect('cotisationtontine:group_detail', group_id=group.id)
-
-    # ✅ Archiver les tirages en cours
-    tirages_actuels = group.tirages.all()
-    TirageHistorique.objects.bulk_create([
-        TirageHistorique(
-            group=group,
-            gagnant=tirage.gagnant,
-            montant=tirage.montant,
-            date_tirage=tirage.date_tirage or timezone.now()
+    if request.method != "POST":
+        return render(
+            request,
+            "cotisationtontine/confirm_reset_cycle.html",
+            {
+                "group": group,
+                "membres_non_gagnants": membres_non_gagnants,
+                "nb_tirages_actuels": group.tirages.count(),
+                "nb_tirages_historiques": group.tirages_historiques.count(),
+                "date_reset_precedent": getattr(group, "date_reset", None),
+            },
         )
-        for tirage in tirages_actuels
-    ])
 
-    # ✅ Supprimer les données du cycle en cours
-    tirages_actuels.delete()
+    # En POST : si certains membres n’ont pas gagné, on avertit et on sort
+    if membres_non_gagnants:
+        noms = ", ".join(getattr(m.user, "nom", None) or getattr(m.user, "username", "") or str(m.user_id) for m in membres_non_gagnants)
+        messages.warning(request, f"Les membres suivants n’ont pas encore gagné : {noms}.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # 1) Archiver les tirages en cours -> TirageHistorique
+    tirages_actuels = list(group.tirages.select_related("gagnant").all())
+    if tirages_actuels:
+        TirageHistorique.objects.bulk_create(
+            [
+                TirageHistorique(
+                    group=group,
+                    gagnant=t.gagnant,
+                    montant=t.montant,
+                    date_tirage=t.date_tirage or timezone.now(),
+                )
+                for t in tirages_actuels
+            ]
+        )
+
+    # 2) Supprimer les tirages en cours
+    if tirages_actuels:
+        group.tirages.all().delete()
+
+    # 3) Supprimer les cotisations du cycle (on laisse les Versement pour l’audit)
     CotisationTontine.objects.filter(member__group=group).delete()
 
-    # ✅ Marquer la date du nouveau cycle
+    # 4) Mettre à jour le groupe
     group.date_reset = timezone.now()
-    if hasattr(group, 'cycle_en_cours'):
+    if hasattr(group, "cycle_en_cours"):
         group.cycle_en_cours = True
-    group.save()
+    group.save(update_fields=["date_reset"] + (["cycle_en_cours"] if hasattr(group, "cycle_en_cours") else []))
 
-    messages.success(request, "✅ Cycle réinitialisé avec succès. Les membres peuvent recommencer les versements.")
-    return redirect('cotisationtontine:group_detail', group_id=group.id)
-
-
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
-from cotisationtontine.models import Group, CotisationTontine, Versement, GroupMember
-from django.contrib import messages
-from django.utils import timezone
-from django.urls import reverse
+    messages.success(request, f"✅ Cycle du groupe « {getattr(group, 'nom', group.id)} » réinitialisé avec succès. Les versements peuvent reprendre.")
+    return redirect("cotisationtontine:group_detail", group_id=group.id)
 
 
+# =====================
+# Résultats d’un tirage
+# =====================
 @login_required
-def reset_cycle_view(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-
-    # ✅ Vérifie si l'utilisateur connecté est l'admin du groupe
-    if group.admin != request.user:
-        messages.error(request, "Vous n'avez pas la permission de réinitialiser ce groupe.")
-        return redirect('dashboard_tontine_simple')
-
-    if request.method == 'POST':
-        # Remettre à zéro les montants
-        for membre in group.membres.all():
-            membre.montant = 0
-            membre.save()
-
-        # Supprimer les cotisations et versements
-        CotisationTontine.objects.filter(member__group=group).delete()
-        Versement.objects.filter(member__group=group).delete()
-
-        # Date de reset
-        group.date_reset = timezone.now()
-        group.save()
-
-        messages.success(request, f"✅ Le cycle du groupe « {group.nom} » a été réinitialisé avec succès.")
-        return redirect('cotisationtontine:group_detail', group_id=group.id)
-
-    return render(request, 'cotisationtontine/confirm_reset_cycle.html', {'group': group})
-
-
 def tirage_resultat_view(request, group_id):
-    # logiquement, on affiche les résultats ici
-    return render(request, 'cotisationtontine/tirage_resultat.html', {'group_id': group_id})
+    """
+    Affiche une page de résultats (à compléter selon ton besoin).
+    """
+    group = get_object_or_404(Group, id=group_id)
+    # Ex : derniers tirages, prochain ordre, etc.
+    tirages = group.tirages.select_related("gagnant__user").order_by("-date_tirage")
+    return render(request, "cotisationtontine/tirage_resultat.html", {"group": group, "tirages": tirages})
 
-# cotisationtontine/views.py
 
-from django.shortcuts import render, get_object_or_404
-#from .models import Group, Cycle
-from django.contrib.auth.decorators import login_required
-
+# ==================================
+# Historique des cycles (si disponible)
+# ==================================
 @login_required
 def historique_cycles_view(request, group_id):
     """
-    Affiche l'historique des cycles passés d'un groupe.
+    Affiche l'historique des cycles passés d'un groupe si le modèle Cycle existe.
+    Tolérant : si le modèle n’existe pas, on rend une page vide (sans 500).
     """
     group = get_object_or_404(Group, id=group_id)
 
-    # Récupération des cycles archivés (ex: statut = "fini")
-    anciens_cycles = (
-        Cycle.objects.filter(group=group)
-        .exclude(date_fin__isnull=True)  # On garde que les cycles terminés
-        .prefetch_related(
-            "etapes__tirage__beneficiaire__user"
-        )  # Optimise les requêtes
-        .order_by("-date_debut")
-    )
+    # Récupère Cycle dynamiquement pour éviter un crash si non migré/commenté
+    try:
+        Cycle = apps.get_model("cotisationtontine", "Cycle")
+    except LookupError:
+        Cycle = None
 
-    context = {
-        "group": group,
-        "anciens_cycles": anciens_cycles
-    }
-    return render(request, "cotisationtontine/historique_cycles.html", context)
+    anciens_cycles = []
+    if Cycle is not None:
+        anciens_cycles = (
+            Cycle.objects.filter(group=group)
+            .exclude(date_fin__isnull=True)  # cycles terminés
+            .prefetch_related("etapes__tirage__beneficiaire__user")
+            .order_by("-date_debut")
+        )
+
+    return render(
+        request,
+        "cotisationtontine/historique_cycles.html",
+        {
+            "group": group,
+            "anciens_cycles": anciens_cycles,
+        },
+    )
 
 
 import logging

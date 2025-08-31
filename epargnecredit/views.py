@@ -380,188 +380,317 @@ def group_detail(request, group_id):
 
     return render(request, 'epargnecredit/group_detail.html', context)
 
+# epargnecredit/views.py
 
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.db import transaction
-from django.utils import timezone
-from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-from decimal import Decimal
-import requests
 import json
+from decimal import Decimal, ROUND_HALF_UP
+import requests
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 
 from epargnecredit.models import GroupMember, Versement
 
 
+# ===============================
+# Helpers PayDunya (compat PAYDUNYA / PAYDUNYA_KEYS)
+# ===============================
+def _pd_conf():
+    """
+    Récupère la configuration PayDunya depuis settings.
+    Priorité à PAYDUNYA (recommandé), fallback vers PAYDUNYA_KEYS pour compat.
+    """
+    cfg = getattr(settings, "PAYDUNYA", None) or getattr(settings, "PAYDUNYA_KEYS", None)
+    if not cfg:
+        raise RuntimeError("Configuration PayDunya absente (PAYDUNYA ou PAYDUNYA_KEYS).")
+    for k in ("master_key", "private_key", "public_key", "token"):
+        if k not in cfg or not cfg[k]:
+            raise RuntimeError(f"Clé PayDunya manquante: {k}")
+    return cfg
+
+
+def _pd_headers(cfg):
+    return {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "PAYDUNYA-MASTER-KEY": cfg["master_key"],
+        "PAYDUNYA-PRIVATE-KEY": cfg["private_key"],
+        "PAYDUNYA-PUBLIC-KEY": cfg["public_key"],
+        "PAYDUNYA-TOKEN": cfg["token"],
+    }
+
+
+def _pd_base_url(cfg):
+    # Recommande PAYDUNYA["sandbox"] True/False ; sinon bascule sur DEBUG.
+    sandbox = cfg.get("sandbox", getattr(settings, "DEBUG", True)) if hasattr(cfg, "get") else getattr(settings, "DEBUG", True)
+    return "https://app.paydunya.com/sandbox-api/v1" if sandbox else "https://app.paydunya.com/api/v1"
+
+
+def _as_fcfa_int(amount: Decimal) -> int:
+    """PayDunya attend des entiers (FCFA)."""
+    return int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+# ===============================
+# Initier un versement
+# ===============================
 @login_required
 @transaction.atomic
-def initier_versement(request, member_id):
+def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
     """
-    Initier un versement pour un membre d'un groupe (Caisse ou PayDunya)
+    - CAISSE : crée directement le Versement (pas de champ 'statut').
+    - PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement (idempotent).
     """
     member = get_object_or_404(GroupMember, id=member_id)
-    group_id = member.group.id
+    group = member.group
+    group_id = group.id
 
-    # Vérifier que l'utilisateur a le droit d'effectuer un versement pour ce membre
-    if request.user != member.user and request.user != member.group.admin and not getattr(request.user, "is_super_admin", False):
+    # Permissions : soi-même, admin du groupe, ou super admin
+    is_self = (request.user == member.user)
+    is_group_admin = (request.user == getattr(group, "admin", None))
+    is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+    if not (is_self or is_group_admin or is_super_admin):
         messages.error(request, "⚠️ Vous n'avez pas les droits pour effectuer un versement pour ce membre.")
         return redirect("epargnecredit:group_detail", group_id=group_id)
 
-    if request.method == 'POST':
-        try:
-            montant_saisi = Decimal(request.POST.get('montant', '0'))
-            if montant_saisi <= 0:
-                messages.error(request, "Le montant doit être supérieur à 0.")
-                return redirect("epargnecredit:initier_versement", member_id=member_id)
-        except (TypeError, ValueError, Decimal.InvalidOperation):
-            messages.error(request, "Montant invalide.")
-            return redirect("epargnecredit:initier_versement", member_id=member_id)
+    if request.method == "GET":
+        return render(request, "epargnecredit/initier_versement.html", {"member": member, "group": group})
 
-        methode = request.POST.get('methode', 'paydunya').lower()
+    # --- POST ---
+    montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
+    methode = (request.POST.get("methode") or "paydunya").lower()
 
-        # --- Si paiement en caisse ---
-        if methode == 'caisse':
-            Versement.objects.create(
-                member=member,
-                montant=montant_saisi,
-                frais=0,
-                methode="CAISSE",
-                transaction_id=f"CAISSE-{member.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}",
-                statut="valide"
-            )
-            member.montant += montant_saisi
-            member.save()
+    # Validation montant
+    try:
+        montant = Decimal(montant_raw)
+    except Exception:
+        messages.error(request, "Montant invalide.")
+        return redirect("epargnecredit:initier_versement", member_id=member_id)
 
-            messages.success(request, f"✅ Versement de {montant_saisi} FCFA enregistré via Caisse.")
-            return redirect('epargnecredit:group_detail', group_id=group_id)
+    if montant <= 0:
+        messages.error(request, "Le montant doit être supérieur à 0.")
+        return redirect("epargnecredit:initier_versement", member_id=member_id)
 
-        # --- Si paiement PayDunya ---
-        frais_pourcent = montant_saisi * Decimal('0.02')
-        frais_fixe = Decimal('50')
-        frais_total = int(round(frais_pourcent + frais_fixe))
-        montant_total = int(round(montant_saisi + frais_total))
+    # Forcer FCFA entier
+    montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-        base_url = settings.NGROK_BASE_URL.rstrip('/') + '/' if settings.DEBUG and getattr(settings, 'NGROK_BASE_URL', None) else request.build_absolute_uri('/')
+    # 1) CAISSE -> écriture immédiate (⚠️ pas de champ 'statut')
+    if methode == "caisse":
+        Versement.objects.create(
+            member=member,
+            montant=montant,
+            frais=Decimal("0"),
+            methode="CAISSE",
+            transaction_id=f"CAISSE-{member.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}",
+        )
+        messages.success(request, f"✅ Versement de {_as_fcfa_int(montant)} FCFA enregistré via Caisse.")
+        return redirect("epargnecredit:group_detail", group_id=group_id)
 
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "PAYDUNYA-MASTER-KEY": settings.PAYDUNYA_KEYS["master_key"],
-            "PAYDUNYA-PRIVATE-KEY": settings.PAYDUNYA_KEYS["private_key"],
-            "PAYDUNYA-PUBLIC-KEY": settings.PAYDUNYA_KEYS["public_key"],
-            "PAYDUNYA-TOKEN": settings.PAYDUNYA_KEYS["token"],
-        }
+    # 2) PAYDUNYA
+    try:
+        cfg = _pd_conf()
+        headers = _pd_headers(cfg)
+        base_url = _pd_base_url(cfg)
+    except RuntimeError as e:
+        messages.error(request, str(e))
+        return redirect("epargnecredit:initier_versement", member_id=member_id)
 
-        payload = {
-            "invoice": {
-                "items": [{
+    # Frais : 2% + 50 FCFA (arrondi FCFA)
+    frais_total = (montant * Decimal("0.02") + Decimal("50")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    montant_total = (montant + frais_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    # URLs absolues
+    callback_url = request.build_absolute_uri(reverse("epargnecredit:versement_callback"))
+    return_url = request.build_absolute_uri(reverse("epargnecredit:versement_merci"))
+    cancel_url = request.build_absolute_uri(reverse("epargnecredit:group_detail", args=[group_id]))
+
+    payload = {
+        "invoice": {
+            "items": [
+                {
                     "name": "Versement épargne",
                     "quantity": 1,
-                    "unit_price": montant_total,
-                    "total_price": montant_total,
-                    "description": f"Versement membre {member.user.nom} (frais: {frais_total} FCFA)"
-                }],
-                "description": f"Paiement épargne (+{frais_total} FCFA de frais)",
-                "total_amount": montant_total,
-                "callback_url": f"{base_url}groups/versement/callback/",
-                "return_url": f"{base_url}groups/{group_id}/"
-            },
-            "store": {
-                "name": "YaayESS",
-                "tagline": "Plateforme de gestion financière",
-                "website_url": "https://yaayess.com"
-            },
-            "custom_data": {
-                "member_id": member.id,
-                "user_id": request.user.id,
-                "montant_saisi": int(montant_saisi),
-                "frais_total": frais_total
-            }
-        }
+                    "unit_price": _as_fcfa_int(montant_total),
+                    "total_price": _as_fcfa_int(montant_total),
+                    "description": f"Versement membre {member.user.nom or member.user.phone} (frais: {_as_fcfa_int(frais_total)} FCFA)",
+                }
+            ],
+            "description": f"Paiement épargne (+{_as_fcfa_int(frais_total)} FCFA de frais)",
+            "total_amount": _as_fcfa_int(montant_total),
+            "currency": "XOF",
+        },
+        "store": {
+            "name": cfg.get("store_name", "YaayESS"),
+            "tagline": cfg.get("store_tagline", "Plateforme de gestion financière"),
+            "website_url": cfg.get("website_url", "https://yaayess.com"),
+        },
+        "actions": {  # ✅ bon emplacement pour les URLs
+            "callback_url": callback_url,
+            "return_url": return_url,
+            "cancel_url": cancel_url,
+        },
+        # Données utiles au callback
+        "custom_data": {
+            "member_id": member.id,
+            "user_id": request.user.id,
+            "montant": _as_fcfa_int(montant),  # hors frais
+            "frais": _as_fcfa_int(frais_total),
+        },
+    }
 
+    # Créer la facture
+    try:
+        resp = requests.post(f"{base_url}/checkout-invoice/create", headers=headers, json=payload, timeout=20)
+    except requests.exceptions.RequestException as e:
+        messages.error(request, f"Erreur réseau PayDunya : {e}")
+        return redirect("epargnecredit:initier_versement", member_id=member_id)
+
+    if resp.status_code != 200:
+        messages.error(request, f"Erreur PayDunya (HTTP {resp.status_code})")
+        if getattr(settings, "DEBUG", False):
+            messages.info(request, f"DEBUG PayDunya: {resp.text[:600]}")
+        return redirect("epargnecredit:initier_versement", member_id=member_id)
+
+    try:
+        data = resp.json()
+    except json.JSONDecodeError:
+        messages.error(request, "Réponse PayDunya invalide (JSON).")
+        if getattr(settings, "DEBUG", False):
+            messages.info(request, f"DEBUG PayDunya: {resp.text[:600]}")
+        return redirect("epargnecredit:initier_versement", member_id=member_id)
+
+    if getattr(settings, "DEBUG", False):
         try:
-            response = requests.post(
-                "https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create",
-                headers=headers,
-                json=payload,
-                timeout=15
+            messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:600]}")
+        except Exception:
+            pass
+
+    # --- Extraction/redirect (gère response_text = URL string) ---
+    if isinstance(data, dict) and data.get("response_code") == "00":
+        invoice_url = None
+        rt = data.get("response_text")
+
+        # Cas principal: PayDunya renvoie l'URL directement en string
+        if isinstance(rt, str) and rt.startswith("http"):
+            invoice_url = rt
+        # Variante: dict {invoice_url: ...}
+        elif isinstance(rt, dict):
+            invoice_url = rt.get("invoice_url")
+
+        # Fallbacks communs
+        if not invoice_url:
+            invoice_url = (
+                data.get("invoice_url")
+                or data.get("checkout_url")
+                or data.get("url")
+                or (data.get("data", {}).get("invoice_url") if isinstance(data.get("data"), dict) else None)
             )
 
-            if response.status_code != 200:
-                messages.error(request, f"Erreur PayDunya (HTTP {response.status_code}): {response.text}")
-                return redirect("epargnecredit:initier_versement", member_id=member_id)
+        if invoice_url:
+            return redirect(invoice_url)
 
-            try:
-                data = response.json()
-            except json.JSONDecodeError:
-                messages.error(request, "Réponse invalide de PayDunya (format JSON incorrect)")
-                return redirect("epargnecredit:initier_versement", member_id=member_id)
+        token = data.get("token") or (rt.get("token") if isinstance(rt, dict) else None)
+        if token:
+            messages.warning(request, "Facture créée. Redirection indisponible ; le paiement doit être finalisé côté PayDunya.")
+            return redirect("epargnecredit:group_detail", group_id=group_id)
 
-            if not isinstance(data, dict):
-                messages.error(request, "Réponse invalide de PayDunya (format incorrect)")
-                return redirect("epargnecredit:initier_versement", member_id=member_id)
+        messages.warning(request, "Facture créée mais URL manquante. Retour au groupe.")
+        return redirect("epargnecredit:group_detail", group_id=group_id)
 
-            response_code = data.get("response_code")
-            if response_code == "00":
-                Versement.objects.create(
-                    member=member,
-                    montant=montant_saisi,
-                    frais=frais_total,
-                    methode="PAYDUNYA",
-                    transaction_id=data.get("token", ""),
-                    statut="en_attente"
-                )
-
-                invoice_url = data.get("response_text", {}).get("invoice_url", f"/groups/{group_id}/")
-                return redirect(invoice_url)
-            else:
-                error_message = data.get("response_text", "Erreur inconnue")
-                messages.error(request, f"Échec du paiement: {error_message}")
-                return redirect("epargnecredit:initier_versement", member_id=member_id)
-
-        except requests.exceptions.RequestException as e:
-            messages.error(request, f"Erreur réseau PayDunya: {str(e)}")
-            return redirect("epargnecredit:initier_versement", member_id=member_id)
-        except Exception as e:
-            messages.error(request, f"Erreur inattendue: {str(e)}")
-            return redirect("epargnecredit:initier_versement", member_id=member_id)
-
-    return render(request, "epargnecredit/initier_versement.html", {"member": member})
+    messages.error(request, f"Échec de création de facture: {data.get('response_text', 'Erreur inconnue')}")
+    return redirect("epargnecredit:initier_versement", member_id=member_id)
 
 
+# ===============================
+# Callback PayDunya (idempotent & confirm)
+# ===============================
 @csrf_exempt
-def versement_callback(request):
+@transaction.atomic
+def versement_callback(request: HttpRequest) -> JsonResponse:
     """
-    Callback PayDunya pour confirmer un versement
+    1) Récupère le token du payload
+    2) Confirme auprès de PayDunya (endpoint confirm)
+    3) Crée un Versement idempotent (transaction_id=token)
     """
     try:
-        data = json.loads(request.body)
-        token = data.get("token")
+        payload = json.loads(request.body or "{}")
     except Exception:
         return JsonResponse({"error": "Payload invalide"}, status=400)
 
+    token = payload.get("token") or payload.get("payout_token") or payload.get("invoice", {}).get("token")
+    if not token:
+        return JsonResponse({"error": "Token manquant"}, status=400)
+
+    # Idempotence : si déjà traité, OK
+    if Versement.objects.filter(transaction_id=token).exists():
+        return JsonResponse({"message": "Déjà confirmé."}, status=200)
+
     try:
-        versement = Versement.objects.get(transaction_id=token)
-        versement.statut = "valide"
-        versement.save()
+        cfg = _pd_conf()
+        headers = _pd_headers(cfg)
+        base_url = _pd_base_url(cfg)
+    except RuntimeError as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
-        member = versement.member
-        member.montant += versement.montant
-        member.save()
+    try:
+        confirm = requests.get(f"{base_url}/checkout-invoice/confirm/{token}", headers=headers, timeout=20)
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({"error": f"Erreur réseau PayDunya: {e}"}, status=502)
 
-        return JsonResponse({"message": "✅ Versement confirmé"})
-    except Versement.DoesNotExist:
-        return JsonResponse({"error": "❌ Versement introuvable"}, status=404)
+    if confirm.status_code != 200:
+        return JsonResponse({"error": f"Confirm HTTP {confirm.status_code}"}, status=502)
+
+    try:
+        conf = confirm.json()
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Confirm JSON invalide"}, status=502)
+
+    status_flag = str(conf.get("status", "")).lower()
+    ok = (conf.get("response_code") == "00") and (status_flag in {"completed", "paid", "accepted"})
+    if not ok:
+        return JsonResponse({"error": f"Paiement non confirmé: {status_flag} | {conf.get('response_text')}"}, status=400)
+
+    # Récupération des custom_data (du confirm si présents, sinon du payload)
+    custom = conf.get("custom_data") if isinstance(conf.get("custom_data"), dict) else payload.get("custom_data", {})
+    try:
+        member_id = int(custom.get("member_id"))
+        montant = Decimal(str(custom.get("montant", "0"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        frais = Decimal(str(custom.get("frais", "0"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    except Exception:
+        return JsonResponse({"error": "custom_data invalide"}, status=400)
+
+    member = GroupMember.objects.filter(id=member_id).select_related("group", "user").first()
+    if not member:
+        return JsonResponse({"error": "Membre introuvable"}, status=404)
+
+    # Création idempotente
+    Versement.objects.get_or_create(
+        transaction_id=token,
+        defaults={
+            "member": member,
+            "montant": montant,
+            "frais": frais,
+            "methode": "PAYDUNYA",
+        },
+    )
+
+    return JsonResponse({"message": "✅ Versement confirmé"}, status=200)
 
 
-def versement_merci(request):
-    """
-    Page de remerciement après un versement
-    """
+# ===============================
+# Page de remerciement
+# ===============================
+def versement_merci(request: HttpRequest) -> HttpResponse:
     return render(request, "epargnecredit/versement_merci.html")
+
+
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404
@@ -602,151 +731,111 @@ def dashboard(request):
     })
 
 
-def editer_membre_view(request, group_id, membre_id):
-    return HttpResponse(f"Éditer membre {membre_id} du groupe {group_id}")
-
-def supprimer_membre_view(request, group_id, membre_id):
-    return HttpResponse(f"Supprimer membre {membre_id} du groupe {group_id}")
-
-
-def reset_cycle_view(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-    # Ici tu réinitialises les versements/crédits selon ta logique
-    messages.info(request, f"Cycle réinitialisé pour le groupe {group.nom} (à implémenter).")
-    return redirect("epargnecredit:group_detail", group_id=group.id)
-
-
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
 from django.utils import timezone
-from .models import Group, GroupMember, EpargneCredit
+from django.apps import apps
 
-
-@login_required
-@transaction.atomic
-def reset_cycle_view(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-
-    # ✅ Autoriser admin ou superuser
-    if request.user != group.admin and not request.user.is_superuser:
-        messages.error(request, "Seul l'administrateur ou un superutilisateur peut réinitialiser le cycle.")
-        return redirect('epargnecredit:group_detail', group_id=group.id)
-
-    # ✅ Afficher une confirmation avant la réinitialisation
-    if request.method != 'POST':
-        return render(request, 'epargnecredit/confirm_reset.html', {'group': group})
-
-    # ✅ Vérifier que tous les membres ont déjà gagné
-    membres = set(group.membres.all())
-    gagnants_actuels = {tirage.gagnant for tirage in group.tirages.all() if tirage.gagnant}
-    gagnants_historiques = {tirage.gagnant for tirage in group.tirages_historiques.all() if tirage.gagnant}
-
-    tous_les_gagnants = gagnants_actuels.union(gagnants_historiques)
-    membres_non_gagnants = membres - tous_les_gagnants
-
-    if membres_non_gagnants:
-        noms = ", ".join(m.user.username for m in membres_non_gagnants)
-        messages.warning(request, f"Les membres suivants n'ont pas encore gagné : {noms}.")
-        return redirect('epargnecredit:group_detail', group_id=group.id)
-
-    # ✅ Archiver les tirages en cours
-    tirages_actuels = group.tirages.all()
-    TirageHistorique.objects.bulk_create([
-        TirageHistorique(
-            group=group,
-            gagnant=tirage.gagnant,
-            montant=tirage.montant,
-            date_tirage=tirage.date_tirage or timezone.now()
-        )
-        for tirage in tirages_actuels
-    ])
-
-    # ✅ Supprimer les données du cycle en cours
-    tirages_actuels.delete()
-    epargnecredit.objects.filter(member__group=group).delete()
-
-    # ✅ Marquer la date du nouveau cycle
-    group.date_reset = timezone.now()
-    if hasattr(group, 'cycle_en_cours'):
-        group.cycle_en_cours = True
-    group.save()
-
-    messages.success(request, "✅ Cycle réinitialisé avec succès. Les membres peuvent recommencer les versements.")
-    return redirect('epargnecredit:group_detail', group_id=group.id)
-
-
-from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
-from .models import Group, GroupMember, EpargneCredit
-from django.contrib import messages
-from django.utils import timezone
+from django.http import HttpRequest, HttpResponse
 from django.urls import reverse
 
+from .models import Group, GroupMember, EpargneCredit, Versement
 
+
+# =================================================================
+# Réinitialisation du cycle (purge des versements & épargne/crédit)
+# =================================================================
 @login_required
-def reset_cycle_view(request, group_id):
+@transaction.atomic
+def reset_cycle_view(request: HttpRequest, group_id: int) -> HttpResponse:
+    """
+    Réinitialise le groupe d'épargne/crédit :
+      - Permissions : admin du groupe OU superuser/super_admin.
+      - GET  : affiche la page de confirmation.
+      - POST : remet à zéro les soldes membres (si champ présent),
+               supprime les écritures EpargneCredit et Versement,
+               met à jour la date de reset du groupe.
+    ⚠️ Cette action supprime les versements (irréversible).
+    """
     group = get_object_or_404(Group, id=group_id)
 
-    # ✅ Vérifie si l'utilisateur connecté est l'admin du groupe
-    if group.admin != request.user:
+    user = request.user
+    is_group_admin = (user == getattr(group, "admin", None))
+    is_superuser = getattr(user, "is_superuser", False) or getattr(user, "is_super_admin", False)
+    if not (is_group_admin or is_superuser):
         messages.error(request, "Vous n'avez pas la permission de réinitialiser ce groupe.")
-        return redirect('dashboard_epargne_credit')
+        return redirect("dashboard_epargne_credit")
 
-    if request.method == 'POST':
-        # Remettre à zéro les montants
-        for membre in group.membres.all():
-            membre.montant = 0
-            membre.save()
+    if request.method != "POST":
+        # Page de confirmation
+        members = GroupMember.objects.filter(group=group).select_related("user")
+        return render(
+            request,
+            "epargnecredit/confirm_reset_cycle.html",
+            {"group": group, "members": members, "date_reset_precedent": getattr(group, "date_reset", None)},
+        )
 
-        # Supprimer les cotisations et versements
-        epargnecredit.objects.filter(member__group=group).delete()
-        Versement.objects.filter(member__group=group).delete()
+    # --------- POST : exécuter le reset ---------
+    members = GroupMember.objects.filter(group=group)
 
-        # Date de reset
-        group.date_reset = timezone.now()
-        group.save()
+    # 1) Remettre à zéro les montants des membres (si champ 'montant' existe)
+    for m in members:
+        if hasattr(m, "montant"):
+            m.montant = 0
+            m.save(update_fields=["montant"])
+        else:
+            # Si pas de champ 'montant', on ignore silencieusement
+            pass
 
-        messages.success(request, f"✅ Le cycle du groupe « {group.nom} » a été réinitialisé avec succès.")
-        return redirect('epargnecredit:group_detail', group_id=group.id)
+    # 2) Supprimer les écritures métiers (épargne/crédit) liées au groupe
+    EpargneCredit.objects.filter(member__group=group).delete()
 
-    return render(request, 'epargnecredit/confirm_reset_cycle.html', {'group': group})
+    # 3) Supprimer les versements (tu as demandé à réinitialiser les versements)
+    Versement.objects.filter(member__group=group).delete()
+
+    # 4) Date de reset sur le groupe
+    group.date_reset = timezone.now()
+    group.save(update_fields=["date_reset"])
+
+    messages.success(
+        request,
+        f"✅ Le cycle du groupe « {getattr(group, 'nom', group.id)} » a été réinitialisé avec succès."
+    )
+    return redirect("epargnecredit:group_detail", group_id=group.id)
 
 
-def tirage_resultat_view(request, group_id):
-    # logiquement, on affiche les résultats ici
-    return render(request, 'epargnecredit/tirage_resultat.html', {'group_id': group_id})
-
-# epargnecredit/views.py
-
-from django.shortcuts import render, get_object_or_404
-#from .models import Group, Cycle
-from django.contrib.auth.decorators import login_required
-
+# ==================================
+# Historique des cycles (si disponible)
+# ==================================
 @login_required
-def historique_cycles_view(request, group_id):
+def historique_cycles_view(request: HttpRequest, group_id: int) -> HttpResponse:
     """
-    Affiche l'historique des cycles passés d'un groupe.
+    Affiche l'historique des cycles passés d'un groupe si le modèle Cycle existe.
+    Tolérant : si le modèle n’existe pas, on rend une page vide.
     """
     group = get_object_or_404(Group, id=group_id)
 
-    # Récupération des cycles archivés (ex: statut = "fini")
-    anciens_cycles = (
-        Cycle.objects.filter(group=group)
-        .exclude(date_fin__isnull=True)  # On garde que les cycles terminés
-        .prefetch_related(
-            "etapes__tirage__beneficiaire__user"
-        )  # Optimise les requêtes
-        .order_by("-date_debut")
+    try:
+        Cycle = apps.get_model("epargnecredit", "Cycle")
+    except LookupError:
+        Cycle = None
+
+    anciens_cycles = []
+    if Cycle is not None:
+        anciens_cycles = (
+            Cycle.objects.filter(group=group)
+            .exclude(date_fin__isnull=True)  # cycles terminés
+            .prefetch_related("etapes__tirage__beneficiaire__user")
+            .order_by("-date_debut")
+        )
+
+    return render(
+        request,
+        "epargnecredit/historique_cycles.html",
+        {"group": group, "anciens_cycles": anciens_cycles},
     )
-
-    context = {
-        "group": group,
-        "anciens_cycles": anciens_cycles
-    }
-    return render(request, "epargnecredit/historique_cycles.html", context)
-
 
 
 from django.shortcuts import render
