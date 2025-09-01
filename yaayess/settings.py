@@ -23,6 +23,20 @@ ALLOWED_HOSTS = os.environ.get(
     "localhost,127.0.0.1"
 ).split(",")
 
+"""
+# Django 4+ : schéma + hôte (+ port) obligatoires
+CSRF_TRUSTED_ORIGINS = [
+    "https://127.0.0.1:8000",
+    "https://localhost:8000",
+]
+
+# Comme tu tournes en HTTPS
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+
+# (optionnel) on laisse Django gérer le domaine du cookie
+# CSRF_COOKIE_DOMAIN = None
+
 # ----------------------------------------------------
 # 🔒 HTTPS Settings (seulement en production)
 # ----------------------------------------------------
@@ -34,11 +48,41 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+
 else:
     # Désactiver les flags HTTPS en développement
     CSRF_COOKIE_SECURE = False
     SESSION_COOKIE_SECURE = False
     SECURE_SSL_REDIRECT = False
+"""
+ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://127.0.0.1:8000",
+    "https://localhost:8000",
+]
+
+# En DEV (DEBUG=True), pas de Secure pour faciliter les tests sur runsslserver
+if DEBUG:
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SECURE = False
+    SECURE_SSL_REDIRECT = False
+    CSRF_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SAMESITE = "Lax"
+
+    # (Option robuste) stocker le token côté session au lieu d'un cookie
+    # -> évite beaucoup de soucis d’origine/certificat en local
+    CSRF_USE_SESSIONS = True
+else:
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 
 # ----------------------------------------------------
 # 📦 INSTALLED APPS (inchangé)

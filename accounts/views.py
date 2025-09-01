@@ -217,230 +217,6 @@ def _unique_alias_for(name: str) -> str:
 
 
 
-
-def _redirect_by_option(user: User) -> HttpResponse:
-    """Redirige selon l'option choisie par l'utilisateur."""
-    if getattr(user, "option", None) == "1":
-        member = GroupMember.objects.filter(user=user).order_by("-id").first()
-        if member:
-            try:
-                return redirect(reverse("cotisationtontine:group_detail", args=[member.group.id]))
-            except Exception:
-                pass
-        return redirect("cotisationtontine:dashboard_tontine_simple")
-    # Option "2" (ou autre) => épargne/crédit
-    return redirect("epargnecredit:dashboard_epargne_credit")
-
-
-# ----------------------------------------------------
-# Inscription via lien d'invitation
-# ----------------------------------------------------
-# accounts/views.py
-from typing import Optional
-from django.apps import apps
-from django.contrib import messages
-from django.contrib.auth import authenticate, login, get_user_model
-from django.db import IntegrityError, transaction
-from django.db.models import Q
-from django.http import Http404, HttpRequest, HttpResponse
-from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
-from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
-
-User = get_user_model()
-
-# ---------- Helpers ----------
-
-def _get_field_names(Model) -> set:
-    return {f.name for f in Model._meta.get_fields()}
-
-def _find_group_in_model(Model, code: str):
-    """
-    Cherche un Group dans Model en testant plusieurs champs possibles.
-    Utilise filter().first() pour éviter les erreurs MultipleObjectsReturned.
-    """
-    fields = _get_field_names(Model)
-    q = Q()
-    for field in ("code_invitation", "invitation_code", "uuid", "code", "slug"):
-        if field in fields:
-            q |= Q(**{field: code})
-
-    if q:
-        obj = Model.objects.filter(q).order_by("-id").first()
-        if obj:
-            return obj
-
-    if code.isdigit() and "id" in fields:
-        return Model.objects.filter(id=int(code)).first()
-
-    return None
-
-def _resolve_group_by_code(code: str):
-    """
-    Recherche un Group par code dans:
-      - cotisationtontine.Group
-      - epargnecredit.Group
-    Puis via les modèles Invitation (accounts/cotisationtontine/epargnecredit) s'ils existent.
-    Lève une 404 si rien n'est trouvé.
-    """
-    code = (code or "").strip()
-    # 1) Directement dans les deux modèles Group
-    for app_label in ("cotisationtontine", "epargnecredit"):
-        try:
-            Model = apps.get_model(app_label, "Group")
-        except LookupError:
-            Model = None
-        if not Model:
-            continue
-        g = _find_group_in_model(Model, code)
-        if g:
-            return g
-
-    # 2) Via Invitation -> group
-    for app_label in ("accounts", "cotisationtontine", "epargnecredit"):
-        try:
-            Invitation = apps.get_model(app_label, "Invitation")
-        except LookupError:
-            Invitation = None
-        if not Invitation:
-            continue
-
-        inv = (
-            Invitation.objects.select_related("group")
-            .filter(Q(code=code) | Q(token=code) | Q(uuid=code))
-            .order_by("-id")
-            .first()
-        )
-        if inv and getattr(inv, "group", None):
-            return inv.group
-
-    # 3) Pas trouvé
-    raise Http404("Invitation ou groupe introuvable.")
-
-
-def _add_member_to_group(request, user: User, group) -> None:
-    """
-    Ajoute l'utilisateur au group correspondant (Tontine/Epargne).
-    """
-    from cotisationtontine.models import GroupMember as TontineMember
-    from epargnecredit.models import GroupMember as EpargneMember
-
-    app_label = group._meta.app_label
-    MemberModel = TontineMember if app_label == "cotisationtontine" else (
-        EpargneMember if app_label == "epargnecredit" else None
-    )
-
-    if MemberModel is None:
-        messages.error(request, "Type de groupe inconnu.")
-        return
-
-    member, created = MemberModel.objects.get_or_create(
-        group=group,
-        user=user,
-        defaults={"montant": 0, "date_joined": timezone.now()},
-    )
-    if created:
-        messages.success(
-            request,
-            f"✅ Vous avez été ajouté au groupe « {getattr(group, 'nom', group.id)} »."
-        )
-    else:
-        messages.info(
-            request,
-            f"ℹ️ Vous êtes déjà membre du groupe « {getattr(group, 'nom', group.id)} »."
-        )
-
-# ---------- Vue principale ----------
-
-@ensure_csrf_cookie
-@csrf_protect
-@transaction.atomic
-def inscription_et_rejoindre(request: HttpRequest, code: str) -> HttpResponse:
-    """
-    1) Retrouve le groupe depuis <code>
-    2) Si l'utilisateur existe (phone), authentifie puis ajoute au groupe
-    3) Sinon crée le compte (nom, phone, password, option), puis ajoute au groupe
-    4) Redirige vers le bon dashboard selon user.option
-    Affiche explicitement "nom existe déjà" si un autre compte porte déjà ce nom.
-    """
-    try:
-        group = _resolve_group_by_code(code)
-    except Http404:
-        messages.error(request, "Lien d’invitation invalide ou expiré.")
-        return render(request, "accounts/inscription_par_invit.html", {"group": None}, status=404)
-
-    if request.method == "GET":
-        # Affiche le formulaire avec les infos du groupe
-        return render(request, "accounts/inscription_par_invit.html", {"group": group})
-
-    # ----------- POST -----------
-    nom = request.POST.get("nom", "").strip()
-    phone = request.POST.get("phone", "").strip()
-    password = request.POST.get("password", "").strip()
-    confirm_password = request.POST.get("confirm_password", "").strip()
-    option = request.POST.get("option", "").strip()  # "1" (tontine) ou "2" (épargne/crédit)
-
-    # Validations rapides
-    if not all([nom, phone, password, confirm_password, option]):
-        messages.error(request, "Tous les champs sont requis, y compris le choix de l'option.")
-        return render(request, "accounts/inscription_par_invit.html", {"group": group})
-
-    if password != confirm_password:
-        messages.error(request, "Les mots de passe ne correspondent pas.")
-        return render(request, "accounts/inscription_par_invit.html", {"group": group})
-
-    # Cas 1 : un compte existe déjà avec ce phone
-    existing_by_phone = User.objects.filter(phone=phone).first()
-    if existing_by_phone:
-        # NOTE: si USERNAME_FIELD='phone', on peut passer username=phone
-        user = authenticate(request, username=phone, password=password)
-        if user is None:
-            messages.error(request, "Mot de passe incorrect pour ce numéro de téléphone.")
-            return render(request, "accounts/inscription_par_invit.html", {"group": group})
-
-        # Mise à jour facultative du nom si vide
-        if not user.nom:
-            user.nom = nom
-
-        # Renseigner option si absente
-        if not getattr(user, "option", None):
-            user.option = option
-
-        user.save(update_fields=["nom", "option"])
-        login(request, user)
-        _add_member_to_group(request, user, group)
-        return _redirect_by_option(user)
-
-    # Cas 2 : un autre compte porte déjà ce nom
-    if User.objects.filter(nom__iexact=nom).exclude(phone=phone).exists():
-        messages.error(request, "Le nom existe déjà. Choisissez-en un autre.")
-        return render(request, "accounts/inscription_par_invit.html", {"group": group})
-
-    # Création du compte
-    try:
-        alias = _unique_alias_for(nom)
-        user = User.objects.create_user(
-            nom=nom,
-            phone=phone,
-            password=password,
-            alias=alias,
-            option=option,
-        )
-        messages.success(request, f"Compte créé avec succès pour {nom} (alias : {alias}).")
-    except IntegrityError:
-        messages.error(request, "Ce nom ou ce numéro est déjà utilisé.")
-        return render(request, "accounts/inscription_par_invit.html", {"group": group})
-    except Exception as e:
-        messages.error(request, f"Erreur lors de la création du compte : {e}")
-        return render(request, "accounts/inscription_par_invit.html", {"group": group})
-
-    # Connexion + ajout au groupe
-    login(request, user)
-    _add_member_to_group(request, user, group)
-    return _redirect_by_option(user)
-
-
-
 from django.core.exceptions import PermissionDenied
 
 def admin_required(view_func):
@@ -466,3 +242,318 @@ def dashboard_membre(request):
     # vue réservée aux membres
     ...
 
+# --- Imports nécessaires (au besoin, complète/évite les doublons) ---
+from django.apps import apps
+from django.db.models import Q
+from django.http import Http404
+
+# ---------- Helpers de recherche ----------
+def _get_field_names(Model) -> set:
+    return {f.name for f in Model._meta.get_fields()}
+
+def _find_group_in_model(Model, code: str):
+    """
+    Cherche un Group dans Model en testant plusieurs champs possibles.
+    Utilise filter().first() pour éviter MultipleObjectsReturned.
+    """
+    if not Model or not code:
+        return None
+    fields = _get_field_names(Model)
+    q = Q()
+    for field in ("code_invitation", "invitation_code", "uuid", "code", "slug"):
+        if field in fields:
+            q |= Q(**{field: code})
+    obj = Model.objects.filter(q).order_by("-id").first() if q else None
+    if obj:
+        return obj
+    if code.isdigit() and "id" in fields:
+        return Model.objects.filter(id=int(code)).first()
+    return None
+
+def _resolve_group_by_code(code: str):
+    """
+    Recherche un Group par code dans:
+      1) cotisationtontine.Group
+      2) epargnecredit.Group
+      3) via Invitation.* -> group (accounts / cotisationtontine / epargnecredit)
+    Lève Http404 si rien n'est trouvé.
+    """
+    code = (code or "").strip()
+    if not code:
+        raise Http404("Invitation ou groupe introuvable.")
+
+    # 1) Cherche directement dans les modèles Group
+    for app_label in ("cotisationtontine", "epargnecredit"):
+        try:
+            GroupModel = apps.get_model(app_label, "Group")
+        except LookupError:
+            GroupModel = None
+        g = _find_group_in_model(GroupModel, code) if GroupModel else None
+        if g:
+            return g
+
+    # 2) Cherche via les modèles Invitation possédant un FK 'group'
+    for app_label in ("accounts", "cotisationtontine", "epargnecredit"):
+        try:
+            Invitation = apps.get_model(app_label, "Invitation")
+        except LookupError:
+            Invitation = None
+        if not Invitation:
+            continue
+
+        fields = _get_field_names(Invitation)
+        q = Q()
+        if "code" in fields:
+            q |= Q(code=code)
+        if "token" in fields:
+            q |= Q(token=code)  # string vers UUID fonctionne, Django castera
+        if "uuid" in fields:
+            q |= Q(uuid=code)
+
+        if q:
+            inv = (
+                Invitation.objects.select_related("group")
+                .filter(q)
+                .order_by("-id")
+                .first()
+            )
+            if inv and getattr(inv, "group", None):
+                return inv.group
+
+    # 3) Rien trouvé
+    raise Http404("Invitation ou groupe introuvable.")
+
+
+from django.utils import timezone
+from django.contrib import messages
+from django.apps import apps
+
+def _add_member_to_group(request, user, group) -> None:
+    """
+    Ajoute l'utilisateur au groupe (cotisationtontine ou epargnecredit) sans doublon.
+    Utilise apps.get_model pour éviter les imports circulaires.
+    Remplit quelques champs par défaut s'ils existent.
+    """
+    app_label = getattr(getattr(group, "_meta", None), "app_label", "")
+    try:
+        MemberModel = apps.get_model(app_label, "GroupMember")
+    except LookupError:
+        messages.error(request, "Type de groupe inconnu.")
+        return
+
+    # Prépare des valeurs par défaut seulement si les champs existent
+    fields = {f.name for f in MemberModel._meta.get_fields()}
+    defaults = {}
+    if "montant" in fields:
+        defaults["montant"] = 0
+    if "date_joined" in fields:
+        defaults["date_joined"] = timezone.now()
+    if "actif" in fields:
+        defaults["actif"] = True
+
+    member, created = MemberModel.objects.get_or_create(
+        group=group,
+        user=user,
+        defaults=defaults,
+    )
+
+    group_name = getattr(group, "nom", str(group.id))
+    if created:
+        messages.success(request, f"✅ Vous avez été ajouté au groupe « {group_name} ».")
+    else:
+        messages.info(request, f"ℹ️ Vous êtes déjà membre du groupe « {group_name} ».")
+
+
+
+
+def _forced_option_for_group(group) -> str | None:
+#def _forced_option_for_group(group) -> Optional[str]:
+    """
+    Retourne '1' si le groupe vient de cotisationtontine, '2' pour epargnecredit,
+    sinon None si inconnu.
+    """
+    app_label = getattr(getattr(group, "_meta", None), "app_label", "")
+    if app_label == "cotisationtontine":
+        return "1"
+    if app_label == "epargnecredit":
+        return "2"
+    return None
+
+
+def _redirect_by_option(user: User, group=None) -> HttpResponse:
+    """
+    Redirige vers le bon dashboard / group_detail.
+    - Si un groupe est fourni, on force l'option selon l'app du groupe (1 ou 2),
+      on met à jour user.option si différent, puis on redirige vers le bon module.
+    - Sinon, on retombe sur le comportement historique basé sur user.option.
+    """
+    forced = _forced_option_for_group(group) if group is not None else None
+    option = forced or getattr(user, "option", None)
+
+    # Synchroniser user.option si on a une option forcée
+    if forced and getattr(user, "option", None) != forced:
+        user.option = forced
+        try:
+            user.save(update_fields=["option"])
+        except Exception:
+            # fallback silencieux si le model n'a pas 'option'
+            pass
+
+    if option == "1":  # Cotisation & Tontine
+        try:
+            TMember = apps.get_model("cotisationtontine", "GroupMember")
+            m = TMember.objects.filter(user=user).order_by("-id").first()
+            if m:
+                return redirect("cotisationtontine:group_detail", m.group.id)
+        except Exception:
+            pass
+        return redirect("cotisationtontine:dashboard_tontine_simple")
+
+    # Par défaut : Épargne & Crédit
+    try:
+        EMember = apps.get_model("epargnecredit", "GroupMember")
+        m = EMember.objects.filter(user=user).order_by("-id").first()
+        if m:
+            return redirect("epargnecredit:group_detail", m.group.id)
+    except Exception:
+        pass
+    return redirect("epargnecredit:dashboard_epargne_credit")
+
+# optionnel mais bien: évite l’évaluation immédiate des annotations
+#from __future__ import annotations
+
+from typing import Optional  # si tu utilises encore Optional[...] quelque part
+
+from django.apps import apps
+from django.contrib import messages
+from django.contrib.auth import authenticate, login, get_user_model
+from django.db import IntegrityError, transaction
+from django.db.models import Q
+from django.http import Http404, HttpRequest, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie  # ✅ manquant
+from django.urls import reverse  # ✅ utile si tu appelles reverse(...)
+
+from django.middleware.csrf import get_token
+
+@ensure_csrf_cookie
+@csrf_protect
+@transaction.atomic
+def inscription_et_rejoindre(request: HttpRequest, code: str) -> HttpResponse:
+    """
+    1) Retrouve le groupe depuis <code>
+    2) Si l'utilisateur existe (phone), authentifie puis ajoute au groupe
+    3) Sinon crée le compte (nom, phone, password), option forcée selon l'app d'origine
+    4) Redirige automatiquement vers le bon module (tontine ou epargne)
+    """
+    try:
+        group = _resolve_group_by_code(code)
+    except Http404:
+        messages.error(request, "Lien d’invitation invalide ou expiré.")
+        return render(request, "accounts/inscription_par_invit.html", {"group": None}, status=404)
+
+    # Déterminer l’option (forcée) selon l’app du groupe
+    forced_option = _forced_option_for_group(group)
+
+    if request.method == "GET":
+        # ✅ Force la génération du token CSRF et la création de la session (cookie 'sessionid')
+        get_token(request)
+        request.session["__csrf_touch__"] = timezone.now().isoformat()
+        request.session.modified = True
+
+        # Afficher le formulaire (champ "option" masqué côté template si forced_option est défini)
+        return render(request, "accounts/inscription_par_invit.html", {
+            "group": group,
+            "forced_option": forced_option,
+        })
+
+    # ----------- POST -----------
+    nom = (request.POST.get("nom") or "").strip()
+    phone = (request.POST.get("phone") or "").strip()
+    password = (request.POST.get("password") or "").strip()
+    confirm_password = (request.POST.get("confirm_password") or "").strip()
+
+    # On ignore toute "option" postée : on force selon le groupe du lien
+    option = forced_option or (request.POST.get("option") or "").strip()
+
+    # Validations rapides
+    if not all([nom, phone, password, confirm_password]):
+        messages.error(request, "Tous les champs sont requis.")
+        return render(request, "accounts/inscription_par_invit.html", {
+            "group": group, "forced_option": forced_option
+        }, status=400)
+
+    if password != confirm_password:
+        messages.error(request, "Les mots de passe ne correspondent pas.")
+        return render(request, "accounts/inscription_par_invit.html", {
+            "group": group, "forced_option": forced_option
+        }, status=400)
+
+    # Cas 1 : un compte existe déjà avec ce phone
+    existing_by_phone = User.objects.filter(phone=phone).first()
+    if existing_by_phone:
+        user = authenticate(request, username=phone, password=password)
+        if user is None:
+            messages.error(request, "Mot de passe incorrect pour ce numéro de téléphone.")
+            return render(request, "accounts/inscription_par_invit.html", {
+                "group": group, "forced_option": forced_option
+            }, status=400)
+
+        # Mise à jour du nom si vide
+        if not getattr(user, "nom", None):
+            user.nom = nom
+
+        # Synchroniser l'option avec celle du groupe du lien
+        if option and getattr(user, "option", None) != option:
+            try:
+                user.option = option
+            except Exception:
+                pass
+
+        # Sauvegarde sûre
+        try:
+            user.save(update_fields=["nom", "option"])
+        except Exception:
+            try:
+                user.save(update_fields=["nom"])
+            except Exception:
+                user.save()
+
+        login(request, user)
+        _add_member_to_group(request, user, group)
+        return _redirect_by_option(user, group)
+
+    # Cas 2 : un autre compte porte déjà ce nom
+    if User.objects.filter(nom__iexact=nom).exclude(phone=phone).exists():
+        messages.error(request, "Le nom existe déjà. Choisissez-en un autre.")
+        return render(request, "accounts/inscription_par_invit.html", {
+            "group": group, "forced_option": forced_option
+        }, status=400)
+
+    # Création du compte
+    try:
+        alias = _unique_alias_for(nom)
+        user = User.objects.create_user(
+            nom=nom,
+            phone=phone,
+            password=password,
+            alias=alias,
+            option=option,  # ⬅️ forcé ici selon l'app du groupe
+        )
+        messages.success(request, f"Compte créé avec succès pour {nom} (alias : {alias}).")
+    except IntegrityError:
+        messages.error(request, "Ce nom ou ce numéro est déjà utilisé.")
+        return render(request, "accounts/inscription_par_invit.html", {
+            "group": group, "forced_option": forced_option
+        }, status=400)
+    except Exception as e:
+        messages.error(request, f"Erreur lors de la création du compte : {e}")
+        return render(request, "accounts/inscription_par_invit.html", {
+            "group": group, "forced_option": forced_option
+        }, status=400)
+
+    # Connexion + ajout au groupe
+    login(request, user)
+    _add_member_to_group(request, user, group)
+    return _redirect_by_option(user, group)
