@@ -118,3 +118,63 @@ class RegisterForm(UserCreationForm):
         if commit:
             user.save()
         return user
+
+# epargnecredit/forms.py
+from django import forms
+from django.utils import timezone
+from .models import PretDemande
+
+# epargnecredit/forms.py
+from django import forms
+from django.utils import timezone
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+from .models import PretDemande
+
+class PretDemandeForm(forms.ModelForm):
+    class Meta:
+        model = PretDemande
+        fields = ["montant", "interet", "nb_mois", "debut_remboursement"]
+        widgets = {
+            "montant": forms.NumberInput(attrs={"class": "form-control", "min": "1", "step": "1", "placeholder": "Ex: 100000"}),
+            "interet": forms.NumberInput(attrs={"class": "form-control", "min": "0", "max": "100", "step": "0.01", "placeholder": "Ex: 5"}),
+            "nb_mois": forms.NumberInput(attrs={"class": "form-control", "min": "1", "step": "1", "placeholder": "Ex: 12"}),
+            "debut_remboursement": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        montant = cleaned.get("montant")
+        interet = cleaned.get("interet")
+        nb_mois = cleaned.get("nb_mois")
+        debut = cleaned.get("debut_remboursement")
+
+        # Montant: forcer entier (field = Decimal(… , decimal_places=0))
+        try:
+            if montant is None:
+                raise InvalidOperation
+            cleaned["montant"] = Decimal(montant).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            if cleaned["montant"] <= 0:
+                self.add_error("montant", "Le montant doit être > 0.")
+        except Exception:
+            self.add_error("montant", "Montant invalide.")
+
+        # Intérêt %
+        try:
+            if interet is None:
+                raise InvalidOperation
+            interet = Decimal(interet)
+            if interet < 0 or interet > 100:
+                self.add_error("interet", "L'intérêt doit être entre 0 et 100%.")
+        except Exception:
+            self.add_error("interet", "Intérêt invalide.")
+
+        # Nombre de mois
+        if not nb_mois or int(nb_mois) <= 0:
+            self.add_error("nb_mois", "Le nombre de mois doit être > 0.")
+
+        # Date de début
+        if debut and debut < timezone.now().date():
+            self.add_error("debut_remboursement", "La date de début ne peut pas être passée.")
+
+        return cleaned
+

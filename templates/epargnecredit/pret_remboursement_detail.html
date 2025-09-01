@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Remboursement du prêt{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 class="mb-2">Remboursement du prêt</h2>
+  <p class="text-muted mb-3">{{ group.nom }}</p>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }}">{{ message|safe }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="small text-muted">Bénéficiaire</div>
+          <div><strong>{{ demande.member.user.nom|default:demande.member.user.phone }}</strong></div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Montant emprunté + intérêt</div>
+          <div><strong>{{ total|floatformat:0|intcomma }} FCFA</strong></div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Mensualité globale</div>
+          <div><strong>{{ mensualite|floatformat:0|intcomma }} FCFA</strong> sur {{ demande.nb_mois }} mois</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Début de remboursement</div>
+          <div><strong>{{ demande.debut_remboursement|date:"d/m/Y" }}</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h5 class="mb-2">
+    Répartition — {{ nb_membres }} membre{{ nb_membres|pluralize }}
+  </h5>
+
+  <div class="table-responsive shadow-sm rounded">
+    <table class="table table-bordered align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Membre</th>
+          <th>Part totale</th>
+          <th>Part mensuelle</th>
+          <th>Téléphone</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in repartition %}
+          <tr>
+            <td>{{ r.member.user.nom|default:r.member.user.phone }}</td>
+            <td>{{ r.part_totale|floatformat:0|intcomma }} FCFA</td>
+            <td>{{ r.part_mensuelle|floatformat:0|intcomma }} FCFA</td>
+            <td>{{ r.member.user.phone }}</td>
+            <td class="d-flex gap-1">
+              {# Placeholders pour enregistrer un remboursement / marquer payé #}
+              <button class="btn btn-sm btn-outline-success" disabled>Enregistrer remboursement</button>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-center text-muted">Aucun membre</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-3">
+    <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-secondary">⬅️ Retour au groupe</a>
+  </div>
+</div>
+{% endblock %}

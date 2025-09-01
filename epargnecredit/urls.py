@@ -43,4 +43,11 @@ urlpatterns = [
     # --- Historique cycles & actions ---
     path('<int:group_id>/historique-cycles/', views.historique_cycles_view, name='historique_cycles'),
     path("historique-actions/", views.historique_actions_view, name="historique_actions"),
+
+    path("pret/nouveau/<int:member_id>/", views.demande_pret, name="demande_pret"),
+    path("pret/<int:pk>/valider/", views.pret_valider, name="pret_valider"),
+    path("pret/<int:pk>/refuser/", views.pret_refuser, name="pret_refuser"),
+
+    path("pret/<int:pk>/remboursement/", views.pret_remboursement_detail, name="pret_remboursement_detail"),
+
 ]

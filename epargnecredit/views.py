@@ -328,7 +328,7 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 
 from .models import Group, GroupMember, Versement, ActionLog
-
+from .models import Group, GroupMember, Versement, ActionLog, PretDemande  # + PretDemande
 
 @login_required
 def group_detail(request, group_id):
@@ -344,7 +344,6 @@ def group_detail(request, group_id):
         return redirect("epargnecredit:group_list")
 
     # --- Nom de la relation reverse GroupMember -> Versement ---
-    # epargnecredit utilise 'versements_ec'
     rel_lookup = "versements_ec"
 
     # --- Sous-requête : dernier versement (date + montant) depuis date_reset si définie ---
@@ -410,6 +409,16 @@ def group_detail(request, group_id):
     if user_is_admin:
         request.session["last_invitation_link"] = invite_url
 
+    # --- 🔹 Demandes de prêt en attente (admin seulement) ---
+    pending_prets = PretDemande.objects.none()
+    if user_is_admin:
+        pending_prets = (
+            PretDemande.objects
+            .filter(member__group=group, statut="PENDING")
+            .select_related("member", "member__user")
+            .order_by("-created_at")
+        )
+
     context = {
         "group": group,
         "membres": membres,                # total_montant / last_date / last_amount
@@ -419,6 +428,7 @@ def group_detail(request, group_id):
         "user_is_admin": user_is_admin,
         "invite_url": invite_url,
         "last_invitation_link": request.session.get("last_invitation_link"),
+        "pending_prets": pending_prets,    # 🔹 ajouté
     }
     return render(request, "epargnecredit/group_detail.html", context)
 
@@ -908,4 +918,222 @@ def historique_actions_view(request):
         "logs": logs
     })
 
+# epargnecredit/views.py (ajoute en haut si pas déjà)
+from django.views.decorators.http import require_http_methods
+from django.utils import timezone
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, render, redirect
+from django.urls import reverse
+from django.db import transaction
 
+from .models import Group, GroupMember, Versement, PretDemande  # 🔹 PretDemande
+from .forms import PretDemandeForm
+
+# ------------------------------------------------
+# Créer une demande de prêt (membre ou admin)
+# ------------------------------------------------
+# epargnecredit/views.py
+from django.db import transaction, IntegrityError
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, render, redirect
+from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+from .models import GroupMember, PretDemande
+from .forms import PretDemandeForm
+
+@login_required
+@transaction.atomic
+def demande_pret(request, member_id: int):
+    member = get_object_or_404(
+        GroupMember.objects.select_related("user", "group"),
+        id=member_id
+    )
+    group = member.group
+
+    # Permissions: le membre lui-même, l'admin du groupe, ou super_admin
+    is_self = (request.user == member.user)
+    is_group_admin = (request.user == getattr(group, "admin", None))
+    is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+    if not (is_self or is_group_admin or is_super_admin):
+        messages.error(request, "Vous n’avez pas les droits pour créer une demande de prêt pour ce membre.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
+
+    if request.method == "POST":
+        form = PretDemandeForm(request.POST)
+        if form.is_valid():
+            try:
+                # Empêcher plusieurs demandes “en attente” (contrainte DB + garde applicative)
+                if PretDemande.objects.filter(member=member, statut="PENDING").exists():
+                    messages.warning(request, "Une demande de prêt est déjà en attente pour ce membre.")
+                    return redirect("epargnecredit:group_detail", group_id=group.id)
+
+                demande: PretDemande = form.save(commit=False)
+                demande.member = member
+                demande.statut = "PENDING"
+                demande.save()
+            except IntegrityError as e:
+                # Cas de collision avec l'unique constraint conditionnelle
+                if "uniq_pending_pret_par_membre_ec" in str(e):
+                    messages.warning(request, "Une demande de prêt est déjà en attente pour ce membre.")
+                    return redirect("epargnecredit:group_detail", group_id=group.id)
+                messages.error(request, f"Erreur base de données: {e}")
+                return render(request, "epargnecredit/demande_pret_form.html", {
+                    "form": form, "member": member, "group": group
+                }, status=400)
+            except Exception as e:
+                messages.error(request, f"Erreur inattendue: {e}")
+                return render(request, "epargnecredit/demande_pret_form.html", {
+                    "form": form, "member": member, "group": group
+                }, status=400)
+
+            messages.success(request, "Votre demande de prêt a été enregistrée et est en attente de validation.")
+            return redirect("epargnecredit:group_detail", group_id=group.id)
+        else:
+            # Réafficher le formulaire avec les erreurs
+            return render(request, "epargnecredit/demande_pret_form.html", {
+                "form": form, "member": member, "group": group
+            }, status=400)
+    else:
+        # GET
+        form = PretDemandeForm()
+        return render(request, "epargnecredit/demande_pret_form.html", {
+            "form": form, "member": member, "group": group
+        })
+
+# ------------------------------------------------
+# Valider / Refuser une demande (ADMIN SEULEMENT)
+# ------------------------------------------------
+@login_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def pret_valider(request, pk: int):
+    demande = get_object_or_404(PretDemande.objects.select_related("member", "member__group"), pk=pk)
+    group = demande.member.group
+
+    is_group_admin = (request.user == getattr(group, "admin", None))
+    is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+    if not (is_group_admin or is_super_admin):
+        messages.error(request, "Seul l’admin du groupe peut valider un prêt.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
+
+    if demande.statut != "PENDING":
+        messages.info(request, "Cette demande a déjà été traitée.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
+
+    demande.statut = "APPROVED"
+    demande.decided_by = request.user
+    demande.decided_at = timezone.now()
+    demande.commentaire = request.POST.get("commentaire", "")
+    demande.save(update_fields=["statut", "decided_by", "decided_at", "commentaire"])
+
+    messages.success(request, "Demande de prêt approuvée ✅")
+    # 🔁 Redirige vers la page de remboursement
+    return redirect("epargnecredit:pret_remboursement_detail", pk=demande.id)
+
+
+@login_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def pret_refuser(request, pk: int):
+    demande = get_object_or_404(PretDemande.objects.select_related("member", "member__group"), pk=pk)
+    group = demande.member.group
+
+    is_group_admin = (request.user == getattr(group, "admin", None))
+    is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+    if not (is_group_admin or is_super_admin):
+        messages.error(request, "Seul l’admin du groupe peut refuser un prêt.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
+
+    if demande.statut != "PENDING":
+        messages.info(request, "Cette demande a déjà été traitée.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
+
+    demande.statut = "REJECTED"
+    demande.decided_by = request.user
+    demande.decided_at = timezone.now()
+    demande.commentaire = request.POST.get("commentaire", "")
+    demande.save(update_fields=["statut", "decided_by", "decided_at", "commentaire"])
+
+    messages.success(request, "Demande de prêt refusée ❌")
+    return redirect("epargnecredit:group_detail", group_id=group.id)
+
+from decimal import Decimal, ROUND_HALF_UP
+from django.db.models import Q, Sum, OuterRef, Subquery, Value, DecimalField
+from django.db.models.functions import Coalesce
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
+from django.contrib import messages
+from django.utils import timezone
+from django.views.decorators.http import require_http_methods
+from django.db import transaction, IntegrityError
+
+from .models import Group, GroupMember, Versement, ActionLog, PretDemande
+
+@login_required
+def pret_remboursement_detail(request, pk: int):
+    """
+    Affiche la répartition du remboursement d'un prêt APPROUVÉ
+    entre les membres actifs du groupe (parts égales).
+    Accessible à l’admin du groupe (ou super_admin).
+    """
+    demande = get_object_or_404(
+        PretDemande.objects.select_related("member", "member__group", "member__user"),
+        pk=pk,
+    )
+    group = demande.member.group
+
+    # Permissions
+    is_group_admin = (request.user == getattr(group, "admin", None))
+    is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+    if not (is_group_admin or is_super_admin):
+        messages.error(request, "Seul l’admin du groupe peut consulter cette page.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
+
+    if demande.statut != "APPROVED":
+        messages.info(request, "Cette demande n'est pas approuvée.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
+
+    # Membres actifs du groupe (si le champ 'actif' existe)
+    membres_qs = GroupMember.objects.filter(group=group).select_related("user")
+    if "actif" in {f.name for f in GroupMember._meta.get_fields()}:
+        membres_qs = membres_qs.filter(actif=True)
+
+    nb_membres = membres_qs.count() or 1  # garde-fou
+
+    # Totaux (entiers FCFA)
+    total = demande.total_a_rembourser
+    try:
+        total = Decimal(total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    except Exception:
+        total = Decimal("0")
+
+    mensualite = demande.mensualite
+    try:
+        mensualite = Decimal(mensualite).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    except Exception:
+        mensualite = Decimal("0")
+
+    # Part par membre (totale & mensuelle)
+    part_totale = (total / nb_membres).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    part_mensuelle = (mensualite / nb_membres).quantize(Decimal("1"), rounding=ROUND_HALF_UP) if demande.nb_mois else part_totale
+
+    # Préparer la liste pour le template
+    repartition = []
+    for m in membres_qs.order_by("id"):
+        repartition.append({
+            "member": m,
+            "part_totale": part_totale,
+            "part_mensuelle": part_mensuelle,
+        })
+
+    context = {
+        "group": group,
+        "demande": demande,
+        "repartition": repartition,
+        "total": total,
+        "mensualite": mensualite,
+        "nb_membres": nb_membres,
+    }
+    return render(request, "epargnecredit/pret_remboursement_detail.html", context)

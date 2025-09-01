@@ -58,7 +58,7 @@
         <thead class="table-light">
           <tr>
             <th>Nom</th>
-            <th style="min-width: 180px;">Actions</th>
+            <th style="min-width: 220px;">Actions</th>
             <th>Montant versé</th>
             <th>Dernier versement</th>
             <th>Téléphone</th>
@@ -85,6 +85,10 @@
                 {% else %}
                   <button class="btn btn-sm btn-secondary flex-fill" disabled>✅ Atteint</button>
                 {% endif %}
+
+                {# 🔹 Bouton Demande de prêt pour chaque membre #}
+                <a href="{% url 'epargnecredit:demande_pret' m.id %}"
+                   class="btn btn-sm btn-outline-primary flex-fill">💼 Demande de prêt</a>
               </td>
 
               {# ---- MONTANT VERSÉ + / MONTANT DE BASE + PROGRESSION ---- #}
@@ -127,5 +131,49 @@
         </tfoot>
       </table>
     </div>
+
+    {# 🔹 Bloc Admin : Demandes de prêt en attente #}
+    {% if user_is_admin and pending_prets %}
+      <h3 class="mt-4">
+        Demandes de prêt en attente
+        <span class="badge bg-warning text-dark ms-2">{{ pending_prets|length }}</span>
+      </h3>
+      <div class="table-responsive shadow-sm rounded mt-2">
+        <table class="table table-sm table-bordered align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Membre</th>
+              <th>Montant</th>
+              <th>Intérêt</th>
+              <th>Mois</th>
+              <th>Début</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for d in pending_prets %}
+            <tr>
+              <td>{{ d.member.user.nom|default:d.member.user.phone }}</td>
+              <td>{{ d.montant|floatformat:0|intcomma }} FCFA</td>
+              <td>{{ d.interet|floatformat:2 }} %</td>
+              <td>{{ d.nb_mois }}</td>
+              <td>{{ d.debut_remboursement|date:"d/m/Y" }}</td>
+              <td class="d-flex gap-1">
+                <form method="post" action="{% url 'epargnecredit:pret_valider' d.id %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-success">✅ Valider</button>
+                </form>
+                <form method="post" action="{% url 'epargnecredit:pret_refuser' d.id %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-danger">❌ Refuser</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
 </div>
 {% endblock %}

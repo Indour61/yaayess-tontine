@@ -192,3 +192,61 @@ class Invitation(models.Model):
 
     def __str__(self):
         return f"Invitation for {self.phone} to join {self.group.nom}"
+
+# epargnecredit/models.py
+from django.conf import settings
+from django.db import models
+
+class PretDemande(models.Model):
+    STATUTS = (
+        ("PENDING", "En attente"),
+        ("APPROVED", "Approuvé"),
+        ("REJECTED", "Refusé"),
+    )
+
+    member = models.ForeignKey(
+        "GroupMember",
+        on_delete=models.CASCADE,
+        related_name="demandes_pret_ec",
+    )
+    montant = models.DecimalField(max_digits=12, decimal_places=0)
+    interet = models.DecimalField(
+        max_digits=5, decimal_places=2,
+        help_text="Pourcentage annuel simple, ex. 5 pour 5%"
+    )
+    nb_mois = models.PositiveIntegerField()
+    debut_remboursement = models.DateField()
+
+    statut = models.CharField(max_length=10, choices=STATUTS, default="PENDING")
+    commentaire = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="prets_decides_ec"
+    )
+
+    class Meta:
+        db_table = "epargnecredit_pretdemande"
+        ordering = ["-created_at"]
+        constraints = [
+            # Un seul prêt "en attente" par membre
+            models.UniqueConstraint(
+                fields=["member"],
+                condition=models.Q(statut="PENDING"),
+                name="uniq_pending_pret_par_membre_ec",
+            )
+        ]
+
+    def __str__(self):
+        return f"Demande prêt {self.member.user} ({self.montant} FCFA) - {self.get_statut_display()}"
+
+    @property
+    def total_a_rembourser(self):
+        # Intérêt simple global
+        return self.montant + (self.montant * (self.interet / 100))
+
+    @property
+    def mensualite(self):
+        return (self.total_a_rembourser / self.nb_mois) if self.nb_mois else self.total_a_rembourser

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Demande de prêt{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Demande de prêt — {{ member.user.nom|default:member.user.phone }}</h2>
+  <p class="text-muted mb-3">{{ group.nom }}</p>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }}">{{ message|safe }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    <div class="mb-3">
+      <label class="form-label" for="{{ form.montant.id_for_label }}">Montant (FCFA)</label>
+      {{ form.montant }}
+      {% if form.montant.errors %}<div class="text-danger small">{{ form.montant.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label" for="{{ form.interet.id_for_label }}">Intérêt (%)</label>
+      {{ form.interet }}
+      {% if form.interet.errors %}<div class="text-danger small">{{ form.interet.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label" for="{{ form.nb_mois.id_for_label }}">Nombre de mois</label>
+      {{ form.nb_mois }}
+      {% if form.nb_mois.errors %}<div class="text-danger small">{{ form.nb_mois.errors }}</div>{% endif %}
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label" for="{{ form.debut_remboursement.id_for_label }}">Début de remboursement</label>
+      {{ form.debut_remboursement }}
+      {% if form.debut_remboursement.errors %}<div class="text-danger small">{{ form.debut_remboursement.errors }}</div>{% endif %}
+    </div>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <button type="submit" class="btn btn-primary">📨 Envoyer la demande</button>
+    <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-secondary ms-2">Annuler</a>
+  </form>
+</div>
+{% endblock %}
