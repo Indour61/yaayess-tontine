@@ -3,9 +3,13 @@
 
 {% block content %}
 <div class="container mt-4">
-  <h2 class="mb-4">Effectuer un versement pour <strong>{{ member.nom }}</strong></h2>
+  <h2 class="mb-4">
+    Effectuer un versement pour
+    <strong>{{ member.user.nom|default:member.user.phone }}</strong>
+    {% if member.group %}<small class="text-muted">— {{ member.group.nom }}</small>{% endif %}
+  </h2>
 
-  <form method="post" id="versement-form" class="needs-validation" novalidate>
+  <form method="post" id="versement-form" class="needs-validation" novalidate autocomplete="off">
     {% csrf_token %}
 
     <!-- Champ montant -->
@@ -17,8 +21,10 @@
         name="montant"
         id="montant"
         min="1"
+        step="1"
+        inputmode="numeric"
         required
-        placeholder="Ex: 5000"
+        placeholder="Ex : 5000"
       >
       <div class="invalid-feedback">
         Veuillez saisir un montant valide supérieur à 0.
@@ -50,19 +56,23 @@
 </div>
 
 <script>
-// Bootstrap validation custom
+// Bootstrap validation + anti double-soumission
 (() => {
-  'use strict'
-
-  const form = document.getElementById('versement-form')
+  'use strict';
+  const form = document.getElementById('versement-form');
+  const submitBtn = document.getElementById('submit-btn');
 
   form.addEventListener('submit', event => {
     if (!form.checkValidity()) {
-      event.preventDefault()
-      event.stopPropagation()
+      event.preventDefault();
+      event.stopPropagation();
+    } else {
+      // Empêche le double envoi
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Traitement en cours...';
     }
-    form.classList.add('was-validated')
-  }, false)
+    form.classList.add('was-validated');
+  }, false);
 })();
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -79,16 +89,16 @@ document.addEventListener('DOMContentLoaded', function() {
       montant = 0;
     }
 
-    let methode = methodeSelect.value;
+    const methode = methodeSelect.value;
 
     if (methode === 'paydunya' && montant > 0) {
-      let fraisPourcent = montant * 0.02;
-      let fraisFixe = 50;
-      let fraisTotal = fraisPourcent + fraisFixe;
-      let total = montant + fraisTotal;
+      const fraisPourcent = montant * 0.02;
+      const fraisFixe = 50;
+      const fraisTotal = fraisPourcent + fraisFixe;
+      const total = montant + fraisTotal;
 
-      fraisEl.textContent = fraisTotal.toFixed(0);
-      totalEl.textContent = total.toFixed(0);
+      fraisEl.textContent = Math.round(fraisTotal).toString();
+      totalEl.textContent = Math.round(total).toString();
       fraisSection.style.display = 'block';
       submitBtn.textContent = '💳 Payer avec PayDunya';
     } else {
@@ -105,4 +115,3 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
-

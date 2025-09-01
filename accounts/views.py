@@ -177,45 +177,6 @@ def profile_view(request):
 
     return render(request, 'accounts/profile.html')
 
-
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import login, authenticate
-from django.contrib import messages
-from django.urls import reverse
-from django.utils import timezone
-from django.db import IntegrityError
-import random
-import string
-
-from .models import CustomUser
-from cotisationtontine.models import Group, GroupMember
-
-
-def generate_alias(nom):
-    """
-    Génère un alias unique basé sur le nom + un suffixe aléatoire.
-    Exemple: Fatou Diop → fatou.diop.8372
-    """
-    base_alias = nom.lower().replace(" ", ".")
-    suffix = "".join(random.choices(string.digits, k=4))
-    return f"{base_alias}.{suffix}"
-
-
-#from __future__ import annotations
-
-# ======================================================
-# accounts/views.py — version simplifiée & robuste
-# Objectif : faciliter l'ajout d'un membre via un lien
-# Route attendue : /accounts/rejoindre/<code>/
-#   (name='inscription_et_rejoindre' dans accounts/urls.py)
-#
-# Hypothèses :
-# - AUTH_USER_MODEL utilise le téléphone comme identifiant (USERNAME_FIELD='phone').
-# - Le modèle Group (cotisationtontine) possède idéalement un champ "code_invitation".
-#   En fallback, on sait aussi rejoindre par id numérique.
-# - GroupMember a une contrainte d'unicité (group, user).
-# ======================================================
-
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout
@@ -356,32 +317,6 @@ def _resolve_group_by_code(code: str):
     # 3) Pas trouvé
     raise Http404("Invitation ou groupe introuvable.")
 
-def _redirect_by_option(user: User) -> HttpResponse:
-    """
-    Redirige vers le bon dashboard selon user.option:
-      - "1" => Tontine
-      - "2" => Épargne/Crédit
-    """
-    opt = str(getattr(user, "option", "")).strip()
-    if opt == "1":
-        return redirect("cotisationtontine:dashboard_tontine_simple")
-    if opt == "2":
-        return redirect("epargnecredit:dashboard_epargne_credit")
-    # fallback si option inconnue
-    messages.info(None, "Option non reconnue, redirection vers l’accueil.")
-    return redirect("landing")  # adapte au nom de ta vue d’accueil
-
-def _unique_alias_for(nom: str) -> str:
-    """
-    Génère un alias unique à partir du nom.
-    """
-    base = (nom or "user").strip().lower().replace(" ", "_")
-    alias = base
-    i = 1
-    while User.objects.filter(alias=alias).exists():
-        i += 1
-        alias = f"{base}_{i}"
-    return alias
 
 def _add_member_to_group(request, user: User, group) -> None:
     """
@@ -505,96 +440,6 @@ def inscription_et_rejoindre(request: HttpRequest, code: str) -> HttpResponse:
     return _redirect_by_option(user)
 
 
-# ----------------------------------------------------
-# Auth classique (signup / login / logout / profil)
-# ----------------------------------------------------
-@transaction.atomic
-def signup_view(request: HttpRequest) -> HttpResponse:
-    if request.user.is_authenticated:
-        messages.info(request, "Vous êtes déjà connecté.")
-        return _redirect_by_option(request.user)
-
-    group_id = request.GET.get("group_id") or request.POST.get("group_id")
-    group = get_object_or_404(Group, id=group_id) if group_id else None
-
-    if request.method == "POST":
-        form = CustomUserCreationForm(request.POST)
-        if form.is_valid():
-            try:
-                user = form.save()
-                login(request, user)
-
-                if group:
-                    _add_member_to_group(user, group)
-
-                messages.success(request, f"Bienvenue {user.nom} ! Votre compte a été créé.")
-                return _redirect_by_option(user)
-            except Exception as e:
-                messages.error(request, f"Erreur lors de la création du compte : {e}")
-        else:
-            messages.error(request, "Veuillez corriger les erreurs ci-dessous.")
-    else:
-        form = CustomUserCreationForm()
-
-    return render(request, "accounts/signup.html", {"form": form, "group": group})
-
-
-def login_view(request: HttpRequest) -> HttpResponse:
-    if request.user.is_authenticated:
-        messages.info(request, "Vous êtes déjà connecté.")
-        return _redirect_by_option(request.user)
-
-    if request.method == "POST":
-        form = CustomAuthenticationForm(request, data=request.POST)
-        if form.is_valid():
-            user = form.get_user()
-            login(request, user)
-            messages.success(request, f"Connexion réussie. Bienvenue {user.nom} !")
-            return _redirect_by_option(user)
-        else:
-            messages.error(request, "Numéro/nom ou mot de passe incorrect, ou option invalide.")
-    else:
-        form = CustomAuthenticationForm()
-
-    return render(request, "accounts/login.html", {"form": form})
-
-
-@login_required
-def logout_view(request: HttpRequest) -> HttpResponse:
-    logout(request)
-    messages.success(request, "Vous avez été déconnecté avec succès.")
-    return redirect("accounts:login")
-
-
-@login_required
-def profile_view(request: HttpRequest) -> HttpResponse:
-    if request.method == "POST":
-        nom = request.POST.get("nom")
-        email = request.POST.get("email")
-        phone = request.POST.get("phone")
-
-        if nom and nom != request.user.nom:
-            if User.objects.filter(nom=nom).exclude(id=request.user.id).exists():
-                messages.error(request, "Ce nom est déjà utilisé par un autre utilisateur.")
-            else:
-                request.user.nom = nom
-                messages.success(request, "Votre nom a été mis à jour.")
-
-        if email:
-            request.user.email = email
-            messages.success(request, "Votre email a été mis à jour.")
-
-        if phone and phone != request.user.phone:
-            if User.objects.filter(phone=phone).exclude(id=request.user.id).exists():
-                messages.error(request, "Ce numéro de téléphone est déjà utilisé par un autre utilisateur.")
-            else:
-                request.user.phone = phone
-                messages.success(request, "Votre numéro de téléphone a été mis à jour.")
-
-        request.user.save()
-        return redirect("accounts:profile")
-
-    return render(request, "accounts/profile.html")
 
 from django.core.exceptions import PermissionDenied
 
