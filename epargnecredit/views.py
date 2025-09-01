@@ -63,6 +63,8 @@ try:
 except Exception:
     ActionLog = None  # on gérera plus bas
 
+from epargnecredit.decorators import validation_required
+
 @login_required
 def dashboard_epargne_credit(request):
     """

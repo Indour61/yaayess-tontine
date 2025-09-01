@@ -1,5 +1,5 @@
-# epargnecredit/decorators.py
-from functools import wraps
+# epargnecredit/mixins.py
+from django.views import View
 from django.shortcuts import redirect
 from django.contrib import messages
 from django.http import JsonResponse
@@ -9,7 +9,6 @@ ATTENTE_VALIDATION_NAME = "accounts:attente_validation"
 LOGIN_NAME = "accounts:login"
 
 def _is_ajax(request):
-    # Compat: header standard pour XHR/fetch
     return request.headers.get("x-requested-with") == "XMLHttpRequest" or \
            request.headers.get("accept", "").startswith("application/json")
 
@@ -20,44 +19,29 @@ def _is_on_attente_page(request):
     except Exception:
         return False
 
-def validation_required(view_func):
+class ValidationRequiredMixin(View):
     """
-    Bloque l'accès à Épargne & Crédit si l'utilisateur n'est pas validé.
-    - Laisse passer staff / superuser.
-    - Ne s'applique que si user.option == "2".
-    - AJAX/API: renvoie JSON 403 au lieu d'une redirection HTML.
-    - Évite la boucle de redirection si on est déjà sur la page 'attente_validation'.
+    À mixer sur les vues CBV d'Épargne & Crédit.
     """
-    @wraps(view_func)
-    def _wrapped(request, *args, **kwargs):
+    def dispatch(self, request, *args, **kwargs):
         user = request.user
 
-        # 1) Auth obligatoire
         if not user.is_authenticated:
             login_url = reverse(LOGIN_NAME)
             return redirect(f"{login_url}?next={request.get_full_path()}")
 
-        # 2) Bypass pour staff/superuser
         if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
-            return view_func(request, *args, **kwargs)
+            return super().dispatch(request, *args, **kwargs)
 
-        # 3) Ne s'applique qu'à l'option Épargne & Crédit
         if getattr(user, "option", None) == "2" and not getattr(user, "is_validated", False):
-            # Éviter la boucle si on est déjà sur la page d'attente
             if _is_on_attente_page(request):
-                return view_func(request, *args, **kwargs)
+                return super().dispatch(request, *args, **kwargs)
 
-            # Réponse JSON propre pour API/AJAX
             msg = "⛔ Votre compte doit être validé par l’administrateur avant d’accéder à Épargne & Crédit."
             if _is_ajax(request):
-                return JsonResponse(
-                    {"detail": msg, "code": "account_not_validated"},
-                    status=403
-                )
+                return JsonResponse({"detail": msg, "code": "account_not_validated"}, status=403)
 
             messages.error(request, msg)
             return redirect(ATTENTE_VALIDATION_NAME)
 
-        # 4) OK
-        return view_func(request, *args, **kwargs)
-    return _wrapped
+        return super().dispatch(request, *args, **kwargs)

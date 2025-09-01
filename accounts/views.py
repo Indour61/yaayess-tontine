@@ -140,42 +140,70 @@ def logout_view(request):
     messages.success(request, "Vous avez été déconnecté avec succès.")
     return redirect('accounts:login')
 
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.shortcuts import render, redirect
+from django.db import transaction
+
+from .models import CustomUser
+
 
 @login_required
+@transaction.atomic
 def profile_view(request):
     """
-    Affiche et permet de modifier le profil de l'utilisateur.
+    Affiche et permet de modifier le profil de l'utilisateur connecté.
     """
+    user = request.user
+
     if request.method == 'POST':
-        # Logique de mise à jour du profil
-        nom = request.POST.get('nom')
-        email = request.POST.get('email')
-        phone = request.POST.get('phone')
+        nom = request.POST.get('nom', '').strip()
+        email = request.POST.get('email', '').strip()
+        phone = request.POST.get('phone', '').strip()
 
-        if nom and nom != request.user.nom:
-            # Vérifier si le nom n'est pas déjà utilisé
-            if CustomUser.objects.filter(nom=nom).exclude(id=request.user.id).exists():
-                messages.error(request, "Ce nom est déjà utilisé par un autre utilisateur.")
+        modifications = False
+
+        # 🔹 Vérification du nom
+        if nom and nom != user.nom:
+            if CustomUser.objects.filter(nom=nom).exclude(id=user.id).exists():
+                messages.error(request, "❌ Ce nom est déjà utilisé par un autre utilisateur.")
             else:
-                request.user.nom = nom
-                messages.success(request, "Votre nom a été mis à jour.")
+                user.nom = nom
+                modifications = True
+                messages.success(request, "✅ Votre nom a été mis à jour.")
 
-        if email:
-            request.user.email = email
-            messages.success(request, "Votre email a été mis à jour.")
-
-        if phone and phone != request.user.phone:
-            # Vérifier si le téléphone n'est pas déjà utilisé
-            if CustomUser.objects.filter(phone=phone).exclude(id=request.user.id).exists():
-                messages.error(request, "Ce numéro de téléphone est déjà utilisé par un autre utilisateur.")
+        # 🔹 Vérification de l'email
+        if email and email != user.email:
+            if CustomUser.objects.filter(email=email).exclude(id=user.id).exists():
+                messages.error(request, "❌ Cet email est déjà utilisé par un autre utilisateur.")
             else:
-                request.user.phone = phone
-                messages.success(request, "Votre numéro de téléphone a été mis à jour.")
+                user.email = email
+                modifications = True
+                messages.success(request, "✅ Votre email a été mis à jour.")
 
-        request.user.save()
+        # 🔹 Vérification du téléphone
+        if phone and phone != user.phone:
+            if CustomUser.objects.filter(phone=phone).exclude(id=user.id).exists():
+                messages.error(request, "❌ Ce numéro de téléphone est déjà utilisé par un autre utilisateur.")
+            else:
+                user.phone = phone
+                modifications = True
+                messages.success(request, "✅ Votre numéro de téléphone a été mis à jour.")
+
+        # 🔹 Sauvegarde si nécessaire
+        if modifications:
+            user.save()
+        else:
+            messages.info(request, "ℹ️ Aucune modification détectée.")
+
         return redirect('accounts:profile')
 
-    return render(request, 'accounts/profile.html')
+    # 🔹 En GET, affiche le profil avec les données actuelles
+    context = {
+        "user": user
+    }
+    return render(request, 'accounts/profile.html', context)
+
 
 from django.conf import settings
 from django.contrib import messages

@@ -45,12 +45,6 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, Group
 from django.core.validators import RegexValidator
 from django.utils.translation import gettext_lazy as _
 from .managers import CustomUserManager
-
-from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, Group, Permission
-from django.core.validators import RegexValidator
-from django.utils.translation import gettext_lazy as _
-from .managers import CustomUserManager
 from django.utils import timezone
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
@@ -103,10 +97,12 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         help_text="Option choisie lors de l'inscription"
     )
 
-    is_validated = models.BooleanField(default=False)  # ✅ Nouveau champ
-    date_joined = models.DateTimeField(
-        _("date d'inscription"),
-        default=timezone.now
+    is_validated = models.BooleanField(default=False)  # déjà présent ✅
+    validated_at = models.DateTimeField(null=True, blank=True)
+    validated_by = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="validated_users",
+        limit_choices_to={"is_staff": True}
     )
 
     is_active = models.BooleanField(
