@@ -38,18 +38,51 @@ from datetime import timedelta
 from .models import Group, GroupMember, Versement, ActionLog
 
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.utils import timezone
+from datetime import timedelta
+from django.db.models import Sum
+
+from .models import Group, Versement, ActionLog  # adapte l’import si nécessaire
+
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Sum
+from django.urls import reverse, NoReverseMatch
 from datetime import timedelta
-from .models import Group, Versement, ActionLog
 
+# Imports modèles (adapte si l’emplacement diffère)
+from .models import Group, Versement
+# ActionLog peut ne pas exister : on protège l’import
+try:
+    from .models import ActionLog
+except Exception:
+    ActionLog = None  # on gérera plus bas
 
 @login_required
 def dashboard_epargne_credit(request):
     """
     Dashboard principal avec aperçu des groupes, activités récentes et statistiques.
+    Accès réservé aux comptes validés par un superuser.
     """
+
+    # ✅ Fallback URL si l'URL d'attente n'existe pas encore
+    try:
+        attente_url = reverse("accounts:attente_validation")
+    except NoReverseMatch:
+        attente_url = reverse("accounts:login")
+
+    # ✅ Blocage si le compte n'est pas encore validé (superuser passe)
+    if not request.user.is_superuser and not getattr(request.user, "is_validated", False):
+        messages.error(
+            request,
+            "⛔ Votre compte doit être validé par l’administrateur avant d’accéder à l’application Épargne & Crédit."
+        )
+        return redirect(attente_url)
 
     # Groupes dont l'utilisateur est administrateur
     groupes_admin = Group.objects.filter(admin=request.user)
@@ -59,18 +92,21 @@ def dashboard_epargne_credit(request):
         membres_ec=request.user
     ).exclude(admin=request.user).distinct()
 
-    # Dernières actions de l'utilisateur
-    dernieres_actions = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
+    # Dernières actions de l'utilisateur (si ActionLog existe)
+    if ActionLog is not None:
+        dernieres_actions = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
+    else:
+        dernieres_actions = []
 
     # Total des versements de l'utilisateur
     total_versements = Versement.objects.filter(
         member__user=request.user
     ).aggregate(total=Sum('montant'))['total'] or 0
 
-    # Nombre total de groupes où l'utilisateur est membre
+    # Nombre total de groupes
     total_groupes = groupes_membre.count() + groupes_admin.count()
 
-    # Récupérer les versements récents (30 derniers jours)
+    # Versements récents (30 jours)
     date_limite = timezone.now() - timedelta(days=30)
     versements_recents = Versement.objects.filter(
         member__user=request.user,
@@ -80,7 +116,7 @@ def dashboard_epargne_credit(request):
     # Statistiques des groupes administrés
     stats_groupes_admin = []
     for groupe in groupes_admin:
-        total_membres = groupe.membres_ec.count()
+        total_membres = getattr(groupe, "membres_ec", []).count() if hasattr(groupe, "membres_ec") else 0
         total_versements_groupe = Versement.objects.filter(
             member__group=groupe
         ).aggregate(total=Sum('montant'))['total'] or 0
@@ -99,7 +135,6 @@ def dashboard_epargne_credit(request):
         "versements_recents": versements_recents,
         "stats_groupes_admin": stats_groupes_admin,
     }
-
     return render(request, "epargnecredit/dashboard.html", context)
 
 from django.shortcuts import render, redirect, get_object_or_404

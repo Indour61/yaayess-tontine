@@ -557,3 +557,30 @@ def inscription_et_rejoindre(request: HttpRequest, code: str) -> HttpResponse:
     login(request, user)
     _add_member_to_group(request, user, group)
     return _redirect_by_option(user, group)
+
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
+from django.contrib import messages
+
+def validation_required(view_func):
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect("accounts:login")
+        if request.user.option == "2" and not request.user.is_validated:
+            messages.error(request, "⛔ Votre compte doit être validé par l’administrateur avant d’accéder à l’application Épargne & Crédit.")
+            return redirect("accounts:attente_validation")
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+@login_required
+@validation_required
+def dashboard_epargne_credit(request):
+    # logique du dashboard
+    return render(request, "epargnecredit/dashboard.html")
+
+
+from django.shortcuts import render
+
+def attente_validation(request):
+    return render(request, "accounts/attente_validation.html")

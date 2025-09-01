@@ -103,6 +103,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         help_text="Option choisie lors de l'inscription"
     )
 
+    is_validated = models.BooleanField(default=False)  # ✅ Nouveau champ
     date_joined = models.DateTimeField(
         _("date d'inscription"),
         default=timezone.now

@@ -9,5 +9,7 @@ urlpatterns = [
     path('signup/', views.signup_view, name='signup'),
     # Correction du nom pour qu'il soit cohérent
     path('rejoindre/<str:code>/', views.inscription_et_rejoindre, name='inscription_et_rejoindre'),
+
+    path("attente-validation/", views.attente_validation, name="attente_validation"),
 ]
 
