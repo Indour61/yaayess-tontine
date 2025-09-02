@@ -11,13 +11,31 @@
 {% if groupes %}
   <div class="list-group shadow-sm">
     {% for g in groupes %}
-      <a href="{% url 'epargnecredit:group_detail' g.id %}" class="list-group-item list-group-item-action">
+      {% if g.is_remboursement %}
+        {% url 'epargnecredit:group_detail_remboursement' g.id as detail_url %}
+      {% else %}
+        {% url 'epargnecredit:group_detail' g.id as detail_url %}
+      {% endif %}
+
+      <a href="{{ detail_url }}" class="list-group-item list-group-item-action">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <h5 class="mb-1 fw-semibold">{{ g.nom }}</h5>
-            <small class="text-muted">Créé le {{ g.date_creation|date:"d/m/Y" }}</small>
+            <h5 class="mb-1 fw-semibold">
+              {{ g.nom }}
+              {% if g.is_remboursement %}
+                <span class="badge bg-warning text-dark ms-2">Remboursement</span>
+              {% else %}
+                <span class="badge bg-success ms-2">Principal</span>
+              {% endif %}
+            </h5>
+            <small class="text-muted">
+              Créé le {{ g.date_creation|date:"d/m/Y" }}
+              {% if g.is_remboursement and g.parent_group %}
+                • Parent : <strong>{{ g.parent_group.nom }}</strong>
+              {% endif %}
+            </small>
           </div>
-          <span class="badge bg-success">✅</span>
+          <span class="badge bg-outline-secondary text-muted">#{{ g.id }}</span>
         </div>
       </a>
     {% endfor %}
@@ -32,3 +50,5 @@
   </div>
 {% endif %}
 {% endblock %}
+
+

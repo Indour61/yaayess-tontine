@@ -1,17 +1,20 @@
 from django.db import models
 from django.conf import settings
+from django.db.models import Q, UniqueConstraint
 import uuid
-from django.utils import timezone
 
 
-# ✅ Groupe principal
 class Group(models.Model):
+    # ✅ Infos de base
     nom = models.CharField(max_length=255, verbose_name="Nom du groupe")
     date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
     date_reset = models.DateTimeField(null=True, blank=True)
+
+    # ✅ Invitations (tu as les deux : on conserve tel quel)
     code_invitation = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     invitation_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
+    # ✅ Admin
     admin = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -19,27 +22,28 @@ class Group(models.Model):
         verbose_name="Administrateur"
     )
 
+    # ⚠️ Champ historique chez toi, libellé “Code d’invitation”
+    # (on le garde pour compat descendante)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, verbose_name="Code d'invitation")
-    montant_base = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Montant de base")
 
+    # ✅ Montants
+    montant_base = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0.00, verbose_name="Montant de base"
+    )
     montant_fixe_gagnant = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name="Montant fixe pour les gagnants"
+        max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Montant fixe pour les gagnants"
     )
 
+    # ✅ Flux tontine (si tu l’utilises côté épargne&crédit)
     prochain_gagnant = models.ForeignKey(
         'GroupMember',
         on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        null=True, blank=True,
         related_name="groupes_prochain_gagnant_ec",
         verbose_name="Prochain gagnant à exclure"
     )
 
-    # ✅ Ajout de la relation ManyToMany via GroupMember
+    # ✅ Relation membres via table pivot
     membres_ec = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through='GroupMember',
@@ -47,14 +51,46 @@ class Group(models.Model):
         verbose_name="Membres"
     )
 
+    # 🆕 Spécifique “groupe remboursement”
+    is_remboursement = models.BooleanField(
+        default=False, help_text="Coché pour un groupe de remboursement"
+    )
+    parent_group = models.ForeignKey(
+        'self',
+        null=True, blank=True,
+        on_delete=models.CASCADE,
+        related_name='remboursement_children',
+        help_text="Si groupe de remboursement, lien vers le groupe parent"
+    )
+
     class Meta:
         ordering = ['-date_creation']
         verbose_name = "Groupe"
         verbose_name_plural = "Groupes"
         db_table = "epargnecredit_group"
+        constraints = [
+            # ✅ Un seul groupe remboursement par parent (partial unique index)
+            UniqueConstraint(
+                fields=['parent_group', 'is_remboursement'],
+                condition=Q(is_remboursement=True),
+                name='unique_one_remboursement_per_parent_ec',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['is_remboursement']),
+            models.Index(fields=['admin']),
+        ]
 
     def __str__(self):
-        return f"{self.nom} (admin : {self.admin})"
+        suffix = " (remboursement)" if self.is_remboursement else ""
+        return f"{self.nom}{suffix} — admin: {self.admin}"
+
+    # Helpers pratiques
+    def has_remboursement_group(self) -> bool:
+        return self.remboursement_children.filter(is_remboursement=True).exists()
+
+    def get_remboursement_group(self):
+        return self.remboursement_children.filter(is_remboursement=True).first()
 
 
 from django.db import models

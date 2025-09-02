@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+
+  <!-- Navigation -->
+  <div class="d-flex gap-2 mb-3">
+    <a href="{% url 'epargnecredit:group_list' %}" class="btn btn-outline-secondary">
+      ⬅️ Retour à la liste des groupes
+    </a>
+    {% if group.parent_group %}
+      <a href="{% url 'epargnecredit:group_detail' group.parent_group.id %}" class="btn btn-outline-primary">
+        ↩️ Retour au groupe parent
+      </a>
+    {% endif %}
+  </div>
+
+  <h2 class="mb-1">{{ group.nom }}</h2>
+  <p class="text-muted">
+    Groupe de remboursement lié à :
+    <strong>{{ group.parent_group.nom }}</strong>
+  </p>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }}">{{ message|safe }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="alert alert-secondary small">
+    🔁 Pas d’objectif fixe : les versements sont <strong>toujours possibles</strong>.
+  </div>
+
+  <div class="card">
+    <div class="card-header">Membres à rembourser</div>
+    <div class="card-body p-0">
+      <table class="table mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Nom</th>
+            <th>Téléphone</th>
+            <th>Montant versé</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for m in membres %}
+          <tr>
+            <td>{{ m.user.nom|default:"—" }}</td>
+            <td>{{ m.user.phone|default:"—" }}</td>
+            <td>{{ m.montant|floatformat:0 }} FCFA</td>
+            <td class="text-end">
+              <!-- Bouton Verser toujours actif -->
+              <a href="{% url 'epargnecredit:initier_paiement_remboursement' m.id %}"
+                 class="btn btn-sm btn-success">
+                💰 Verser
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="4" class="text-center text-muted py-3">
+              Aucun membre à rembourser pour le moment.
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

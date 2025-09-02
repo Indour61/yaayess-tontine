@@ -49,5 +49,11 @@ urlpatterns = [
     path("pret/<int:pk>/refuser/", views.pret_refuser, name="pret_refuser"),
 
     path("pret/<int:pk>/remboursement/", views.pret_remboursement_detail, name="pret_remboursement_detail"),
+    path("remboursement/<int:group_id>/", views.group_detail_remboursement, name="group_detail_remboursement"),
+    path(
+            "remboursement/paiement/<int:member_id>/",
+            views.initier_paiement_remboursement,
+            name="initier_paiement_remboursement",
+        ),
 
 ]

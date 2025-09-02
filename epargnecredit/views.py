@@ -172,54 +172,80 @@ from epargnecredit.utils import envoyer_invitation  # ta fonction de simulation 
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.shortcuts import render, redirect
 from django.urls import reverse
 
 from .forms import GroupForm
 from .models import Group, GroupMember
-from .utils import envoyer_invitation  # ta fonction de simulation WhatsApp/SMS
+from .utils import envoyer_invitation
+
 
 @login_required
 @transaction.atomic
 def ajouter_groupe_view(request):
     """
     Création d'un nouveau groupe par un utilisateur connecté :
-    1️⃣ Création du groupe avec l'utilisateur comme admin
-    2️⃣ Ajout de l'admin comme membre
-    3️⃣ Génération d'un lien d'invitation
-    4️⃣ Envoi de l'invitation (simulation WhatsApp ou SMS)
+    1) Création du groupe (parent) avec l'utilisateur comme admin
+    2) Ajout de l'admin comme membre du groupe parent
+    3) Création automatique du groupe de remboursement (enfant) lié au parent
+    4) Génération d'un lien d'invitation pour le groupe parent
+    5) Envoi de l'invitation (simulation WhatsApp/SMS)
     """
     if request.method == "POST":
         form = GroupForm(request.POST)
         if form.is_valid():
             try:
-                # ✅ Créer le groupe
+                # 1) Groupe parent
                 group = form.save(commit=False)
                 group.admin = request.user
+                group.is_remboursement = False
+                group.parent_group = None
                 group.save()
 
-                # ✅ Ajoute l'admin comme membre du groupe
-                GroupMember.objects.create(
+                # 2) Admin -> membre du groupe parent (évite doublon)
+                GroupMember.objects.get_or_create(
                     group=group,
                     user=request.user,
-                    montant=0
+                    defaults={"montant": 0}
                 )
 
-                # ✅ Crée un lien d'invitation sécurisé
+                # 3) Groupe de remboursement (enfant)
+                group_remb = Group.objects.create(
+                    nom=f"{group.nom} — Remboursement",
+                    admin=request.user,
+                    is_remboursement=True,
+                    parent_group=group,
+                    montant_base=0  # neutre pour la vue remboursement
+                )
+                # ⚠️ Si ta group_list n'affiche que les groupes où l'utilisateur est MEMBRE
+                # et pas ADMIN, décommente pour ajouter l'admin aussi comme membre :
+                # GroupMember.objects.get_or_create(group=group_remb, user=request.user, defaults={"montant": 0})
+
+                # 4) Lien d'invitation (groupe parent)
                 lien_invitation = request.build_absolute_uri(
                     reverse("accounts:inscription_et_rejoindre", args=[str(group.code_invitation)])
                 )
 
-                # ✅ Simule l'envoi de l'invitation
+                # 5) Simulation d'envoi
                 envoyer_invitation(request.user.phone, lien_invitation)
+
+                # Lien vers la page détail remboursement
+                lien_remb = reverse("epargnecredit:group_detail_remboursement", args=[group_remb.id])
 
                 messages.success(
                     request,
-                    f"Groupe « {group.nom} » créé avec succès et vous avez été ajouté comme membre."
+                    (
+                        f"Groupe « {group.nom} » créé, vous avez été ajouté comme membre. "
+                        f"Un groupe de remboursement a également été créé : "
+                        f"<a href='{lien_remb}'>voir le groupe de remboursement</a>."
+                    )
                 )
                 return redirect("epargnecredit:dashboard_epargne_credit")
 
+            except IntegrityError as e:
+                # Ex: contrainte 'unique_one_remboursement_per_parent_ec'
+                messages.error(request, f"Conflit de création (intégrité) : {e}")
             except Exception as e:
                 messages.error(request, f"Erreur lors de la création du groupe : {str(e)}")
     else:
@@ -230,6 +256,30 @@ def ajouter_groupe_view(request):
         "epargnecredit/ajouter_groupe.html",
         {"form": form, "title": "Créer un groupe"}
     )
+
+# epargnecredit/views.py
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, render
+from django.db.models import Sum, Max
+from .models import Group, GroupMember, Versement
+
+# epargnecredit/views.py (ajoute ceci)
+from django.shortcuts import get_object_or_404
+
+@login_required
+def group_detail_remboursement(request, group_id):
+    group = get_object_or_404(Group, pk=group_id, is_remboursement=True)
+
+    # membres du groupe remboursement
+    membres = GroupMember.objects.select_related('user').filter(group=group).order_by('user__nom')
+
+    context = {
+        "group": group,
+        "membres": membres,
+        "title": f"Détails Remboursement — {group.nom}",
+    }
+    return render(request, "epargnecredit/group_detail_remboursement.html", context)
+
 
 @login_required
 @transaction.atomic
@@ -310,14 +360,6 @@ def ajouter_membre_view(request, group_id):
         {"group": group, "form": form}
     )
 
-from django.db.models import Q, Sum
-from django.shortcuts import get_object_or_404, render, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.urls import reverse
-from .models import Group, GroupMember, Versement, ActionLog
-
-
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q, Sum
 from django.shortcuts import render, get_object_or_404, redirect
@@ -326,23 +368,29 @@ from django.urls import reverse
 
 from .models import Group, GroupMember, Versement, ActionLog
 
+from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+from django.shortcuts import render
+
+from .models import Group
+
 @login_required
 def group_list_view(request):
     """
     Affiche la liste des groupes :
     - Tous les groupes si super admin
     - Sinon, seulement ceux créés par l'utilisateur ou ceux où il est membre
+    (inclut aussi les groupes de remboursement)
     """
     if getattr(request.user, "is_super_admin", False):
         groupes = Group.objects.all()
     else:
-        # Utilisation du nouveau related_name 'members'
         groupes = Group.objects.filter(
             Q(admin=request.user) |
-            Q(members__user=request.user)
+            Q(membres_ec=request.user)
         ).distinct()
 
-    return render(request, 'epargnecredit/group_list.html', {'groupes': groupes})
+    return render(request, "epargnecredit/group_list.html", {"groupes": groupes})
 
 
 
@@ -791,6 +839,211 @@ def versement_merci(request: HttpRequest) -> HttpResponse:
     return render(request, "epargnecredit/versement_merci.html")
 
 
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+import json
+import requests
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+
+from .models import GroupMember, Versement
+# helpers que tu as déjà quelque part (identiques à initier_versement)
+# _pd_conf, _pd_headers, _pd_base_url, _as_fcfa_int
+
+
+@login_required
+@transaction.atomic
+def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> HttpResponse:
+    """
+    - CAISSE : crée directement le Versement (pas de champ 'statut').
+    - PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement.
+    Contexte spécifique remboursement :
+      * Le member doit appartenir à un group is_remboursement=True
+      * Les redirections reviennent vers group_detail_remboursement
+    """
+    member = get_object_or_404(GroupMember.objects.select_related("group", "user"), id=member_id)
+    group = member.group
+    group_id = group.id
+
+    # --- Vérification contexte remboursement ---
+    if not getattr(group, "is_remboursement", False):
+        messages.error(request, "Ce membre n'appartient pas à un groupe de remboursement.")
+        return redirect("epargnecredit:group_detail", group_id=getattr(group, "parent_group_id", group_id))
+
+    # --- Permissions ---
+    is_self = (request.user == member.user)
+    is_group_admin = (request.user == getattr(group, "admin", None))
+    is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+    if not (is_self or is_group_admin or is_super_admin):
+        messages.error(request, "Vous n'avez pas les droits pour effectuer un versement pour ce membre.")
+        return redirect("epargnecredit:group_detail_remboursement", group_id=group_id)
+
+    # --- GET: page de saisie du montant/méthode (on réutilise ton template existant) ---
+    if request.method == "GET":
+        # Tu peux réutiliser le même template que pour l’épargne
+        return render(
+            request,
+            "epargnecredit/initier_versement.html",
+            {
+                "member": member,
+                "group": group,
+                "is_remboursement": True,  # pour adapter les libellés dans le template si tu veux
+            },
+        )
+
+    # --- POST ---
+    montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
+    methode = (request.POST.get("methode") or "paydunya").lower()
+
+    # Valider le montant
+    try:
+        montant = Decimal(montant_raw)
+    except Exception:
+        messages.error(request, "Montant invalide.")
+        return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
+
+    if montant <= 0:
+        messages.error(request, "Le montant doit être supérieur à 0.")
+        return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
+
+    # Forcer l'entier en FCFA
+    montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    # 1) CAISSE -> écriture immédiate
+    if methode == "caisse":
+        Versement.objects.create(
+            member=member,
+            montant=montant,
+            frais=Decimal("0"),
+            methode="CAISSE",
+            transaction_id=f"EC-CAISSE-REM-{member.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}",
+        )
+        messages.success(request, f"Versement de {_as_fcfa_int(montant)} FCFA enregistré (Remboursement).")
+        return redirect("epargnecredit:group_detail_remboursement", group_id=group_id)
+
+    # 2) PAYDUNYA
+    try:
+        cfg = _pd_conf()
+        headers = _pd_headers(cfg)
+        base_url = _pd_base_url(cfg)
+    except RuntimeError as e:
+        messages.error(request, str(e))
+        return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
+
+    # Frais (ex) : 2% + 50 FCFA
+    frais_total = (montant * Decimal("0.02") + Decimal("50")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    montant_total = (montant + frais_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    # URLs spécifiques remboursement
+    callback_url = request.build_absolute_uri(reverse("epargnecredit:versement_callback"))
+    return_url = request.build_absolute_uri(reverse("epargnecredit:versement_merci"))
+    cancel_url = request.build_absolute_uri(reverse("epargnecredit:group_detail_remboursement", args=[group_id]))
+
+    payload = {
+        "invoice": {
+            "items": [
+                {
+                    "name": "Versement remboursement",
+                    "quantity": 1,
+                    "unit_price": _as_fcfa_int(montant_total),
+                    "total_price": _as_fcfa_int(montant_total),
+                    "description": (
+                        f"Remboursement membre {member.user.nom or member.user.phone} "
+                        f"(frais: {_as_fcfa_int(frais_total)} FCFA)"
+                    ),
+                }
+            ],
+            "description": f"Paiement remboursement (+{_as_fcfa_int(frais_total)} FCFA de frais)",
+            "total_amount": _as_fcfa_int(montant_total),
+            "currency": "XOF",
+        },
+        "store": {
+            "name": cfg.get("store_name", "YaayESS"),
+            "tagline": cfg.get("store_tagline", "Plateforme de gestion financière"),
+            "website_url": cfg.get("website_url", "https://yaayess.com"),
+        },
+        "actions": {
+            "callback_url": callback_url,
+            "return_url": return_url,
+            "cancel_url": cancel_url,
+        },
+        "custom_data": {
+            "member_id": member.id,
+            "user_id": request.user.id,
+            "montant": _as_fcfa_int(montant),   # hors frais
+            "frais": _as_fcfa_int(frais_total),
+            "context": "remboursement",
+        },
+    }
+
+    # Création de la facture
+    try:
+        resp = requests.post(f"{base_url}/checkout-invoice/create", headers=headers, json=payload, timeout=20)
+    except requests.exceptions.RequestException as e:
+        messages.error(request, f"Erreur réseau PayDunya : {e}")
+        return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
+
+    if resp.status_code != 200:
+        messages.error(request, f"Erreur PayDunya (HTTP {resp.status_code})")
+        if getattr(settings, "DEBUG", False):
+            try:
+                messages.info(request, f"DEBUG PayDunya: {resp.text[:600]}")
+            except Exception:
+                pass
+        return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
+
+    try:
+        data = resp.json()
+    except json.JSONDecodeError:
+        messages.error(request, "Réponse PayDunya invalide (JSON).")
+        if getattr(settings, "DEBUG", False):
+            messages.info(request, f"DEBUG PayDunya: {resp.text[:600]}")
+        return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
+
+    if getattr(settings, "DEBUG", False):
+        try:
+            messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:600]}")
+        except Exception:
+            pass
+
+    # response_code "00" => facture créée
+    if isinstance(data, dict) and data.get("response_code") == "00":
+        invoice_url = None
+        rt = data.get("response_text")
+
+        if isinstance(rt, str) and rt.startswith("http"):
+            invoice_url = rt
+        elif isinstance(rt, dict):
+            invoice_url = rt.get("invoice_url")
+
+        if not invoice_url:
+            invoice_url = (
+                data.get("invoice_url")
+                or data.get("checkout_url")
+                or data.get("url")
+                or (data.get("data", {}).get("invoice_url") if isinstance(data.get("data"), dict) else None)
+            )
+
+        if invoice_url:
+            return redirect(invoice_url)
+
+        # Pas d'URL : si token présent, on laisse le callback finaliser
+        token = data.get("token") or (rt.get("token") if isinstance(rt, dict) else None)
+        if token:
+            messages.warning(request, "Facture créée. Redirection indisponible ; finalisez le paiement côté PayDunya.")
+            return redirect("epargnecredit:group_detail_remboursement", group_id=group_id)
+
+        messages.warning(request, "Facture créée mais URL manquante. Retour au groupe de remboursement.")
+        return redirect("epargnecredit:group_detail_remboursement", group_id=group_id)
+
+    messages.error(request, f"Échec de création de facture: {data.get('response_text', 'Erreur inconnue')}")
+    return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
 
 
 from django.contrib.auth.decorators import login_required
@@ -1041,32 +1294,78 @@ def demande_pret(request, member_id: int):
 # ------------------------------------------------
 # Valider / Refuser une demande (ADMIN SEULEMENT)
 # ------------------------------------------------
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
+from django.db import transaction, IntegrityError
+from django.shortcuts import get_object_or_404, redirect
+from django.utils import timezone
+from django.contrib import messages
+
+from .models import PretDemande, Group, GroupMember
+
+
 @login_required
 @require_http_methods(["POST"])
 @transaction.atomic
 def pret_valider(request, pk: int):
-    demande = get_object_or_404(PretDemande.objects.select_related("member", "member__group"), pk=pk)
+    # Charge la demande + le membre et son groupe en 1 requête
+    demande = get_object_or_404(
+        PretDemande.objects.select_related("member", "member__group", "member__user"),
+        pk=pk
+    )
     group = demande.member.group
 
+    # Permissions : admin du groupe ou super admin
     is_group_admin = (request.user == getattr(group, "admin", None))
     is_super_admin = bool(getattr(request.user, "is_super_admin", False))
     if not (is_group_admin or is_super_admin):
         messages.error(request, "Seul l’admin du groupe peut valider un prêt.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
+    # Idempotence : si déjà traité, on renvoie vers la page remboursement
     if demande.statut != "PENDING":
-        messages.info(request, "Cette demande a déjà été traitée.")
-        return redirect("epargnecredit:group_detail", group_id=group.id)
+        # essaie de retrouver le groupe de remboursement pour rediriger utilement
+        remb = getattr(group, "get_remboursement_group", lambda: None)() if hasattr(group, "get_remboursement_group") else None
+        if remb is None:
+            return redirect("epargnecredit:group_detail", group_id=group.id)
+        return redirect("epargnecredit:group_detail_remboursement", group_id=remb.id)
 
+    # 1) Approuve la demande
     demande.statut = "APPROVED"
     demande.decided_by = request.user
     demande.decided_at = timezone.now()
     demande.commentaire = request.POST.get("commentaire", "")
     demande.save(update_fields=["statut", "decided_by", "decided_at", "commentaire"])
 
-    messages.success(request, "Demande de prêt approuvée ✅")
-    # 🔁 Redirige vers la page de remboursement
-    return redirect("epargnecredit:pret_remboursement_detail", pk=demande.id)
+    # 2) Assure l'existence du group_remboursement (sécurité si jamais manquant)
+    remb = None
+    if hasattr(group, "get_remboursement_group"):
+        remb = group.get_remboursement_group()
+
+    if remb is None:
+        # crée le groupe remboursement si inexistant (cohérent avec ton modèle)
+        remb = Group.objects.create(
+            nom=f"{group.nom} — Remboursement",
+            admin=group.admin,
+            is_remboursement=True,
+            parent_group=group,
+            montant_base=0
+        )
+
+    # 3) Ajoute le bénéficiaire au groupe remboursement (idempotent)
+    try:
+        GroupMember.objects.get_or_create(
+            group=remb,
+            user=demande.member.user,
+            defaults={"montant": 0}
+        )
+    except IntegrityError:
+        # En cas de course ou contrainte, on ignore si déjà présent
+        pass
+
+    messages.success(request, "Demande de prêt approuvée ✅ Le membre a été ajouté au groupe de remboursement.")
+    # 4) Redirige vers la page de remboursement
+    return redirect("epargnecredit:group_detail_remboursement", group_id=remb.id)
 
 
 @login_required
