@@ -257,29 +257,6 @@ def ajouter_groupe_view(request):
         {"form": form, "title": "Créer un groupe"}
     )
 
-# epargnecredit/views.py
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import get_object_or_404, render
-from django.db.models import Sum, Max
-from .models import Group, GroupMember, Versement
-
-# epargnecredit/views.py (ajoute ceci)
-from django.shortcuts import get_object_or_404
-
-@login_required
-def group_detail_remboursement(request, group_id):
-    group = get_object_or_404(Group, pk=group_id, is_remboursement=True)
-
-    # membres du groupe remboursement
-    membres = GroupMember.objects.select_related('user').filter(group=group).order_by('user__nom')
-
-    context = {
-        "group": group,
-        "membres": membres,
-        "title": f"Détails Remboursement — {group.nom}",
-    }
-    return render(request, "epargnecredit/group_detail_remboursement.html", context)
-
 
 @login_required
 @transaction.atomic
@@ -402,23 +379,22 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 
 from .models import Group, GroupMember, Versement, ActionLog  # adapte si noms différents
-
-# epargnecredit/views.py (extrait)
-
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.db.models import Q, Sum, Value, DecimalField, Subquery, OuterRef
+from django.db.models import Q, Sum, Value, OuterRef, Subquery
 from django.db.models.functions import Coalesce
+from django.db.models import DecimalField
 from django.shortcuts import get_object_or_404, render, redirect
+from django.contrib import messages
 from django.urls import reverse
+from django.contrib.auth.decorators import login_required
 
-from .models import Group, GroupMember, Versement, ActionLog
-from .models import Group, GroupMember, Versement, ActionLog, PretDemande  # + PretDemande
+from .models import Group, GroupMember, Versement, ActionLog, PretDemande
+
 
 @login_required
 def group_detail(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
+    # Accès autorisé si admin, membre, ou super admin
     has_access = (
         group.admin_id == getattr(request.user, "id", None)
         or GroupMember.objects.filter(group=group, user=request.user).exists()
@@ -427,6 +403,11 @@ def group_detail(request, group_id):
     if not has_access:
         messages.error(request, "⚠️ Vous n'avez pas accès à ce groupe.")
         return redirect("epargnecredit:group_list")
+
+    # ✅ Récupérer le groupe de remboursement lié (si ce groupe est un parent)
+    remb_group = None
+    if hasattr(group, "get_remboursement_group") and not getattr(group, "is_remboursement", False):
+        remb_group = group.get_remboursement_group()
 
     # --- Nom de la relation reverse GroupMember -> Versement ---
     rel_lookup = "versements_ec"
@@ -494,7 +475,7 @@ def group_detail(request, group_id):
     if user_is_admin:
         request.session["last_invitation_link"] = invite_url
 
-    # --- 🔹 Demandes de prêt en attente (admin seulement) ---
+    # --- Demandes de prêt en attente (admin seulement) ---
     pending_prets = PretDemande.objects.none()
     if user_is_admin:
         pending_prets = (
@@ -513,12 +494,134 @@ def group_detail(request, group_id):
         "user_is_admin": user_is_admin,
         "invite_url": invite_url,
         "last_invitation_link": request.session.get("last_invitation_link"),
-        "pending_prets": pending_prets,    # 🔹 ajouté
+        "pending_prets": pending_prets,
+        "remb_group": remb_group,          # 👈 ajouté pour le lien vers /epargne/remboursement/<id>/
     }
     return render(request, "epargnecredit/group_detail.html", context)
 
+from datetime import timedelta
+from decimal import Decimal, ROUND_HALF_UP
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, render
+from django.db.models import Sum
+from django.utils import timezone
 
-# epargnecredit/views.py
+from .models import Group, GroupMember, Versement, PretDemande
+
+
+@login_required
+def group_detail_remboursement(request, group_id):
+    group = get_object_or_404(Group, pk=group_id, is_remboursement=True)
+    parent = group.parent_group  # prêt approuvé est porté par le groupe parent
+
+    membres = list(
+        GroupMember.objects.select_related('user').filter(group=group).order_by('user__nom', 'id')
+    )
+    if not membres:
+        return render(request, "epargnecredit/group_detail_remboursement.html", {
+            "group": group,
+            "membres": [],
+            "title": f"Détails Remboursement — {group.nom}",
+        })
+
+    member_ids = [m.id for m in membres]
+    user_ids = [m.user_id for m in membres]
+
+    # Total versé par membre (sur le groupe de remboursement)
+    totals = {
+        row['member']: (row['total'] or Decimal("0"))
+        for row in (Versement.objects
+                    .filter(member_id__in=member_ids)
+                    .values('member').annotate(total=Sum('montant')))
+    }
+
+    # Dernière demande APPROUVÉE par user dans le groupe parent
+    loans_qs = (
+        PretDemande.objects
+        .filter(member__group=parent, member__user_id__in=user_ids, statut="APPROVED")
+        .select_related("member", "member__user")
+        .order_by('member__user_id', '-decided_at', '-id')
+    )
+    loans_by_user = {}
+    for d in loans_qs:
+        uid = d.member.user_id
+        if uid not in loans_by_user:
+            loans_by_user[uid] = d
+
+    today = timezone.now().date()
+
+    from calendar import monthrange
+    def month_add(d, n):
+        year = d.year + (d.month - 1 + n) // 12
+        month = (d.month - 1 + n) % 12 + 1
+        last_day = monthrange(year, month)[1]
+        from datetime import date
+        day = min(d.day, last_day)
+        return date(year, month, day)
+
+    for m in membres:
+        # Total versé (arrondi entier FCFA)
+        m.total_verse = (totals.get(m.id, Decimal("0"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+        d = loans_by_user.get(m.user_id)
+        if not d:
+            m.montant_prete_plus_interet = None
+            m.mensualite = None
+            m.penalites = None
+            m.reste_a_rembourser = None
+            continue
+
+        principal = Decimal(d.montant or 0)
+        taux = Decimal(d.interet or 0)         # %/mois (hypothèse)
+        nb_mois = max(int(d.nb_mois or 1), 1)
+        start_date = (d.debut_remboursement or today)
+        if hasattr(start_date, "date"):
+            start_date = start_date.date()
+
+        # Intérêt simple total + total dû + mensualité
+        interet_total = (principal * (taux / Decimal("100")) * Decimal(nb_mois)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        total_du = (principal + interet_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        mensualite = (total_du / Decimal(nb_mois)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+        # Échéances échues
+        echeances_echues = 0
+        last_due_date = None
+        for i in range(nb_mois):
+            due_date = month_add(start_date, i)  # i=0 -> 1re échéance
+            if due_date <= today:
+                echeances_echues += 1
+                last_due_date = due_date
+            else:
+                break
+
+        attendu = (mensualite * Decimal(echeances_echues)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        if attendu > total_du:
+            attendu = total_du
+
+        paye = m.total_verse
+        retard = max(attendu - paye, Decimal("0"))
+
+        # Pénalité: 10% du retard si > 10j après la dernière échéance échue
+        penalites = Decimal("0")
+        if retard > 0 and last_due_date and today > (last_due_date + timedelta(days=10)):
+            penalites = (retard * Decimal("0.10")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+        # Reste à rembourser (incluant pénalités)
+        reste_brut = total_du - paye
+        if reste_brut < 0:
+            reste_brut = Decimal("0")
+        reste_final = (reste_brut + penalites).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+        m.montant_prete_plus_interet = total_du
+        m.mensualite = mensualite
+        m.penalites = penalites
+        m.reste_a_rembourser = reste_final
+
+    return render(request, "epargnecredit/group_detail_remboursement.html", {
+        "group": group,
+        "membres": membres,
+        "title": f"Détails Remboursement — {group.nom}",
+    })
 
 import json
 from decimal import Decimal, ROUND_HALF_UP

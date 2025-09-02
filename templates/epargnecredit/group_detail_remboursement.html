@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
@@ -39,28 +40,63 @@
         <thead>
           <tr>
             <th>Nom</th>
-            <th>Téléphone</th>
-            <th>Montant versé</th>
             <th class="text-end">Actions</th>
+            <th class="text-end">Montant versé</th>
+            <th class="text-end">Montant prêté + intérêt</th>
+            <th class="text-end">Mensuel à rembourser</th>
+            <th class="text-end">Pénalités</th>
+            <th class="text-end">Reste à rembourser</th>
           </tr>
         </thead>
         <tbody>
         {% for m in membres %}
           <tr>
-            <td>{{ m.user.nom|default:"—" }}</td>
-            <td>{{ m.user.phone|default:"—" }}</td>
-            <td>{{ m.montant|floatformat:0 }} FCFA</td>
+            <td>
+              {% if m.user.nom %}
+                {{ m.user.nom|title }}
+              {% else %}
+                {{ m.user.phone|default:"—" }}
+              {% endif %}
+            </td>
+
             <td class="text-end">
-              <!-- Bouton Verser toujours actif -->
               <a href="{% url 'epargnecredit:initier_paiement_remboursement' m.id %}"
                  class="btn btn-sm btn-success">
                 💰 Verser
               </a>
             </td>
+
+            <td class="text-end">
+              {{ m.total_verse|default_if_none:0|floatformat:0|intcomma }} FCFA
+            </td>
+
+            <td class="text-end">
+              {% if m.montant_prete_plus_interet is not None %}
+                {{ m.montant_prete_plus_interet|floatformat:0|intcomma }} FCFA
+              {% else %} — {% endif %}
+            </td>
+
+            <td class="text-end">
+              {% if m.mensualite is not None %}
+                {{ m.mensualite|floatformat:0|intcomma }} FCFA
+              {% else %} — {% endif %}
+            </td>
+
+            <td class="text-end">
+              {% if m.penalites is not None %}
+                {{ m.penalites|floatformat:0|intcomma }} FCFA
+              {% else %} — {% endif %}
+            </td>
+
+            <td class="text-end">
+              {% if m.reste_a_rembourser is not None %}
+                {{ m.reste_a_rembourser|floatformat:0|intcomma }} FCFA
+              {% else %} — {% endif %}
+            </td>
           </tr>
         {% empty %}
           <tr>
-            <td colspan="4" class="text-center text-muted py-3">
+            <td colspan="7" class="text-center text-muted py-3">
               Aucun membre à rembourser pour le moment.
             </td>
           </tr>
@@ -71,3 +107,4 @@
   </div>
 </div>
 {% endblock %}
+

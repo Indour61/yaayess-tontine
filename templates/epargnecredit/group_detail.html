@@ -6,174 +6,183 @@
 {% block content %}
 <div class="container mt-4">
 
-    {% if user_is_admin %}
-    <div class="alert alert-success mb-4">
-        🔗 Lien d'invitation à partager :
-        <input type="text" readonly value="{{ invite_url }}" class="form-control mb-2">
-        <a href="https://wa.me/?text=Rejoins notre groupe YaayESS ici 👉 {{ invite_url }}"
-           target="_blank" class="btn btn-outline-success btn-sm">
-            📤 Partager sur WhatsApp
-        </a>
-    </div>
+  {# ── Liens de navigation ── #}
+  <div class="d-flex gap-2 mb-3">
+    <a href="{% url 'epargnecredit:group_list' %}" class="btn btn-outline-secondary">
+      ⬅️ Retour à la liste des groupes
+    </a>
+    {% if remb_group %}
+      <a href="{% url 'epargnecredit:group_detail_remboursement' remb_group.id %}"
+         class="btn btn-outline-warning">
+        💰 Voir le groupe de remboursement
+      </a>
     {% endif %}
+  </div>
 
-    <h1 class="fw-bold text-success">{{ group.nom }}</h1>
-    <p class="mb-1">📅 Date de création : {{ group.date_creation|date:"d/m/Y" }}</p>
-    {% if group.date_reset %}
-      <p class="mb-3 text-muted">🔁 Dernier reset : {{ group.date_reset|date:"d/m/Y H:i" }}</p>
-    {% endif %}
-    <p class="mb-4">
-      💰 Montant de base du groupe :
-      <strong class="text-primary">{{ group.montant_base|default:"0"|floatformat:0|intcomma }} FCFA</strong>
-    </p>
+  {% if user_is_admin %}
+  <div class="alert alert-success mb-4">
+      🔗 Lien d'invitation à partager :
+      <input type="text" readonly value="{{ invite_url }}" class="form-control mb-2">
+      <a href="https://wa.me/?text=Rejoins notre groupe YaayESS ici 👉 {{ invite_url }}"
+         target="_blank" class="btn btn-outline-success btn-sm">
+          📤 Partager sur WhatsApp
+      </a>
+  </div>
+  {% endif %}
 
-    {% if messages %}
-      {% for message in messages %}
-        <div class="alert alert-{{ message.tags|default:'info' }} mt-2" role="alert">
-          {{ message|safe }}
-        </div>
-      {% endfor %}
-    {% endif %}
+  <h1 class="fw-bold text-success">{{ group.nom }}</h1>
+  <p class="mb-1">📅 Date de création : {{ group.date_creation|date:"d/m/Y" }}</p>
+  {% if group.date_reset %}
+    <p class="mb-3 text-muted">🔁 Dernier reset : {{ group.date_reset|date:"d/m/Y H:i" }}</p>
+  {% endif %}
+  <p class="mb-4">
+    💰 Montant de base du groupe :
+    <strong class="text-primary">{{ group.montant_base|default:"0"|floatformat:0|intcomma }} FCFA</strong>
+  </p>
 
-    {% if user_is_admin %}
-      <div class="d-flex flex-wrap gap-2 mb-3">
-        {# pas de tirage au sort en epargnecredit #}
-
-        <form action="{% url 'epargnecredit:reset_cycle' group.id %}" method="post"
-              onsubmit="return confirm('Confirmer la réinitialisation du cycle ?');">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-outline-danger">♻️ Réinitialiser le cycle</button>
-        </form>
-
-        <a href="{{ invite_url }}" class="btn btn-primary">➕ Ajouter un membre</a>
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} mt-2" role="alert">
+        {{ message|safe }}
       </div>
-    {% endif %}
+    {% endfor %}
+  {% endif %}
 
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-      <h2 class="mt-4">{{ membres|length }} membre{{ membres|length|pluralize }}</h2>
+  {% if user_is_admin %}
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <form action="{% url 'epargnecredit:reset_cycle' group.id %}" method="post"
+            onsubmit="return confirm('Confirmer la réinitialisation du cycle ?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-danger">♻️ Réinitialiser le cycle</button>
+      </form>
+
+      <a href="{{ invite_url }}" class="btn btn-primary">➕ Ajouter un membre</a>
     </div>
+  {% endif %}
 
-    <div class="table-responsive shadow-sm rounded">
-      <table class="table table-bordered align-middle mb-0">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h2 class="mt-4">{{ membres|length }} membre{{ membres|length|pluralize }}</h2>
+  </div>
+
+  <div class="table-responsive shadow-sm rounded">
+    <table class="table table-bordered align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Nom</th>
+          <th style="min-width: 220px;">Actions</th>
+          <th>Montant versé</th>
+          <th>Dernier versement</th>
+          <th>Téléphone</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in membres %}
+          <tr>
+            <td>
+              {% if m.user.nom %}
+                {{ m.user.nom|title }}
+              {% else %}
+                {{ m.user.phone }}
+              {% endif %}
+              {% if m.user == group.admin %}
+                <span class="badge bg-success ms-2">Admin</span>
+              {% endif %}
+            </td>
+
+            <td class="d-flex flex-wrap gap-1">
+              {# Bouton Verser TOUJOURS disponible #}
+              <a href="{% url 'epargnecredit:initier_versement' m.id %}"
+                 class="btn btn-sm btn-success flex-fill">💳 Verser</a>
+
+              {# 🔹 Bouton Demande de prêt pour chaque membre #}
+              <a href="{% url 'epargnecredit:demande_pret' m.id %}"
+                 class="btn btn-sm btn-outline-primary flex-fill">💼 Demande de prêt</a>
+            </td>
+
+            {# ---- Montant versé + / montant de base + progression ---- #}
+            <td>
+              <div class="d-flex justify-content-between">
+                <span>{{ m.total_montant|default_if_none:0|floatformat:0|intcomma }} FCFA</span>
+                <small class="text-muted">/ {{ group.montant_base|default:"0"|floatformat:0|intcomma }} FCFA</small>
+              </div>
+              <div class="progress mt-1" style="height:6px;">
+                <div class="progress-bar" role="progressbar"
+                     style="width: {% widthratio m.total_montant|default_if_none:0 group.montant_base|default_if_none:1 100 %}%"
+                     aria-valuemin="0" aria-valuemax="100">
+                </div>
+              </div>
+            </td>
+
+            <td>
+              {% if m.last_date %}
+                {{ m.last_date|date:"d/m/Y H:i" }} : {{ m.last_amount|default_if_none:0|floatformat:0|intcomma }} FCFA
+              {% else %}
+                -
+              {% endif %}
+            </td>
+
+            <td>{{ m.user.phone }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="text-center text-muted">Aucun membre pour l'instant</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+
+      <tfoot>
+        <tr class="fw-bold table-light">
+          <td colspan="2" class="text-end">Total cotisations</td>
+          <td>{{ total_montant|floatformat:0|intcomma }} FCFA</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  {# 🔹 Bloc Admin : Demandes de prêt en attente #}
+  {% if user_is_admin and pending_prets %}
+    <h3 class="mt-4">
+      Demandes de prêt en attente
+      <span class="badge bg-warning text-dark ms-2">{{ pending_prets|length }}</span>
+    </h3>
+    <div class="table-responsive shadow-sm rounded mt-2">
+      <table class="table table-sm table-bordered align-middle mb-0">
         <thead class="table-light">
           <tr>
-            <th>Nom</th>
-            <th style="min-width: 220px;">Actions</th>
-            <th>Montant versé</th>
-            <th>Dernier versement</th>
-            <th>Téléphone</th>
+            <th>Membre</th>
+            <th>Montant</th>
+            <th>Intérêt</th>
+            <th>Mois</th>
+            <th>Début</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {% for m in membres %}
-            <tr>
-              <td>
-                {% if m.user.nom %}
-                  {{ m.user.nom|title }}
-                {% else %}
-                  {{ m.user.phone }}
-                {% endif %}
-                {% if m.user == group.admin %}
-                  <span class="badge bg-success ms-2">Admin</span>
-                {% endif %}
-              </td>
-
-              <td class="d-flex flex-wrap gap-1">
-                {% if not m.total_montant or m.total_montant < group.montant_base %}
-                  <a href="{% url 'epargnecredit:initier_versement' m.id %}"
-                     class="btn btn-sm btn-success flex-fill">💳 Verser</a>
-                {% else %}
-                  <button class="btn btn-sm btn-secondary flex-fill" disabled>✅ Atteint</button>
-                {% endif %}
-
-                {# 🔹 Bouton Demande de prêt pour chaque membre #}
-                <a href="{% url 'epargnecredit:demande_pret' m.id %}"
-                   class="btn btn-sm btn-outline-primary flex-fill">💼 Demande de prêt</a>
-              </td>
-
-              {# ---- MONTANT VERSÉ + / MONTANT DE BASE + PROGRESSION ---- #}
-              <td>
-                <div class="d-flex justify-content-between">
-                  <span>{{ m.total_montant|default_if_none:0|floatformat:0|intcomma }} FCFA</span>
-                  <small class="text-muted">/ {{ group.montant_base|default:"0"|floatformat:0|intcomma }} FCFA</small>
-                </div>
-                <div class="progress mt-1" style="height:6px;">
-                  <div class="progress-bar" role="progressbar"
-                       style="width: {% widthratio m.total_montant|default_if_none:0 group.montant_base|default_if_none:1 100 %}%"
-                       aria-valuemin="0" aria-valuemax="100">
-                  </div>
-                </div>
-              </td>
-
-              <td>
-                {% if m.last_date %}
-                  {{ m.last_date|date:"d/m/Y H:i" }} : {{ m.last_amount|default_if_none:0|floatformat:0|intcomma }} FCFA
-                {% else %}
-                  -
-                {% endif %}
-              </td>
-
-              <td>{{ m.user.phone }}</td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="5" class="text-center text-muted">Aucun membre pour l'instant</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-
-        <tfoot>
-          <tr class="fw-bold table-light">
-            <td colspan="2" class="text-end">Total cotisations</td>
-            <td>{{ total_montant|floatformat:0|intcomma }} FCFA</td>
-            <td colspan="2"></td>
+        {% for d in pending_prets %}
+          <tr>
+            <td>{{ d.member.user.nom|default:d.member.user.phone }}</td>
+            <td>{{ d.montant|floatformat:0|intcomma }} FCFA</td>
+            <td>{{ d.interet|floatformat:2 }} %</td>
+            <td>{{ d.nb_mois }}</td>
+            <td>{{ d.debut_remboursement|date:"d/m/Y" }}</td>
+            <td class="d-flex gap-1">
+              <form method="post" action="{% url 'epargnecredit:pret_valider' d.id %}">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-success">✅ Valider</button>
+              </form>
+              <form method="post" action="{% url 'epargnecredit:pret_refuser' d.id %}">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-outline-danger">❌ Refuser</button>
+              </form>
+            </td>
           </tr>
-        </tfoot>
+        {% endfor %}
+        </tbody>
       </table>
     </div>
-
-    {# 🔹 Bloc Admin : Demandes de prêt en attente #}
-    {% if user_is_admin and pending_prets %}
-      <h3 class="mt-4">
-        Demandes de prêt en attente
-        <span class="badge bg-warning text-dark ms-2">{{ pending_prets|length }}</span>
-      </h3>
-      <div class="table-responsive shadow-sm rounded mt-2">
-        <table class="table table-sm table-bordered align-middle mb-0">
-          <thead class="table-light">
-            <tr>
-              <th>Membre</th>
-              <th>Montant</th>
-              <th>Intérêt</th>
-              <th>Mois</th>
-              <th>Début</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for d in pending_prets %}
-            <tr>
-              <td>{{ d.member.user.nom|default:d.member.user.phone }}</td>
-              <td>{{ d.montant|floatformat:0|intcomma }} FCFA</td>
-              <td>{{ d.interet|floatformat:2 }} %</td>
-              <td>{{ d.nb_mois }}</td>
-              <td>{{ d.debut_remboursement|date:"d/m/Y" }}</td>
-              <td class="d-flex gap-1">
-                <form method="post" action="{% url 'epargnecredit:pret_valider' d.id %}">
-                  {% csrf_token %}
-                  <button class="btn btn-sm btn-success">✅ Valider</button>
-                </form>
-                <form method="post" action="{% url 'epargnecredit:pret_refuser' d.id %}">
-                  {% csrf_token %}
-                  <button class="btn btn-sm btn-outline-danger">❌ Refuser</button>
-                </form>
-              </td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% endif %}
+  {% endif %}
 
 </div>
 {% endblock %}
+
