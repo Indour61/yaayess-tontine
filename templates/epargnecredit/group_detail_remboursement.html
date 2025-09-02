@@ -101,10 +101,22 @@
             </td>
           </tr>
         {% endfor %}
+
+        {% if membres %}
+        <!-- ✅ Ligne de totaux -->
+        <tr class="fw-bold table-secondary">
+          <td>Total</td>
+          <td class="text-end">—</td>
+          <td class="text-end">{{ totals.total_verse|intcomma }} FCFA</td>
+          <td class="text-end">{{ totals.montant_prete_plus_interet|intcomma }} FCFA</td>
+          <td class="text-end">{{ totals.mensualite|intcomma }} FCFA</td>
+          <td class="text-end">{{ totals.penalites|intcomma }} FCFA</td>
+          <td class="text-end">{{ totals.reste_a_rembourser|intcomma }} FCFA</td>
+        </tr>
+        {% endif %}
         </tbody>
       </table>
     </div>
   </div>
 </div>
 {% endblock %}
-

@@ -515,24 +515,36 @@ def group_detail_remboursement(request, group_id):
     parent = group.parent_group  # prêt approuvé est porté par le groupe parent
 
     membres = list(
-        GroupMember.objects.select_related('user').filter(group=group).order_by('user__nom', 'id')
+        GroupMember.objects.select_related('user')
+        .filter(group=group)
+        .order_by('user__nom', 'id')
     )
     if not membres:
         return render(request, "epargnecredit/group_detail_remboursement.html", {
             "group": group,
             "membres": [],
             "title": f"Détails Remboursement — {group.nom}",
+            "totals": {
+                "total_verse": Decimal("0"),
+                "montant_prete_plus_interet": Decimal("0"),
+                "mensualite": Decimal("0"),
+                "penalites": Decimal("0"),
+                "reste_a_rembourser": Decimal("0"),
+            }
         })
 
     member_ids = [m.id for m in membres]
     user_ids = [m.user_id for m in membres]
 
     # Total versé par membre (sur le groupe de remboursement)
-    totals = {
+    totals_map = {
         row['member']: (row['total'] or Decimal("0"))
-        for row in (Versement.objects
-                    .filter(member_id__in=member_ids)
-                    .values('member').annotate(total=Sum('montant')))
+        for row in (
+            Versement.objects
+            .filter(member_id__in=member_ids)
+            .values('member')
+            .annotate(total=Sum('montant'))
+        )
     }
 
     # Dernière demande APPROUVÉE par user dans le groupe parent
@@ -546,7 +558,7 @@ def group_detail_remboursement(request, group_id):
     for d in loans_qs:
         uid = d.member.user_id
         if uid not in loans_by_user:
-            loans_by_user[uid] = d
+            loans_by_user[uid] = d  # garde la plus récente
 
     today = timezone.now().date()
 
@@ -559,9 +571,10 @@ def group_detail_remboursement(request, group_id):
         day = min(d.day, last_day)
         return date(year, month, day)
 
+    # Calcule les montants par membre
     for m in membres:
         # Total versé (arrondi entier FCFA)
-        m.total_verse = (totals.get(m.id, Decimal("0"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        m.total_verse = (totals_map.get(m.id, Decimal("0"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
         d = loans_by_user.get(m.user_id)
         if not d:
@@ -572,7 +585,7 @@ def group_detail_remboursement(request, group_id):
             continue
 
         principal = Decimal(d.montant or 0)
-        taux = Decimal(d.interet or 0)         # %/mois (hypothèse)
+        taux = Decimal(d.interet or 0)         # %/mois
         nb_mois = max(int(d.nb_mois or 1), 1)
         start_date = (d.debut_remboursement or today)
         if hasattr(start_date, "date"):
@@ -601,7 +614,7 @@ def group_detail_remboursement(request, group_id):
         paye = m.total_verse
         retard = max(attendu - paye, Decimal("0"))
 
-        # Pénalité: 10% du retard si > 10j après la dernière échéance échue
+        # Pénalités: 10% du retard si > 10j après la dernière échéance échue
         penalites = Decimal("0")
         if retard > 0 and last_due_date and today > (last_due_date + timedelta(days=10)):
             penalites = (retard * Decimal("0.10")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
@@ -617,10 +630,23 @@ def group_detail_remboursement(request, group_id):
         m.penalites = penalites
         m.reste_a_rembourser = reste_final
 
+    # ✅ Totaux pour le pied de tableau
+    totals = {
+        "total_verse": sum((m.total_verse or Decimal("0")) for m in membres),
+        "montant_prete_plus_interet": sum((m.montant_prete_plus_interet or Decimal("0")) for m in membres),
+        "mensualite": sum((m.mensualite or Decimal("0")) for m in membres),
+        "penalites": sum((m.penalites or Decimal("0")) for m in membres),
+        "reste_a_rembourser": sum((m.reste_a_rembourser or Decimal("0")) for m in membres),
+    }
+    # Arrondis à l’entier FCFA
+    for k, v in totals.items():
+        totals[k] = Decimal(v).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
     return render(request, "epargnecredit/group_detail_remboursement.html", {
         "group": group,
         "membres": membres,
         "title": f"Détails Remboursement — {group.nom}",
+        "totals": totals,
     })
 
 import json
