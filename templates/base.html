@@ -49,8 +49,22 @@
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
         <span class="navbar-toggler-icon"></span>
       </button>
+
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
+          <!-- Assistant IA visible partout -->
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="assistantDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="fas fa-robot me-1"></i>Assistant IA
+            </a>
+            <ul class="dropdown-menu" aria-labelledby="assistantDropdown">
+              <li><a class="dropdown-item" href="{% url 'assistant_ai:chat_ui' %}">💬 Interface Assistant</a></li>
+              <li><a class="dropdown-item" href="{% url 'assistant_ai:chat_text' %}">⚡ API Texte</a></li>
+              <li><a class="dropdown-item" href="{% url 'assistant_ai:chat_voice' %}">🎙️ API Voix</a></li>
+              <li><a class="dropdown-item" href="{% url 'assistant_ai:tts' %}">🔊 API TTS</a></li>
+            </ul>
+          </li>
+
           {% if user.is_authenticated %}
             {% if user.type_adhesion == 1 %}
               <li class="nav-item">
@@ -86,6 +100,7 @@
   </nav>
 
   <main class="container mt-4 mb-5">
+    <!-- Messages Django -->
     {% if messages %}
       {% for message in messages %}
         <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
@@ -100,6 +115,7 @@
         </div>
       {% endfor %}
     {% endif %}
+
     {% block content %}{% endblock %}
   </main>
 
@@ -131,13 +147,39 @@
     </div>
   </footer>
 
+  <!-- Toast global réutilisable -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+    <div id="yaayessToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div id="yaayessToastBody" class="toast-body">✅ Action réussie</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fermer"></button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    // Tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
       return new bootstrap.Tooltip(tooltipTriggerEl)
     })
+
+    // Helper Toast global
+    window.showToast = function(message, type="info", delay=3000) {
+      const toastEl = document.getElementById('yaayessToast');
+      const toastBody = document.getElementById('yaayessToastBody');
+      toastEl.classList.remove("text-bg-primary", "text-bg-success", "text-bg-danger", "text-bg-warning");
+      if (type === "success") toastEl.classList.add("text-bg-success");
+      else if (type === "error") toastEl.classList.add("text-bg-danger");
+      else if (type === "warning") toastEl.classList.add("text-bg-warning");
+      else toastEl.classList.add("text-bg-primary");
+      toastBody.textContent = message;
+      const toast = new bootstrap.Toast(toastEl, { delay });
+      toast.show();
+    }
   </script>
+
   {% block extra_js %}{% endblock %}
 </body>
 </html>

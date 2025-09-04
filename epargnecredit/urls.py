@@ -56,4 +56,5 @@ urlpatterns = [
             name="initier_paiement_remboursement",
         ),
 
+    path("epargne/<int:group_id>/partager-fin-de-cycle/", views.share_cycle_view, name="share_cycle"),
 ]

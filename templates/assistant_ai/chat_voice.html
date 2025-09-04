@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Assistant vocal YaayESS{% endblock %}
+
+{% block content %}
+  {% csrf_token %}
+  <div class="container mt-4">
+    <h2 class="mb-3">Assistant YaayESS – Texte & Voix (FR / Wolof)</h2>
+  {% csrf_token %}
+  <meta name="csrf-token" content="{{ csrf_token }}"/>
+
+  <div class="mb-3">
+    <label class="form-label">Langue</label>
+    <select id="lang" class="form-select" style="max-width:240px">
+      <option value="fr">Français</option>
+      <option value="wo">Wolof</option>
+    </select>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="d-flex gap-2">
+        <input id="textInput" class="form-control" placeholder="Écris ta question..." />
+        <button id="sendBtn" class="btn btn-primary">Envoyer</button>
+      </div>
+      <div id="textResp" class="mt-3"></div>
+      <audio id="textAudio" class="mt-2" controls></audio>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p><strong>Mode vocal</strong> – clique pour parler, reclique pour arrêter.</p>
+      <div class="d-flex gap-2">
+        <button id="recBtn" class="btn btn-success">🎙️ Démarrer</button>
+        <button id="stopBtn" class="btn btn-secondary" disabled>⏹️ Arrêter</button>
+      </div>
+      <div id="voiceTrans" class="mt-3 text-muted"></div>
+      <div id="voiceResp" class="mt-2"></div>
+      <audio id="voiceAudio" class="mt-2" controls></audio>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---- CSRF helpers ----
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+  let csrftoken = getCookie('csrftoken');
+  if (!csrftoken) {
+    // fallback: lire la meta si le cookie n’est pas encore là
+    const m = document.querySelector('meta[name="csrf-token"]');
+    if (m) csrftoken = m.getAttribute('content');
+  }
+
+  const langSel = document.getElementById("lang");
+
+  // ---- Texte -> IA ----
+  const sendBtn = document.getElementById("sendBtn");
+  sendBtn.addEventListener("click", async () => {
+    const input = document.getElementById("textInput");
+    const text = input.value.trim();
+    const lang = langSel.value;
+    if (!text) return;
+
+    const respEl = document.getElementById("textResp");
+    const audioEl = document.getElementById("textAudio");
+    respEl.textContent = "⏳ Génération en cours…";
+    audioEl.src = "";
+    sendBtn.disabled = true;
+
+    try {
+      const r = await fetch("{% url 'assistant_ai:chat_text' %}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrftoken || "",
+        },
+        body: JSON.stringify({message: text, lang})
+      });
+
+      const data = await r.json();
+      if (data.ok) {
+        respEl.textContent = data.text;
+        if (data.audio) {
+          audioEl.src = data.audio;
+          audioEl.play().catch(()=>{});
+        }
+      } else {
+        respEl.textContent = "⚠️ Erreur: " + (data.error || "inconnue");
+      }
+    } catch (e) {
+      respEl.textContent = "⚠️ Réseau ou serveur indisponible.";
+    } finally {
+      sendBtn.disabled = false;
+    }
+  });
+
+  // ---- Enregistrement audio ----
+  const recBtn = document.getElementById("recBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  let mediaRecorder;
+  let chunks = [];
+
+  async function getSupportedMime() {
+    // Fallback cross-browser (Safari n’aime pas audio/webm)
+    const candidates = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", ""];
+    for (const type of candidates) {
+      if (!type) return ""; // laisser le browser choisir
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) {
+        return type;
+      }
+    }
+    return "";
+  }
+
+  recBtn.addEventListener("click", async () => {
+    try {
+      chunks = [];
+      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      const mimeType = await getSupportedMime();
+      mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+      mediaRecorder.ondataavailable = e => {
+        if (e.data && e.data.size) chunks.push(e.data);
+      };
+      mediaRecorder.onstop = async () => {
+        const type = mimeType || "audio/webm";
+        const blob = new Blob(chunks, { type });
+        await sendVoice(blob);
+        // stop tracks
+        stream.getTracks().forEach(t => t.stop());
+      };
+
+      mediaRecorder.start();
+      recBtn.disabled = true;
+      stopBtn.disabled = false;
+    } catch (e) {
+      alert("Impossible d'accéder au micro : " + e.message);
+    }
+  });
+
+  stopBtn.addEventListener("click", () => {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+    }
+    recBtn.disabled = false;
+    stopBtn.disabled = true;
+  });
+
+  async function sendVoice(blob) {
+    const lang = langSel.value;
+    const transEl = document.getElementById("voiceTrans");
+    const respEl = document.getElementById("voiceResp");
+    const audioEl = document.getElementById("voiceAudio");
+    transEl.textContent = "⏳ Transcription en cours…";
+    respEl.textContent = "";
+    audioEl.src = "";
+
+    const fd = new FormData();
+    fd.append("lang", lang);
+    // extension indicative (backend accepte plusieurs types)
+    const filename = blob.type.includes("ogg") ? "input.ogg"
+                    : blob.type.includes("mpeg") ? "input.mp3"
+                    : blob.type.includes("mp4") ? "input.m4a"
+                    : "input.webm";
+    fd.append("audio", blob, filename);
+
+    try {
+      const r = await fetch("{% url 'assistant_ai:chat_voice' %}", {
+        method: "POST",
+        headers: { "X-CSRFToken": csrftoken || "" },
+        body: fd
+      });
+
+      const data = await r.json();
+      if (data.ok) {
+        transEl.textContent = data.user_text ? ("🗣️ Tu as dit : " + data.user_text) : "(Transcription vide)";
+        respEl.textContent = data.text || "";
+        if (data.audio) {
+          audioEl.src = data.audio;
+          audioEl.play().catch(()=>{});
+        }
+      } else {
+        transEl.textContent = "";
+        respEl.textContent = "⚠️ Erreur: " + (data.error || "inconnue)";
+      }
+    } catch (e) {
+      transEl.textContent = "";
+      respEl.textContent = "⚠️ Réseau ou serveur indisponible.";
+    }
+  }
+</script>
+{% endblock %}
+

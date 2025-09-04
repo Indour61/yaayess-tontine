@@ -1602,3 +1602,154 @@ def pret_remboursement_detail(request, pk: int):
         "nb_membres": nb_membres,
     }
     return render(request, "epargnecredit/pret_remboursement_detail.html", context)
+
+# epargnecredit/views.py
+from decimal import Decimal
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db.models import Sum
+from django.shortcuts import get_object_or_404, redirect, render
+
+from .models import Group, GroupMember, Versement
+# Adaptez les imports ci-dessous selon votre code
+# from .models import Credit, CreditRepayment, Penalite
+
+@login_required
+def share_cycle_view(request, group_id):
+    group = get_object_or_404(Group, id=group_id)
+
+    # (Optionnel) Autoriser seulement l'admin du groupe
+    try:
+        if hasattr(group, "admin") and group.admin != request.user:
+            messages.error(request, "Vous n’avez pas la permission d’effectuer le partage pour ce groupe.")
+            return redirect("epargnecredit:group_detail", group_id)
+    except Exception:
+        pass
+
+    # 1) Paramètres de base
+    montant_base = getattr(group, "montant_base", None)
+    if not montant_base or Decimal(montant_base) <= 0:
+        messages.error(request, "Le montant de base (valeur d'une part) n’est pas défini pour ce groupe.")
+        return redirect("epargnecredit:group_detail", group_id)
+
+    montant_base = Decimal(montant_base)
+
+    # 2) Total cotisations validées (du groupe)
+    total_cotisations = (
+        Versement.objects.filter(member__group=group, statut="VALIDE")
+        .aggregate(s=Sum("montant"))
+        .get("s") or Decimal("0")
+    )
+
+    # 3) Total intérêts collectés
+    # ---- OPTION A : via remboursements (recommandé si vous suivez principal vs total)
+    total_remboursements = Decimal("0")
+    total_principal = Decimal("0")
+    try:
+        from .models import CreditRepayment  # adaptez si nécessaire
+        # Si vous avez un champ 'montant' pour le total remboursé :
+        total_remboursements = (
+            CreditRepayment.objects.filter(credit__group=group, statut="VALIDE")
+            .aggregate(s=Sum("montant"))  # ou 'montant_total_rembourse'
+            .get("s") or Decimal("0")
+        )
+        # Et un champ 'montant_principal' ou similaire :
+        total_principal = (
+            CreditRepayment.objects.filter(credit__group=group, statut="VALIDE")
+            .aggregate(s=Sum("montant_principal"))
+            .get("s") or Decimal("0")
+        )
+    except Exception:
+        # ---- OPTION B : via crédits (fallback si vous ne suivez pas principal dans les remboursements)
+        try:
+            from .models import Credit  # adaptez
+            total_pret_plus_interet = (
+                Credit.objects.filter(group=group, statut="REMBOURSE")
+                .aggregate(s=Sum("montant_total"))  # si vous avez un champ 'montant_total' = principal + intérêts
+                .get("s")
+                or Decimal("0")
+            )
+            total_principal = (
+                Credit.objects.filter(group=group, statut="REMBOURSE")
+                .aggregate(s=Sum("montant_pret"))
+                .get("s")
+                or Decimal("0")
+            )
+            total_remboursements = total_pret_plus_interet
+        except Exception:
+            total_remboursements = Decimal("0")
+            total_principal = Decimal("0")
+
+    total_interets = (total_remboursements - total_principal)
+    if total_interets < 0:
+        total_interets = Decimal("0")  # sécurité si données partielles
+
+    # 4) Total pénalités payées
+    total_penalites = Decimal("0")
+    try:
+        from .models import Penalite  # adaptez
+        total_penalites = (
+            Penalite.objects.filter(member__group=group, statut="PAYE")
+            .aggregate(s=Sum("montant"))
+            .get("s") or Decimal("0")
+        )
+    except Exception:
+        pass
+
+    # 5) Nombre total de parts = total_cotisations / montant_base
+    #    (peut être décimal si des cotisations ne tombent pas sur un multiple exact)
+    total_parts = Decimal("0")
+    if montant_base > 0:
+        total_parts = (Decimal(total_cotisations) / montant_base)
+
+    # 6) Montant à répartir = cotisations + intérêts + pénalités
+    montant_global = Decimal(total_cotisations) + Decimal(total_interets) + Decimal(total_penalites)
+
+    # 7) Montant par part
+    montant_par_part = Decimal("0")
+    if total_parts > 0:
+        montant_par_part = (montant_global / total_parts)
+
+    # 8) Parts par membre = (cotisations_membre / montant_base)
+    #    Montant dû par membre = parts_membre * montant_par_part
+    lignes = []
+    membres = GroupMember.objects.filter(group=group).select_related("user")
+    for m in membres:
+        cotisations_membre = (
+            Versement.objects.filter(member=m, statut="VALIDE")
+            .aggregate(s=Sum("montant"))
+            .get("s") or Decimal("0")
+        )
+        parts_membre = Decimal("0")
+        if montant_base > 0:
+            parts_membre = (Decimal(cotisations_membre) / montant_base)
+
+        du_membre = parts_membre * montant_par_part
+
+        lignes.append({
+            "member": m,
+            "nom": getattr(getattr(m, "user", None), "nom", None) or getattr(m, "user_nom", str(m)),
+            "cotise": cotisations_membre,
+            "parts": parts_membre,
+            "du": du_membre.quantize(Decimal("0.01")),
+        })
+
+    # Tri (optionnel) : du montant dû décroissant
+    lignes.sort(key=lambda x: x["du"], reverse=True)
+
+    # Vous pouvez stocker un historique ici si besoin (modèles RepartitionHistorique/RepartitionLigne)
+
+    # On affiche le résultat dans la page détail du groupe
+    context = {
+        "group": group,
+        "montant_base": montant_base,
+        "total_cotisations": total_cotisations,
+        "total_interets": total_interets,
+        "total_penalites": total_penalites,
+        "montant_global": montant_global,
+        "total_parts": total_parts,
+        "montant_par_part": montant_par_part,
+        "repartition_lignes": lignes,
+    }
+    messages.success(request, "La répartition de fin de cycle a été calculée.")
+    return render(request, "epargnecredit/group_detail.html", context)

@@ -56,6 +56,12 @@
         <button type="submit" class="btn btn-outline-danger">♻️ Réinitialiser le cycle</button>
       </form>
 
+      {# ➕ Bouton de partage fin de cycle (calcul de la répartition) #}
+      <form action="{% url 'epargnecredit:share_cycle' group.id %}" method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success">🧮 Partager fin de cycle</button>
+      </form>
+
       <a href="{{ invite_url }}" class="btn btn-primary">➕ Ajouter un membre</a>
     </div>
   {% endif %}
@@ -72,7 +78,6 @@
           <th style="min-width: 220px;">Actions</th>
           <th>Montant versé</th>
           <th>Dernier versement</th>
-
         </tr>
       </thead>
       <tbody>
@@ -90,16 +95,10 @@
             </td>
 
             <td class="d-flex flex-wrap gap-1">
-              {# Bouton Verser TOUJOURS disponible #}
-              <a href="{% url 'epargnecredit:initier_versement' m.id %}"
-                 class="btn btn-sm btn-success flex-fill">💳 Verser</a>
-
-              {# 🔹 Bouton Demande de prêt pour chaque membre #}
-              <a href="{% url 'epargnecredit:demande_pret' m.id %}"
-                 class="btn btn-sm btn-outline-primary flex-fill">💼 Demande de prêt</a>
+              <a href="{% url 'epargnecredit:initier_versement' m.id %}" class="btn btn-sm btn-success flex-fill">💳 Verser</a>
+              <a href="{% url 'epargnecredit:demande_pret' m.id %}" class="btn btn-sm btn-outline-primary flex-fill">💼 Demande de prêt</a>
             </td>
 
-            {# ---- Montant versé + / montant de base + progression ---- #}
             <td>
               <div class="d-flex justify-content-between">
                 <span>{{ m.total_montant|default_if_none:0|floatformat:0|intcomma }} FCFA</span>
@@ -120,12 +119,10 @@
                 -
               {% endif %}
             </td>
-
-
           </tr>
         {% empty %}
           <tr>
-            <td colspan="5" class="text-center text-muted">Aucun membre pour l'instant</td>
+            <td colspan="4" class="text-center text-muted">Aucun membre pour l'instant</td>
           </tr>
         {% endfor %}
       </tbody>
@@ -134,11 +131,84 @@
         <tr class="fw-bold table-light">
           <td colspan="2" class="text-end">Total cotisations</td>
           <td>{{ total_montant|floatformat:0|intcomma }} FCFA</td>
-          <td colspan="2"></td>
+          <td></td> {# ← corrige le colspan pour 4 colonnes #}
         </tr>
       </tfoot>
     </table>
   </div>
+
+  {# ────────────────────────────────────────────────────────────── #}
+  {#    BLOC RÉPARTITION (après clic sur “Partager fin de cycle”)  #}
+  {# ────────────────────────────────────────────────────────────── #}
+  {% if repartition_lignes %}
+  <div class="card mt-4">
+    <div class="card-body">
+      <h4 class="mb-3">Répartition de fin de cycle</h4>
+
+      <div class="row g-3 mb-2">
+        <div class="col-md-3">
+          <small class="text-muted">Valeur d’une part</small>
+          <div><strong>{{ montant_base|floatformat:0|intcomma }} FCFA</strong></div>
+        </div>
+        <div class="col-md-3">
+          <small class="text-muted">Total cotisations</small>
+          <div><strong>{{ total_cotisations|floatformat:0|intcomma }} FCFA</strong></div>
+        </div>
+        <div class="col-md-3">
+          <small class="text-muted">Total intérêts</small>
+          <div><strong>{{ total_interets|floatformat:0|intcomma }} FCFA</strong></div>
+        </div>
+        <div class="col-md-3">
+          <small class="text-muted">Total pénalités</small>
+          <div><strong>{{ total_penalites|floatformat:0|intcomma }} FCFA</strong></div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-3">
+          <small class="text-muted">Montant à répartir</small>
+          <div><strong>{{ montant_global|floatformat:0|intcomma }} FCFA</strong></div>
+        </div>
+        <div class="col-md-3">
+          <small class="text-muted">Total parts</small>
+          <div><strong>{{ total_parts|floatformat:4 }}</strong></div>
+        </div>
+        <div class="col-md-3">
+          <small class="text-muted">Montant par part</small>
+          <div><strong>{{ montant_par_part|floatformat:2|intcomma }} FCFA</strong></div>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Membre</th>
+              <th class="text-end">Cotisé</th>
+              <th class="text-end">Parts</th>
+              <th class="text-end">Montant dû</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for l in repartition_lignes %}
+            <tr>
+              <td>{{ l.nom }}</td>
+              <td class="text-end">{{ l.cotise|floatformat:0|intcomma }} FCFA</td>
+              <td class="text-end">{{ l.parts|floatformat:4 }}</td>
+              <td class="text-end"><strong>{{ l.du|floatformat:0|intcomma }} FCFA</strong></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-muted">Aucune donnée à répartir.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {# Optionnel : bouton pour exporter la répartition #}
+      {# <a href="{% url 'epargnecredit:export_repartition' group.id %}" class="btn btn-outline-secondary btn-sm mt-2">⬇️ Exporter (CSV)</a> #}
+    </div>
+  </div>
+  {% endif %}
 
   {# 🔹 Bloc Admin : Demandes de prêt en attente #}
   {% if user_is_admin and pending_prets %}
@@ -185,4 +255,3 @@
 
 </div>
 {% endblock %}
-

@@ -2,10 +2,16 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv  # Nouveau module
 
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+# Clé OpenAI
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # ou écris la valeur en dur en dev
+
 # Charger les variables d'environnement dès le début
 load_dotenv()
 
-BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ----------------------------------------------------
 # 🔐 SECURITY - Version corrigée
@@ -56,7 +62,7 @@ else:
     SESSION_COOKIE_SECURE = False
     SECURE_SSL_REDIRECT = False
 """
-ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+#ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
 CSRF_TRUSTED_ORIGINS = [
     "https://127.0.0.1:8000",
@@ -98,6 +104,7 @@ INSTALLED_APPS = [
 
     # Apps locales
     'accounts',
+    'assistant_ai',
     'cotisationtontine',
     'epargnecredit',
     'rest_framework',
@@ -217,6 +224,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
 
 
 
