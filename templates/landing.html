@@ -15,10 +15,10 @@
           {% if user.is_authenticated %}
             {% if user.type_adhesion == 1 %}
               <!-- Utilisateur epargnecredit -->
-              <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard Épargne & Crédit</a>
+              <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard Épargne & Crédit</a>
             {% elif user.type_adhesion == 2 %}
               <!-- Utilisateur tontine simple -->
-              <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard Tontine</a>
+              <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard Tontine</a>
             {% else %}
               <!-- Cas générique -->
               <a href="#" class="btn btn-success btn-lg px-4 py-3 fs-5 mb-3">Accéder au Dashboard</a>
@@ -132,9 +132,9 @@
 
           {% if user.is_authenticated %}
             {% if user.type_adhesion == 1 %}
-              <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard Épargne & Crédit</a>
+              <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard Tontine</a>
             {% elif user.type_adhesion == 2 %}
-              <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard Tontine</a>
+              <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard Épargne & Crédit</a>
             {% else %}
               <a href="#" class="btn btn-light btn-lg px-4 py-3 fs-5">Accéder au Dashboard</a>
             {% endif %}

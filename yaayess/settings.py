@@ -135,17 +135,19 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'yaayess.urls'
 WSGI_APPLICATION = 'yaayess.wsgi.application'
 
+# Templates : vérifie bien l’entrée DIRS → "templates/"
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],  # ton dossier templates
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],   # ✅ important pour templates/assistant_ai/...
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.template.context_processors.csrf",  # ✅
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
@@ -226,8 +228,6 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 
-
-
 # ----------------------------------------------------
 # 🔒 SECURITY HEADERS (Production)
 # ----------------------------------------------------
@@ -255,3 +255,14 @@ AUTHENTICATION_BACKENDS = [
 LOGIN_URL = '/accounts/login/'          # redirection pour utilisateurs non connectés
 LOGIN_REDIRECT_URL = '/groups/'         # redirection après login réussi
 
+# Uploads audio (sécu & confort)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024  # 15 Mo
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 Mo
+
+
+# Dev only: servir /media
+if DEBUG:
+    from django.conf.urls.static import static
+    from django.conf import settings as _s
+    urlpatterns = []
+    urlpatterns += static(_s.MEDIA_URL, document_root=_s.MEDIA_ROOT)

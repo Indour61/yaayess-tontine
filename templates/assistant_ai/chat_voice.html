@@ -2,11 +2,11 @@
 {% block title %}Assistant vocal YaayESS{% endblock %}
 
 {% block content %}
-  {% csrf_token %}
-  <div class="container mt-4">
-    <h2 class="mb-3">Assistant YaayESS – Texte & Voix (FR / Wolof)</h2>
-  {% csrf_token %}
-  <meta name="csrf-token" content="{{ csrf_token }}"/>
+<div class="container mt-4">
+  <h2 class="mb-3">Assistant YaayESS – Texte & Voix (FR / Wolof)</h2>
+
+  <!-- Token CSRF injecté côté serveur (fallback si cookie non lisible) -->
+  <input type="hidden" id="csrfmiddlewaretoken" value="{{ csrf_token }}">
 
   <div class="mb-3">
     <label class="form-label">Langue</label>
@@ -16,59 +16,60 @@
     </select>
   </div>
 
+  <!-- Carte: Texte -->
   <div class="card mb-3">
     <div class="card-body">
       <div class="d-flex gap-2">
         <input id="textInput" class="form-control" placeholder="Écris ta question..." />
-        <button id="sendBtn" class="btn btn-primary">Envoyer</button>
+        <button id="sendBtn" class="btn btn-primary" type="button">Envoyer</button>
       </div>
       <div id="textResp" class="mt-3"></div>
-      <audio id="textAudio" class="mt-2" controls></audio>
+      <audio id="textAudio" class="mt-2 d-none" controls></audio>
     </div>
   </div>
 
+  <!-- Carte: Voix -->
   <div class="card">
     <div class="card-body">
       <p><strong>Mode vocal</strong> – clique pour parler, reclique pour arrêter.</p>
       <div class="d-flex gap-2">
-        <button id="recBtn" class="btn btn-success">🎙️ Démarrer</button>
-        <button id="stopBtn" class="btn btn-secondary" disabled>⏹️ Arrêter</button>
+        <button id="recBtn" class="btn btn-success" type="button">🎙️ Démarrer</button>
+        <button id="stopBtn" class="btn btn-secondary" type="button" disabled>⏹️ Arrêter</button>
       </div>
       <div id="voiceTrans" class="mt-3 text-muted"></div>
       <div id="voiceResp" class="mt-2"></div>
-      <audio id="voiceAudio" class="mt-2" controls></audio>
+      <audio id="voiceAudio" class="mt-2 d-none" controls></audio>
     </div>
   </div>
 </div>
 
 <script>
-  // ---- CSRF helpers ----
-  function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
+  // ---------- CSRF ----------
+  function getCsrfToken() {
+    // 1) depuis l'input cachée (OK même si CSRF_COOKIE_HTTPONLY=True)
+    const el = document.getElementById("csrfmiddlewaretoken");
+    if (el && el.value && el.value !== "NOTPROVIDED") return el.value;
+    // 2) fallback cookie (si lisible)
+    const m = document.cookie.match(/(^|;)\s*csrftoken=([^;]+)/);
+    return m ? m.pop() : "";
   }
-  let csrftoken = getCookie('csrftoken');
-  if (!csrftoken) {
-    // fallback: lire la meta si le cookie n’est pas encore là
-    const m = document.querySelector('meta[name="csrf-token"]');
-    if (m) csrftoken = m.getAttribute('content');
-  }
+  let csrftoken = getCsrfToken();
 
   const langSel = document.getElementById("lang");
 
-  // ---- Texte -> IA ----
+  // ---------- Texte -> IA ----------
+  const inputEl = document.getElementById("textInput");
   const sendBtn = document.getElementById("sendBtn");
-  sendBtn.addEventListener("click", async () => {
-    const input = document.getElementById("textInput");
-    const text = input.value.trim();
-    const lang = langSel.value;
-    if (!text) return;
+  const textResp = document.getElementById("textResp");
+  const textAudio = document.getElementById("textAudio");
 
-    const respEl = document.getElementById("textResp");
-    const audioEl = document.getElementById("textAudio");
-    respEl.textContent = "⏳ Génération en cours…";
-    audioEl.src = "";
+  async function sendText() {
+    const text = (inputEl.value || "").trim();
+    if (!text || sendBtn.disabled) return;
+
+    textResp.textContent = "⏳ Génération en cours…";
+    textAudio.src = "";
+    textAudio.classList.add("d-none");
     sendBtn.disabled = true;
 
     try {
@@ -76,40 +77,63 @@
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-CSRFToken": csrftoken || "",
+          "X-CSRFToken": csrftoken
         },
-        body: JSON.stringify({message: text, lang})
+        body: JSON.stringify({ message: text, lang: langSel.value }),
+        credentials: "include",
       });
 
-      const data = await r.json();
-      if (data.ok) {
-        respEl.textContent = data.text;
+      let data = {};
+      try { data = await r.json(); } catch (_) {}
+
+      if (r.ok && data.ok) {
+        textResp.textContent = data.text || "";
         if (data.audio) {
-          audioEl.src = data.audio;
-          audioEl.play().catch(()=>{});
+          textAudio.src = data.audio;
+          textAudio.classList.remove("d-none");
+          textAudio.play().catch(()=>{});
         }
+      } else if (r.status === 403) {
+        textResp.textContent = "⚠️ 403 CSRF : recharge la page /ai/ui/ pour obtenir le cookie.";
       } else {
-        respEl.textContent = "⚠️ Erreur: " + (data.error || "inconnue");
+        const msg = (data && data.error) ? data.error : `HTTP ${r.status}`;
+        textResp.textContent = "⚠️ Erreur: " + msg;
       }
     } catch (e) {
-      respEl.textContent = "⚠️ Réseau ou serveur indisponible.";
+      textResp.textContent = "⚠️ Réseau ou serveur indisponible.";
     } finally {
       sendBtn.disabled = false;
     }
+  }
+
+  sendBtn.addEventListener("click", sendText);
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      sendText();
+    }
   });
 
-  // ---- Enregistrement audio ----
-  const recBtn = document.getElementById("recBtn");
+  // ---------- Enregistrement audio ----------
+  const recBtn  = document.getElementById("recBtn");
   const stopBtn = document.getElementById("stopBtn");
-  let mediaRecorder;
-  let chunks = [];
+  const voiceTrans = document.getElementById("voiceTrans");
+  const voiceResp  = document.getElementById("voiceResp");
+  const voiceAudio = document.getElementById("voiceAudio");
 
-  async function getSupportedMime() {
-    // Fallback cross-browser (Safari n’aime pas audio/webm)
+  let mediaRecorder = null;
+  let chunks = [];
+  let stopTimer = null;
+
+  function safeStopStream(stream) {
+    try { stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+  }
+
+  async function pickMime() {
     const candidates = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", ""];
     for (const type of candidates) {
-      if (!type) return ""; // laisser le browser choisir
-      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) {
+      if (!type) return ""; // laisser le navigateur choisir
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) {
         return type;
       }
     }
@@ -117,28 +141,41 @@
   }
 
   recBtn.addEventListener("click", async () => {
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      alert("Enregistrement non supporté par ce navigateur.");
+      return;
+    }
+    if (mediaRecorder && mediaRecorder.state !== "inactive") return;
+
     try {
       chunks = [];
-      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-      const mimeType = await getSupportedMime();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = await pickMime();
       mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
 
-      mediaRecorder.ondataavailable = e => {
-        if (e.data && e.data.size) chunks.push(e.data);
-      };
+      mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
       mediaRecorder.onstop = async () => {
         const type = mimeType || "audio/webm";
         const blob = new Blob(chunks, { type });
+        chunks = [];
         await sendVoice(blob);
-        // stop tracks
-        stream.getTracks().forEach(t => t.stop());
+        safeStopStream(stream);
       };
 
       mediaRecorder.start();
+      // Sécurité: stop auto après 60s max
+      stopTimer = setTimeout(() => {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+      }, 60000);
+
       recBtn.disabled = true;
       stopBtn.disabled = false;
+      voiceTrans.textContent = "🎙️ Enregistrement en cours…";
+      voiceResp.textContent = "";
+      voiceAudio.classList.add("d-none");
+      voiceAudio.src = "";
     } catch (e) {
-      alert("Impossible d'accéder au micro : " + e.message);
+      alert("Impossible d'accéder au micro : " + (e?.message || e));
     }
   });
 
@@ -146,52 +183,61 @@
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
       mediaRecorder.stop();
     }
+    if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
     recBtn.disabled = false;
     stopBtn.disabled = true;
   });
 
   async function sendVoice(blob) {
-    const lang = langSel.value;
-    const transEl = document.getElementById("voiceTrans");
-    const respEl = document.getElementById("voiceResp");
-    const audioEl = document.getElementById("voiceAudio");
-    transEl.textContent = "⏳ Transcription en cours…";
-    respEl.textContent = "";
-    audioEl.src = "";
-
     const fd = new FormData();
-    fd.append("lang", lang);
-    // extension indicative (backend accepte plusieurs types)
+    fd.append("lang", langSel.value);
     const filename = blob.type.includes("ogg") ? "input.ogg"
-                    : blob.type.includes("mpeg") ? "input.mp3"
-                    : blob.type.includes("mp4") ? "input.m4a"
-                    : "input.webm";
+                  : blob.type.includes("mpeg") ? "input.mp3"
+                  : blob.type.includes("mp4") ? "input.m4a"
+                  : "input.webm";
     fd.append("audio", blob, filename);
+
+    voiceTrans.textContent = "⏳ Transcription en cours…";
+    voiceResp.textContent = "";
 
     try {
       const r = await fetch("{% url 'assistant_ai:chat_voice' %}", {
         method: "POST",
-        headers: { "X-CSRFToken": csrftoken || "" },
-        body: fd
+        headers: { "X-CSRFToken": csrftoken },
+        body: fd,
+        credentials: "include",
       });
 
-      const data = await r.json();
-      if (data.ok) {
-        transEl.textContent = data.user_text ? ("🗣️ Tu as dit : " + data.user_text) : "(Transcription vide)";
-        respEl.textContent = data.text || "";
+      let data = {};
+      try { data = await r.json(); } catch (_) {}
+
+      if (r.ok && data.ok) {
+        voiceTrans.textContent = data.user_text ? ("🗣️ Tu as dit : " + data.user_text) : "(Transcription vide)";
+        voiceResp.textContent  = data.text || "";
         if (data.audio) {
-          audioEl.src = data.audio;
-          audioEl.play().catch(()=>{});
+          voiceAudio.src = data.audio;
+          voiceAudio.classList.remove("d-none");
+          voiceAudio.play().catch(()=>{});
         }
+      } else if (r.status === 403) {
+        voiceTrans.textContent = "";
+        voiceResp.textContent  = "⚠️ 403 CSRF : recharge la page /ai/ui/ pour obtenir le cookie.";
       } else {
-        transEl.textContent = "";
-        respEl.textContent = "⚠️ Erreur: " + (data.error || "inconnue)";
+        const msg = (data && data.error) ? data.error : `HTTP ${r.status}`;
+        voiceTrans.textContent = "";
+        voiceResp.textContent  = "⚠️ Erreur: " + msg;
       }
     } catch (e) {
-      transEl.textContent = "";
-      respEl.textContent = "⚠️ Réseau ou serveur indisponible.";
+      voiceTrans.textContent = "";
+      voiceResp.textContent  = "⚠️ Réseau ou serveur indisponible.";
+    } finally {
+      recBtn.disabled = false;
+      stopBtn.disabled = true;
+      if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        try { mediaRecorder.stop(); } catch(_) {}
+      }
     }
   }
 </script>
 {% endblock %}
-
