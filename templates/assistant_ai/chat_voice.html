@@ -9,36 +9,41 @@
   <input type="hidden" id="csrfmiddlewaretoken" value="{{ csrf_token }}">
 
   <div class="mb-3">
-    <label class="form-label">Langue</label>
-    <select id="lang" class="form-select" style="max-width:240px">
+    <label class="form-label" for="lang">Langue</label>
+    <select id="lang" class="form-select" style="max-width:240px" aria-label="Choisir la langue">
       <option value="fr">Français</option>
       <option value="wo">Wolof</option>
     </select>
+    <div class="form-text">La sélection est mémorisée dans ce navigateur.</div>
   </div>
 
   <!-- Carte: Texte -->
   <div class="card mb-3">
     <div class="card-body">
       <div class="d-flex gap-2">
-        <input id="textInput" class="form-control" placeholder="Écris ta question..." />
+        <input id="textInput" class="form-control" placeholder="Écris ta question…" aria-label="Saisir une question pour l’assistant" />
         <button id="sendBtn" class="btn btn-primary" type="button">Envoyer</button>
       </div>
-      <div id="textResp" class="mt-3"></div>
-      <audio id="textAudio" class="mt-2 d-none" controls></audio>
+      <div class="mt-3">
+        <div id="textResp" class="small" aria-live="polite"></div>
+        <audio id="textAudio" class="mt-2 d-none" controls></audio>
+      </div>
     </div>
   </div>
 
   <!-- Carte: Voix -->
   <div class="card">
     <div class="card-body">
-      <p><strong>Mode vocal</strong> – clique pour parler, reclique pour arrêter.</p>
+      <p class="mb-2"><strong>Mode vocal</strong> – clique pour parler, reclique pour arrêter.</p>
       <div class="d-flex gap-2">
         <button id="recBtn" class="btn btn-success" type="button">🎙️ Démarrer</button>
         <button id="stopBtn" class="btn btn-secondary" type="button" disabled>⏹️ Arrêter</button>
       </div>
-      <div id="voiceTrans" class="mt-3 text-muted"></div>
-      <div id="voiceResp" class="mt-2"></div>
-      <audio id="voiceAudio" class="mt-2 d-none" controls></audio>
+      <div class="mt-3">
+        <div id="voiceTrans" class="text-muted small" aria-live="polite"></div>
+        <div id="voiceResp" class="small mt-2" aria-live="polite"></div>
+        <audio id="voiceAudio" class="mt-2 d-none" controls></audio>
+      </div>
     </div>
   </div>
 </div>
@@ -46,22 +51,40 @@
 <script>
   // ---------- CSRF ----------
   function getCsrfToken() {
-    // 1) depuis l'input cachée (OK même si CSRF_COOKIE_HTTPONLY=True)
     const el = document.getElementById("csrfmiddlewaretoken");
     if (el && el.value && el.value !== "NOTPROVIDED") return el.value;
-    // 2) fallback cookie (si lisible)
     const m = document.cookie.match(/(^|;)\s*csrftoken=([^;]+)/);
-    return m ? m.pop() : "";
+    return m ? decodeURIComponent(m.pop()) : "";
   }
   let csrftoken = getCsrfToken();
 
+  // ---------- Langue (persistance locale) ----------
   const langSel = document.getElementById("lang");
+  try {
+    const savedLang = localStorage.getItem("yaayess_ai_lang");
+    if (savedLang) langSel.value = savedLang;
+  } catch(_) {}
+  langSel.addEventListener("change", () => {
+    try { localStorage.setItem("yaayess_ai_lang", langSel.value); } catch(_) {}
+  });
+
+  // ---------- Utilitaires d'affichage ----------
+  // ✨ strip * : enlève tous les astérisques (Markdown ** / *)
+  function stripStars(text) {
+    return (text || "").replace(/\*/g, "").replace(/\s{2,}/g, " ").trim();
+  }
 
   // ---------- Texte -> IA ----------
   const inputEl = document.getElementById("textInput");
   const sendBtn = document.getElementById("sendBtn");
   const textResp = document.getElementById("textResp");
   const textAudio = document.getElementById("textAudio");
+
+  function setPending(btn, pending) {
+    if (!btn) return;
+    btn.disabled = !!pending;
+    btn.classList.toggle("disabled", !!pending);
+  }
 
   async function sendText() {
     const text = (inputEl.value || "").trim();
@@ -70,7 +93,7 @@
     textResp.textContent = "⏳ Génération en cours…";
     textAudio.src = "";
     textAudio.classList.add("d-none");
-    sendBtn.disabled = true;
+    setPending(sendBtn, true);
 
     try {
       const r = await fetch("{% url 'assistant_ai:chat_text' %}", {
@@ -81,20 +104,22 @@
         },
         body: JSON.stringify({ message: text, lang: langSel.value }),
         credentials: "include",
+        cache: "no-store"
       });
 
       let data = {};
       try { data = await r.json(); } catch (_) {}
 
       if (r.ok && data.ok) {
-        textResp.textContent = data.text || "";
+        // ✨ strip *
+        textResp.textContent = stripStars(data.text || "");
         if (data.audio) {
           textAudio.src = data.audio;
           textAudio.classList.remove("d-none");
           textAudio.play().catch(()=>{});
         }
       } else if (r.status === 403) {
-        textResp.textContent = "⚠️ 403 CSRF : recharge la page /ai/ui/ pour obtenir le cookie.";
+        textResp.textContent = "⚠️ 403 CSRF : recharge la page /ai/ui/ pour obtenir un nouveau cookie/token.";
       } else {
         const msg = (data && data.error) ? data.error : `HTTP ${r.status}`;
         textResp.textContent = "⚠️ Erreur: " + msg;
@@ -102,7 +127,7 @@
     } catch (e) {
       textResp.textContent = "⚠️ Réseau ou serveur indisponible.";
     } finally {
-      sendBtn.disabled = false;
+      setPending(sendBtn, false);
     }
   }
 
@@ -165,7 +190,9 @@
       mediaRecorder.start();
       // Sécurité: stop auto après 60s max
       stopTimer = setTimeout(() => {
-        if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+        try {
+          if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+        } catch(_) {}
       }, 60000);
 
       recBtn.disabled = true;
@@ -180,9 +207,11 @@
   });
 
   stopBtn.addEventListener("click", () => {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
+    try {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+    } catch(_) {}
     if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
     recBtn.disabled = false;
     stopBtn.disabled = true;
@@ -194,6 +223,7 @@
     const filename = blob.type.includes("ogg") ? "input.ogg"
                   : blob.type.includes("mpeg") ? "input.mp3"
                   : blob.type.includes("mp4") ? "input.m4a"
+                  : blob.type.includes("wav") ? "input.wav"
                   : "input.webm";
     fd.append("audio", blob, filename);
 
@@ -206,6 +236,7 @@
         headers: { "X-CSRFToken": csrftoken },
         body: fd,
         credentials: "include",
+        cache: "no-store"
       });
 
       let data = {};
@@ -213,7 +244,8 @@
 
       if (r.ok && data.ok) {
         voiceTrans.textContent = data.user_text ? ("🗣️ Tu as dit : " + data.user_text) : "(Transcription vide)";
-        voiceResp.textContent  = data.text || "";
+        // ✨ strip *
+        voiceResp.textContent  = stripStars(data.text || "");
         if (data.audio) {
           voiceAudio.src = data.audio;
           voiceAudio.classList.remove("d-none");
@@ -221,7 +253,7 @@
         }
       } else if (r.status === 403) {
         voiceTrans.textContent = "";
-        voiceResp.textContent  = "⚠️ 403 CSRF : recharge la page /ai/ui/ pour obtenir le cookie.";
+        voiceResp.textContent  = "⚠️ 403 CSRF : recharge la page /ai/ui/ pour obtenir un nouveau cookie/token.";
       } else {
         const msg = (data && data.error) ? data.error : `HTTP ${r.status}`;
         voiceTrans.textContent = "";
@@ -234,10 +266,14 @@
       recBtn.disabled = false;
       stopBtn.disabled = true;
       if (stopTimer) { clearTimeout(stopTimer); stopTimer = null; }
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        try { mediaRecorder.stop(); } catch(_) {}
-      }
+      try {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+      } catch(_) {}
     }
   }
+
+  // Astuce: focus sur le champ texte au chargement
+  setTimeout(() => { try { inputEl.focus(); } catch(_) {} }, 50);
 </script>
 {% endblock %}
+

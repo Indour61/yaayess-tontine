@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Politique de confidentialité – YaayESS{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <h1 class="mb-3">Politique de confidentialité</h1>
+  <p class="text-muted">
+    Dernière mise à jour :
+    {% if DATE_DU_JOUR %}{{ DATE_DU_JOUR }}{% else %}{% now "Y-m-d" %}{% endif %}
+  </p>
+
+  <nav class="mb-4">
+    <ul>
+      <li><a href="#responsable">1) Responsable du traitement</a></li>
+      <li><a href="#donnees">2) Données que nous collectons</a></li>
+      <li><a href="#finalites">3) Finalités & bases légales</a></li>
+      <li><a href="#destinataires">4) Destinataires & sous-traitants</a></li>
+      <li><a href="#transferts">5) Transferts internationaux</a></li>
+      <li><a href="#durees">6) Durées de conservation</a></li>
+      <li><a href="#droits">7) Vos droits</a></li>
+      <li><a href="#securite">8) Sécurité</a></li>
+      <li><a href="#mineurs">9) Mineurs</a></li>
+      <li><a href="#cookies">10) Cookies & traceurs</a></li>
+      <li><a href="#modifs">11) Modifications</a></li>
+      <li><a href="#contact">12) Contact</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="responsable">1) Responsable du traitement</h2>
+  <p>
+    {{ NOM_ENTITÉ_LEGALE }} ({{ FORME_JURIDIQUE }}), {{ ADRESSE_COMPLÈTE }}, email : {{ EMAIL_CONTACT }}.
+  </p>
+
+  <h2 id="donnees">2) Données que nous collectons</h2>
+  <ul>
+    <li><strong>Profil</strong> : nom, prénom, email, téléphone, langue, pays.</li>
+    <li><strong>Compte & groupes</strong> : membres, rôles, paramètres, historique d’actions.</li>
+    <li><strong>Transactions</strong> : versements/encaissements, montants, dates, références.</li>
+    <li><strong>Support & sécurité</strong> : logs techniques, adresses IP, user-agent, événements.</li>
+    <li><strong>Voix & IA</strong> : fichiers audio, transcriptions, prompts/réponses nécessaires au service.</li>
+  </ul>
+
+  <h2 id="finalites">3) Finalités & bases légales</h2>
+  <ul>
+    <li><strong>Fournir le service</strong> (exécution d’un contrat) : création de compte, gestion de groupes, paiements.</li>
+    <li><strong>Amélioration & support</strong> (intérêt légitime) : statistiques d’usage, résolution d’incidents, lutte anti-fraude.</li>
+    <li><strong>Obligations légales</strong> : facturation, conservation comptable, réponses aux autorités.</li>
+    <li><strong>Marketing</strong> (consentement) : newsletters, notifications (opt-in, retrait possible à tout moment).</li>
+  </ul>
+
+  <h2 id="destinataires">4) Destinataires & sous-traitants</h2>
+  <p>Nous partageons des données avec des prestataires qui nous aident à fournir le service :</p>
+  <ul>
+    <li><strong>Paiement</strong> : {{ PRESTATAIRE_PAIEMENT }} (ex. PayDunya).</li>
+    <li><strong>IA / Transcription / TTS</strong> : {{ PRESTATAIRE_IA }} (ex. OpenAI).</li>
+    <li><strong>Hébergement & emailing</strong> : {{ HÉBERGEUR }}, {{ EMAILER }}.</li>
+  </ul>
+  <p>Ces prestataires agissent <em>pour notre compte</em> via des accords de sous-traitance et mesures de sécurité appropriées.</p>
+
+  <h2 id="transferts">5) Transferts internationaux</h2>
+  <p>
+    Si des données sont transférées hors de {{ PAYS_RÉSIDENCE_DONNÉES }}, nous mettons en place des garanties appropriées
+    (clauses contractuelles types, évaluation des risques, etc.).
+  </p>
+
+  <h2 id="durees">6) Durées de conservation</h2>
+  <ul>
+    <li><strong>Compte & profil</strong> : durée du compte, puis {{ DELAI_SUPPRESSION_COMPTE }} max après fermeture.</li>
+    <li><strong>Transactions & facturation</strong> : {{ DUREE_FACTURATION }} (ex. 5 ans) selon la loi.</li>
+    <li><strong>Logs de sécurité</strong> : {{ DUREE_LOGS }} (ex. 12 mois), sauf incident nécessitant une conservation plus longue.</li>
+    <li><strong>Données IA</strong> : pendant {{ DUREE_DONNEES_IA }} pour la qualité du service, sauf opposition lorsque possible.</li>
+  </ul>
+
+  <h2 id="droits">7) Vos droits</h2>
+  <p>
+    Selon la loi applicable, vous disposez des droits d’accès, rectification, effacement, limitation, portabilité,
+    opposition et retrait du consentement. Pour les exercer : {{ EMAIL_DPO }}. Autorité compétente : {{ AUTORITÉ_DONNÉES }}.
+  </p>
+
+  <h2 id="securite">8) Sécurité</h2>
+  <p>
+    Mesures techniques et organisationnelles raisonnables (chiffrement en transit, contrôle d’accès, sauvegardes, journalisation).
+    Aucun système n’est infaillible.
+  </p>
+
+  <h2 id="mineurs">9) Mineurs</h2>
+  <p>Le service n’est pas destiné aux moins de {{ AGE_MINIMUM }} ans. Contactez-nous si vous pensez qu’un mineur a fourni des données.</p>
+
+  <h2 id="cookies">10) Cookies & traceurs</h2>
+  <p>Voir la <a href="{% url 'legal:cookies' %}">Politique cookies</a>. Les préférences peuvent être gérées via le bandeau de consentement.</p>
+
+  <h2 id="modifs">11) Modifications</h2>
+  <p>Nous pouvons mettre à jour cette politique. La date « Dernière mise à jour » sera ajustée et, si nécessaire, une notification vous sera adressée.</p>
+
+  <h2 id="contact">12) Contact</h2>
+  <p>
+    Délégué à la protection des données (DPO) : {{ NOM_DPO }} — {{ EMAIL_DPO }}<br>
+    Contact général : {{ EMAIL_CONTACT }} / {{ TELEPHONE }}
+  </p>
+</div>
+{% endblock %}

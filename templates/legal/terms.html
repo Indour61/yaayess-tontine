@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Conditions d’utilisation – YaayESS{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <h1 class="mb-3">Conditions d’utilisation (CGU)</h1>
+  <p class="text-muted">
+    Dernière mise à jour :
+    {% if DATE_DU_JOUR %}{{ DATE_DU_JOUR }}{% else %}{% now "Y-m-d" %}{% endif %}
+  </p>
+
+  <div class="alert alert-warning">
+    ⚠️ <strong>Modèle juridique</strong> : document à adapter et à faire valider par un conseil juridique local.
+  </div>
+
+  <nav class="mb-4">
+    <ul>
+      <li><a href="#qui">1) Qui sommes-nous ?</a></li>
+      <li><a href="#acceptation">2) Acceptation</a></li>
+      <li><a href="#modifs">3) Modifications</a></li>
+      <li><a href="#eligibilite">4) Éligibilité</a></li>
+      <li><a href="#compte">5) Compte & sécurité</a></li>
+      <li><a href="#features">6) Description des fonctionnalités</a></li>
+      <li><a href="#role">7) Rôle de YaayESS (décharge)</a></li>
+      <li><a href="#paiements">8) Paiements, frais et remboursements</a></li>
+      <li><a href="#regles">9) Règles d’utilisation</a></li>
+      <li><a href="#contenus">10) Contenus utilisateur</a></li>
+      <li><a href="#pi">11) Propriété intellectuelle</a></li>
+      <li><a href="#dispo">12) Disponibilité & maintenance</a></li>
+      <li><a href="#responsabilite">13) Garanties & responsabilité</a></li>
+      <li><a href="#resiliation">14) Suspension / résiliation</a></li>
+      <li><a href="#donnees">15) Données personnelles</a></li>
+      <li><a href="#droit">16) Droit applicable & litiges</a></li>
+      <li><a href="#contact">17) Contact</a></li>
+    </ul>
+  </nav>
+
+  <h2 id="qui">1) Qui sommes-nous ?</h2>
+  <p>
+    <strong>Éditeur / Responsable :</strong> {{ NOM_ENTITÉ_LEGALE }} ({{ FORME_JURIDIQUE }}),
+    siège social : {{ ADRESSE_COMPLÈTE }}, R.C. {{ NUMERO_RC }} / NINEA {{ NINEA }},
+    email : {{ EMAIL_CONTACT }}, téléphone : {{ TELEPHONE }}.
+  </p>
+  <p>
+    <strong>Plateforme :</strong> « YaayESS » (web & mobile), outils de gestion d’épargne,
+    de crédit communautaire et de tontines, avec un assistant IA.
+  </p>
+
+  <h2 id="acceptation">2) Acceptation des CGU</h2>
+  <p>
+    En créant un compte ou en utilisant YaayESS, vous acceptez ces CGU.
+    Si vous n’êtes pas d’accord, n’utilisez pas la plateforme.
+  </p>
+
+  <h2 id="modifs">3) Modifications</h2>
+  <p>
+    Nous pouvons modifier les CGU à tout moment. En cas de changement substantiel,
+    nous tenterons de vous en informer (email, bannière). La poursuite d’utilisation vaut acceptation.
+  </p>
+
+  <h2 id="eligibilite">4) Éligibilité</h2>
+  <p>
+    Vous déclarez avoir l’âge légal ({{ AGE_MINIMUM }} ans minimum) et la capacité juridique.
+    Vous utilisez YaayESS à titre personnel ou au nom d’un groupe/association dont vous avez l’autorité.
+  </p>
+
+  <h2 id="compte">5) Compte & sécurité</h2>
+  <ul>
+    <li><strong>Informations exactes</strong> : fournissez des informations exactes et tenez-les à jour.</li>
+    <li><strong>Confidentialité</strong> : gardez vos identifiants secrets. Vous êtes responsable des activités de votre compte.</li>
+    <li><strong>Sécurité</strong> : activez les protections recommandées. Signalez tout accès suspect à {{ EMAIL_SECURITE }}.</li>
+    <li><strong>Clôture</strong> : vous pouvez demander la suppression (voir <a href="{% url 'legal:privacy' %}">Politique de confidentialité</a>).
+      Nous pouvons suspendre/fermer un compte en cas de violation.</li>
+  </ul>
+
+  <h2 id="features">6) Description des fonctionnalités</h2>
+  <ol>
+    <li><strong>Épargne & Crédit</strong> : groupes, membres, versements, demandes/validations de crédits, suivi des remboursements.</li>
+    <li><strong>Cotisation Tontine</strong> : tours, tirage au sort, historiques, paiement du gagnant, rappels.</li>
+    <li><strong>Paiements</strong> : intégration avec prestataires tiers (ex. PayDunya).</li>
+    <li><strong>Assistant IA</strong> : réponses automatisées, transcription vocale et TTS via prestataires (ex. OpenAI).</li>
+    <li><strong>Tableaux de bord</strong> : filtres, exports, alertes de retard, notifications (WhatsApp/SMS selon la loi).</li>
+  </ol>
+
+  <h2 id="role">7) Rôle de YaayESS (décharge)</h2>
+  <p>
+    YaayESS <strong>n’est pas une banque</strong> ni un établissement de crédit.
+    La plateforme fournit des <strong>outils</strong>; les groupes restent responsables de leurs décisions
+    (montants, tours de tontine, octroi/recouvrement de crédits, etc.).
+  </p>
+
+  <h2 id="paiements">8) Paiements, frais et remboursements</h2>
+  <ul>
+    <li>Paiements traités par des <strong>prestataires tiers</strong> (ex. PayDunya) : leurs conditions s’appliquent.</li>
+    <li>Fonctionnalités éventuellement <strong>payantes</strong> ; tarifs affichés avant paiement.</li>
+    <li>En cas de litige/rétrofacturation, YaayESS peut suspendre les fonds ou l’accès le temps d’enquête.</li>
+    <li>Monnaie par défaut : <strong>FCFA</strong> (sauf mention contraire).</li>
+  </ul>
+
+  <h2 id="regles">9) Règles d’utilisation</h2>
+  <p>Il est interdit de :</p>
+  <ul>
+    <li>utiliser la plateforme à des fins illégales, frauduleuses ou de blanchiment ;</li>
+    <li>harceler, diffamer, usurper l’identité d’autrui ;</li>
+    <li>manipuler les tours de tontine, soumettre de fausses preuves de paiement ;</li>
+    <li>perturber le service (spam, abus d’API, scraping massif, reverse engineering non autorisé) ;</li>
+    <li>publier des contenus illicites ou portant atteinte aux droits de tiers.</li>
+  </ul>
+
+  <h2 id="contenus">10) Contenus utilisateur</h2>
+  <p>
+    Vous conservez vos droits. Vous nous accordez une <strong>licence non-exclusive</strong>, mondiale, gratuite,
+    pour héberger, traiter et afficher ces contenus uniquement afin d’opérer la plateforme. Vous garantissez disposer des droits nécessaires.
+  </p>
+
+  <h2 id="pi">11) Propriété intellectuelle de YaayESS</h2>
+  <p>
+    La plateforme, logos, interfaces, bases de données et codes restent la propriété de {{ NOM_ENTITÉ_LEGALE }} ou de ses concédants.
+    Toute reproduction non autorisée est interdite.
+  </p>
+
+  <h2 id="dispo">12) Disponibilité & maintenance</h2>
+  <p>
+    Nous fournissons des efforts raisonnables pour assurer la disponibilité. Des interruptions (maintenance, incidents) peuvent survenir.
+    Aucune garantie d’absence d’erreurs.
+  </p>
+
+  <h2 id="responsabilite">13) Garanties & responsabilité</h2>
+  <p>
+    Service fourni « en l’état ». Dans les limites permises, YaayESS décline les garanties implicites et
+    n’est pas responsable des pertes indirectes ni du non-respect des engagements entre membres.
+    Responsabilité cumulée limitée au plus élevé entre (i) les frais payés sur les 12 derniers mois et (ii) {{ PLAFOND_RESPONSABILITÉ_FCFA }} FCFA.
+  </p>
+
+  <h2 id="resiliation">14) Suspension / résiliation</h2>
+  <p>
+    En cas de non-respect des CGU ou de risque avéré (fraude, sécurité), nous pouvons suspendre ou résilier l’accès.
+    Vous pouvez cesser d’utiliser YaayESS à tout moment.
+  </p>
+
+  <h2 id="donnees">15) Données personnelles</h2>
+  <p>
+    Voir notre <a href="{% url 'legal:privacy' %}">Politique de confidentialité</a>.
+  </p>
+
+  <h2 id="droit">16) Droit applicable & règlement des litiges</h2>
+  <ul>
+    <li><strong>Droit applicable</strong> : {{ DROIT_APPLICABLE }} (ex. droit du Sénégal).</li>
+    <li><strong>Compétence</strong> : tribunaux de {{ JURIDICTION }}, sauf dispositions impératives.</li>
+    <li><strong>Médiation</strong> : médiation amiable possible avant action judiciaire.</li>
+  </ul>
+
+  <h2 id="contact">17) Contact</h2>
+  <p>Questions : {{ EMAIL_CONTACT }} / {{ TELEPHONE }}.</p>
+</div>
+{% endblock %}

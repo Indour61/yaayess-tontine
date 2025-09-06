@@ -107,6 +107,7 @@ INSTALLED_APPS = [
     'assistant_ai',
     'cotisationtontine',
     'epargnecredit',
+    'legal',
     'rest_framework',
     'widget_tweaks',
 

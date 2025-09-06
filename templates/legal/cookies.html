@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Politique cookies – YaayESS{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <h1 class="mb-3">Politique cookies</h1>
+  <p class="text-muted">
+    Dernière mise à jour :
+    {% if DATE_DU_JOUR %}{{ DATE_DU_JOUR }}{% else %}{% now "Y-m-d" %}{% endif %}
+  </p>
+
+  <p>
+    Cette page décrit les types de cookies/traceurs utilisés par YaayESS, leurs finalités, et vos choix de consentement.
+  </p>
+
+  <h2 id="types">1) Types de cookies</h2>
+  <ul>
+    <li><strong>Cookies strictement nécessaires</strong> (obligatoires) : authentification, sécurité, prévention de fraude, maintien de session.</li>
+    <li><strong>Mesure d’audience</strong> (consentement) : comprendre l’usage pour améliorer le service (statistiques agrégées).</li>
+    <li><strong>Fonctionnels</strong> (consentement) : mémoriser la langue, les préférences d’affichage, les filtres.</li>
+    <li><strong>Marketing</strong> (consentement) : notifications, campagnes, reciblage le cas échéant.</li>
+  </ul>
+
+  <h2 id="gestion">2) Gestion du consentement</h2>
+  <p>
+    À votre première visite, un bandeau permet d’accepter, refuser ou personnaliser vos choix.
+    Vous pouvez modifier vos préférences à tout moment depuis la page
+    <a href="{{ URL_PREFS_COOKIES|default:'#' }}">Préférences cookies</a> (ou via le bandeau si ré-affiché).
+  </p>
+
+  <h2 id="durees">3) Durées de vie</h2>
+  <p>
+    La durée varie selon le cookie (session ou persistant). Les durées usuelles vont de la fin de session à 13 mois maximum pour la mesure d’audience, conformément aux usages locaux.
+  </p>
+
+  <h2 id="tiers">4) Cookies de tiers</h2>
+  <p>
+    Certains cookies peuvent être déposés par des prestataires (ex. {{ PRESTATAIRE_PAIEMENT }}, {{ EMAILER }}, outils d’analyse). Leur politique s’applique également.
+  </p>
+
+  <h2 id="plus">5) En savoir plus</h2>
+  <ul>
+    <li>Voir nos <a href="{% url 'legal:terms' %}">Conditions d’utilisation</a></li>
+    <li>Voir notre <a href="{% url 'legal:privacy' %}">Politique de confidentialité</a></li>
+    <li>Contact DPO : {{ EMAIL_DPO }}</li>
+  </ul>
+
+  <hr>
+  <h3>Exemple de bandeau (intégration rapide)</h3>
+  <p class="text-muted">À placer dans votre footer/layout :</p>
+  <pre><code>&lt;div id="cookie-banner" class="alert alert-light" style="display:none"&gt;
+  Nous utilisons des cookies pour faire fonctionner YaayESS et améliorer votre expérience.
+  &lt;button class="btn btn-sm btn-primary" id="cookie-accept"&gt;Tout accepter&lt;/button&gt;
+  &lt;button class="btn btn-sm btn-outline-secondary" id="cookie-reject"&gt;Tout refuser&lt;/button&gt;
+  &lt;a class="btn btn-sm btn-link" href="{% url 'legal:cookies' %}"&gt;Personnaliser&lt;/a&gt;
+&lt;/div&gt;
+&lt;script&gt;
+(function(){
+  if (!localStorage.getItem("cookie-consent")) {
+    document.getElementById("cookie-banner").style.display = "block";
+  }
+  document.getElementById("cookie-accept").onclick = function(){
+    localStorage.setItem("cookie-consent","all"); location.reload();
+  };
+  document.getElementById("cookie-reject").onclick = function(){
+    localStorage.setItem("cookie-consent","strict"); location.reload();
+  };
+})();
+&lt;/script&gt;</code></pre>
+</div>
+{% endblock %}

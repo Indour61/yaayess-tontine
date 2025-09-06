@@ -3,6 +3,7 @@ from django.contrib import admin
 from cotisationtontine.views import landing_view
 from django.conf import settings
 from django.conf.urls.static import static
+from django.urls import include, path
 
 urlpatterns = [
     path('', landing_view, name='landing'),
@@ -19,7 +20,12 @@ urlpatterns = [
 
     # Assistant IA
     path('ai/', include(('assistant_ai.urls', 'assistant_ai'), namespace='assistant_ai')),
+
+
+    path("legal/", include(("assistant_ai.legal_urls", "legal"), namespace="legal")),
+
 ]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

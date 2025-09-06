@@ -121,7 +121,7 @@
 
   <footer class="bg-dark text-white py-4 mt-auto">
     <div class="container">
-      <div class="row">
+        <div class="row">
         <div class="col-md-6 mb-3 mb-md-0">
           <h5 class="fw-bold">YaayESS</h5>
           <p class="mb-0">Plateforme de gestion de tontines et d'épargne collective</p>
@@ -129,7 +129,11 @@
         <div class="col-md-3 mb-3 mb-md-0">
           <h6 class="fw-bold">Liens rapides</h6>
           <ul class="list-unstyled">
-            <li><a href="{% url 'landing' %}" class="text-white text-decoration-none">Accueil</a></li>
+            <li><a href="{% url 'landing' %}" class="text-white text-decoration- none">Accueil</a></li>
+            <li><a href="{% url 'legal:terms' %}">Conditions d’utilisation</a></li>
+            <li><a href="{% url 'legal:privacy' %}">Politique de confidentialité</a></li>
+            <li><a href="{% url 'legal:cookies' %}">Cookies</a></li>
+
           </ul>
         </div>
         <div class="col-md-3">
