@@ -44,8 +44,9 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, Group, Permission
 from django.core.validators import RegexValidator
 from django.utils.translation import gettext_lazy as _
-from .managers import CustomUserManager
 from django.utils import timezone
+from .managers import CustomUserManager
+
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     # Validateur pour le format de numéro de téléphone
@@ -88,22 +89,26 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         help_text=_('Adresse email (optionnelle)')
     )
 
-    # Nouveau champ option
+    # Option choisie lors de l'inscription
     option = models.CharField(
         max_length=1,
         choices=OPTION_CHOICES,
         default='1',
-        verbose_name="Option d'inscription",
-        help_text="Option choisie lors de l'inscription"
+        verbose_name=_("Option d'inscription"),
+        help_text=_("Option choisie lors de l'inscription")
     )
 
-    is_validated = models.BooleanField(default=False)  # déjà présent ✅
+    is_validated = models.BooleanField(default=False)
     validated_at = models.DateTimeField(null=True, blank=True)
     validated_by = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="validated_users",
         limit_choices_to={"is_staff": True}
     )
+
+    # ✅ NOUVEAUX CHAMPS – Acceptation des Conditions d’utilisation
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
+    terms_version = models.CharField(max_length=32, null=True, blank=True)
 
     is_active = models.BooleanField(
         _('actif'),
@@ -160,16 +165,17 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         return f"{self.nom} ({self.phone})" if not self.alias else f"{self.nom} [{self.alias}] ({self.phone})"
 
     def get_full_name(self):
-        """
-        Retourne le nom complet de l'utilisateur.
-        """
+        """Retourne le nom complet de l'utilisateur."""
         return f"{self.nom} ({self.alias})" if self.alias else self.nom
 
     def get_short_name(self):
-        """
-        Retourne une version courte du nom de l'utilisateur.
-        """
-        return self.alias or self.nom.split()[0] if self.nom else self.phone
+        """Retourne une version courte du nom de l'utilisateur."""
+        return self.alias or (self.nom.split()[0] if self.nom else self.phone)
+
+    # (facultatif) helper pratique
+    @property
+    def has_accepted_terms(self) -> bool:
+        return bool(self.terms_accepted_at and self.terms_version)
 
 
 from django.db import models

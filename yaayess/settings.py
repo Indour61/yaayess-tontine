@@ -116,6 +116,7 @@ INSTALLED_APPS = [
     'sslserver',
 ]
 
+TERMS_VERSION = "v1.0-2025-09-07"
 
 # ----------------------------------------------------
 # ⚙️ MIDDLEWARE
@@ -131,6 +132,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "legal.middleware.TermsGateMiddleware"
 ]
 
 ROOT_URLCONF = 'yaayess.urls'

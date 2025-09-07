@@ -1,43 +1,88 @@
 {% extends "base.html" %}
+{% block title %}Rejoindre le groupe{% endblock %}
 {% block content %}
   <div class="container mt-4">
-    <h2>Rejoindre le groupe : {{ group.nom|default:"—" }}</h2>
+    <h2 class="mb-2">Rejoindre le groupe : {{ group.nom|default:"—" }}</h2>
 
     {% if forced_option == "1" %}
-      <div class="alert alert-success">
+      <div class="alert alert-success" role="alert">
         ✅ Option sélectionnée automatiquement : <strong>Cotisation & Tontine</strong>
       </div>
     {% elif forced_option == "2" %}
-      <div class="alert alert-info">
-        ✅ Option sélectionnée automatiquement : <strong>Épargne & Crédit</strong>
+      <div class="alert alert-info" role="alert">
+        ✅ Option sélectionnée automatiquement : <strong>Epargne & Credit</strong>
       </div>
     {% endif %}
 
     {% for message in messages %}
-      <div class="alert alert-{{ message.tags|default:'info' }}">{{ message|safe }}</div>
+      <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message|safe }}</div>
     {% endfor %}
 
-    <form method="post" novalidate>
+    <form method="post" class="needs-validation" novalidate>
       {% csrf_token %}
 
       <div class="mb-3">
         <label for="id_nom" class="form-label">Nom</label>
-        <input id="id_nom" name="nom" class="form-control" required>
+        <input
+          id="id_nom"
+          name="nom"
+          class="form-control"
+          maxlength="150"
+          autocomplete="name"
+          placeholder="Ex. Awa Diop"
+          value="{{ request.POST.nom|default_if_none:'' }}"
+          required>
+        <div class="invalid-feedback">Veuillez indiquer votre nom.</div>
       </div>
 
       <div class="mb-3">
         <label for="id_phone" class="form-label">Téléphone</label>
-        <input id="id_phone" type="tel" name="phone" class="form-control" required>
+        <input
+          id="id_phone"
+          type="tel"
+          name="phone"
+          class="form-control"
+          inputmode="tel"
+          autocomplete="tel"
+          placeholder="Ex. +221771234567"
+          pattern="^\+?[0-9]{9,15}$"
+          value="{{ request.POST.phone|default_if_none:'' }}"
+          required>
+        <div class="form-text">Format international, 9 à 15 chiffres (ex. <code>+221771234567</code>).</div>
+        <div class="invalid-feedback">Numéro invalide. Utilisez le format international (9–15 chiffres).</div>
       </div>
 
       <div class="mb-3">
         <label for="id_password" class="form-label">Mot de passe</label>
-        <input id="id_password" type="password" name="password" class="form-control" required>
+        <div class="input-group">
+          <input
+            id="id_password"
+            type="password"
+            name="password"
+            class="form-control"
+            minlength="6"
+            autocomplete="new-password"
+            required>
+          <button class="btn btn-outline-secondary" type="button" id="togglePwd1" aria-label="Afficher/Masquer le mot de passe">👁️</button>
+        </div>
+        <div class="form-text">Minimum 6 caractères. Évitez d’utiliser votre numéro de téléphone.</div>
+        <div class="invalid-feedback">Veuillez indiquer un mot de passe (≥ 6 caractères).</div>
       </div>
 
       <div class="mb-3">
         <label for="id_confirm_password" class="form-label">Confirmer mot de passe</label>
-        <input id="id_confirm_password" type="password" name="confirm_password" class="form-control" required>
+        <div class="input-group">
+          <input
+            id="id_confirm_password"
+            type="password"
+            name="confirm_password"
+            class="form-control"
+            minlength="6"
+            autocomplete="new-password"
+            required>
+          <button class="btn btn-outline-secondary" type="button" id="togglePwd2" aria-label="Afficher/Masquer la confirmation">👁️</button>
+        </div>
+        <div class="invalid-feedback">Veuillez confirmer votre mot de passe.</div>
       </div>
 
       {# Si une option est imposée par le lien, on la passe en champ caché #}
@@ -48,13 +93,58 @@
           <label for="id_option" class="form-label">Option</label>
           <select id="id_option" name="option" class="form-select" required>
             <option value="">— Choisir —</option>
-            <option value="1">Cotisation & Tontine</option>
-            <option value="2">Épargne & Crédit</option>
+            <option value="1" {% if request.POST.option == "1" %}selected{% endif %}>Cotisation & Tontine</option>
+            <option value="2" {% if request.POST.option == "2" %}selected{% endif %}>Epargne & Credit</option>
           </select>
+          <div class="invalid-feedback">Veuillez choisir une option.</div>
         </div>
       {% endif %}
+
+      <!-- ✅ Bloc Conditions d’utilisation (obligatoire) -->
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="accept_terms" id="accept_terms" required>
+        <label class="form-check-label" for="accept_terms">
+          J’ai lu et j’accepte les
+          <a href="/legal/terms/" target="_blank" rel="noopener">Conditions d’utilisation</a>.
+        </label>
+        <div class="invalid-feedback">Vous devez accepter les Conditions d’utilisation.</div>
+      </div>
 
       <button class="btn btn-success">Rejoindre</button>
     </form>
   </div>
+
+  <!-- Mini JS : validation Bootstrap + show/hide password -->
+  <script>
+    (function () {
+      'use strict';
+      const form = document.querySelector('form.needs-validation');
+      if (form) {
+        form.addEventListener('submit', function (e) {
+          const p1 = document.getElementById('id_password');
+          const p2 = document.getElementById('id_confirm_password');
+          if (p1 && p2 && p1.value && p2.value && p1.value !== p2.value) {
+            e.preventDefault(); e.stopPropagation();
+            p2.setCustomValidity("Les mots de passe ne correspondent pas.");
+            p2.reportValidity(); return;
+          } else if (p2) { p2.setCustomValidity(""); }
+
+          if (!form.checkValidity()) { e.preventDefault(); e.stopPropagation(); }
+          form.classList.add('was-validated');
+        }, false);
+      }
+      function bindToggle(btnId, inputId) {
+        const btn = document.getElementById(btnId);
+        const input = document.getElementById(inputId);
+        if (!btn || !input) return;
+        btn.addEventListener('click', function () {
+          const isPwd = input.getAttribute('type') === 'password';
+          input.setAttribute('type', isPwd ? 'text' : 'password');
+          btn.classList.toggle('active');
+        });
+      }
+      bindToggle('togglePwd1', 'id_password');
+      bindToggle('togglePwd2', 'id_confirm_password');
+    })();
+  </script>
 {% endblock %}

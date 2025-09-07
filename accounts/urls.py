@@ -11,5 +11,6 @@ urlpatterns = [
     path('rejoindre/<str:code>/', views.inscription_et_rejoindre, name='inscription_et_rejoindre'),
 
     path("attente-validation/", views.attente_validation, name="attente_validation"),
-]
 
+
+]

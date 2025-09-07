@@ -62,6 +62,26 @@
         {% endif %}
       </div>
 
+      <!-- ✅ Conditions d’utilisation (obligatoire) -->
+      <div class="mb-4">
+        <div class="flex items-start">
+          <input
+            id="accept_terms"
+            name="accept_terms"
+            type="checkbox"
+            class="mt-1 h-4 w-4 text-green-600 border-gray-300 rounded"
+            required
+            {% if request.POST.accept_terms %}checked{% endif %}>
+          <label for="accept_terms" class="ml-2 text-sm text-gray-700">
+            J’ai lu et j’accepte les
+            <a href="/legal/terms/" target="_blank" rel="noopener" class="text-green-700 underline hover:text-green-800">
+              Conditions d’utilisation
+            </a>.
+          </label>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">Obligatoire pour créer votre compte.</p>
+      </div>
+
       <button type="submit"
         class="w-full py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
         S'inscrire
