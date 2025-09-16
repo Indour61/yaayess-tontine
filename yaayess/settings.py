@@ -1,84 +1,37 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv  # Nouveau module
-
+from dotenv import load_dotenv  # Pour charger .env
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# Clé OpenAI
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # ou écris la valeur en dur en dev
-
 # Charger les variables d'environnement dès le début
-load_dotenv()
-
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # ----------------------------------------------------
-# 🔐 SECURITY - Version corrigée
+# 🔐 SECURITY
 # ----------------------------------------------------
 
-# SECRET_KEY doit TOUJOURS venir de l'environnement
-SECRET_KEY = os.environ["SECRET_KEY"]  # Pas de valeur par défaut!
+SECRET_KEY = os.environ["SECRET_KEY"]  # Pas de valeur par défaut
 
-# Debug doit être conditionné par l'environnement
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
-# Configuration des hosts dynamique
 ALLOWED_HOSTS = os.environ.get(
     "ALLOWED_HOSTS",
     "localhost,127.0.0.1"
 ).split(",")
 
-"""
-# Django 4+ : schéma + hôte (+ port) obligatoires
 CSRF_TRUSTED_ORIGINS = [
     "https://127.0.0.1:8000",
     "https://localhost:8000",
+    "https://yaayess.com",
 ]
 
-# Comme tu tournes en HTTPS
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
-
-# (optionnel) on laisse Django gérer le domaine du cookie
-# CSRF_COOKIE_DOMAIN = None
-
-# ----------------------------------------------------
-# 🔒 HTTPS Settings (seulement en production)
-# ----------------------------------------------------
-if not DEBUG:
-    CSRF_COOKIE_SECURE = True
-    SESSION_COOKIE_SECURE = True
-    SECURE_SSL_REDIRECT = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-
-else:
-    # Désactiver les flags HTTPS en développement
-    CSRF_COOKIE_SECURE = False
-    SESSION_COOKIE_SECURE = False
-    SECURE_SSL_REDIRECT = False
-"""
-#ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
-
-CSRF_TRUSTED_ORIGINS = [
-    "https://127.0.0.1:8000",
-    "https://localhost:8000",
-]
-
-# En DEV (DEBUG=True), pas de Secure pour faciliter les tests sur runsslserver
 if DEBUG:
     CSRF_COOKIE_SECURE = False
     SESSION_COOKIE_SECURE = False
     SECURE_SSL_REDIRECT = False
     CSRF_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SAMESITE = "Lax"
-
-    # (Option robuste) stocker le token côté session au lieu d'un cookie
-    # -> évite beaucoup de soucis d’origine/certificat en local
     CSRF_USE_SESSIONS = True
 else:
     CSRF_COOKIE_SECURE = True
@@ -88,6 +41,39 @@ else:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# ----------------------------------------------------
+# 🌍 OPENAI
+# ----------------------------------------------------
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# ----------------------------------------------------
+# 💳 PAYDUNYA
+# ----------------------------------------------------
+PAYDUNYA_MODE = os.environ.get("PAYDUNYA_MODE", "test").lower()
+PAYDUNYA_MASTER_KEY = os.environ.get("PAYDUNYA_MASTER_KEY")
+
+if PAYDUNYA_MODE == "live":
+    PAYDUNYA_PUBLIC_KEY = os.environ.get("PAYDUNYA_LIVE_PUBLIC_KEY")
+    PAYDUNYA_PRIVATE_KEY = os.environ.get("PAYDUNYA_LIVE_PRIVATE_KEY")
+    PAYDUNYA_TOKEN = os.environ.get("PAYDUNYA_LIVE_TOKEN")
+else:
+    PAYDUNYA_PUBLIC_KEY = os.environ.get("PAYDUNYA_TEST_PUBLIC_KEY")
+    PAYDUNYA_PRIVATE_KEY = os.environ.get("PAYDUNYA_TEST_PRIVATE_KEY")
+    PAYDUNYA_TOKEN = os.environ.get("PAYDUNYA_TEST_TOKEN")
+
+PAYDUNYA = {
+    "master_key": PAYDUNYA_MASTER_KEY,
+    "private_key": PAYDUNYA_PRIVATE_KEY,
+    "public_key": PAYDUNYA_PUBLIC_KEY,
+    "token": PAYDUNYA_TOKEN,
+    "sandbox": PAYDUNYA_MODE != "live",
+    "store_name": os.environ.get("PAYDUNYA_STORE_NAME", "YaayESS"),
+    "store_tagline": os.environ.get("PAYDUNYA_STORE_TAGLINE", "Plateforme de gestion financière"),
+    "website_url": os.environ.get("PAYDUNYA_STORE_URL", "https://yaayess.com"),
+}
+
+
 
 
 # ----------------------------------------------------
@@ -178,29 +164,6 @@ EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
 EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]        # Doit être défini
 EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"] # Doit être défini
-
-# ----------------------------------------------------
-# 💳 PAYDUNYA CONFIG - Version sécurisée
-# ----------------------------------------------------
-# settings.py
-
-import os
-
-PAYDUNYA = {
-    "master_key": os.environ.get("PAYDUNYA_MASTER_KEY", "test_master_key"),
-    "private_key": os.environ.get("PAYDUNYA_PRIVATE_KEY", "test_private_key"),
-    "public_key": os.environ.get("PAYDUNYA_PUBLIC_KEY", "test_public_key"),
-    "token": os.environ.get("PAYDUNYA_TOKEN", "test_token"),
-    # "sandbox" => True si mode=test, False si mode=live
-    "sandbox": os.environ.get("PAYDUNYA_MODE", "test").lower() != "live",
-
-    # Métadonnées de la boutique (facultatif mais conseillé)
-    "store_name": os.environ.get("PAYDUNYA_STORE_NAME", "YaayESS"),
-    "store_tagline": os.environ.get("PAYDUNYA_STORE_TAGLINE", "Plateforme de gestion financière"),
-    "website_url": os.environ.get("PAYDUNYA_STORE_URL", "https://yaayess.com"),
-}
-
-
 
 
 # ----------------------------------------------------

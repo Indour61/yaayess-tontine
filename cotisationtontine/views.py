@@ -373,47 +373,21 @@ from django.views.decorators.csrf import csrf_exempt
 from .models import GroupMember, Versement
 
 
-# -------------------------------
-# Helpers PayDunya
-# -------------------------------
-def _paydunya_conf():
-    cfg = getattr(settings, "PAYDUNYA", None)
-    if not cfg:
-        raise RuntimeError("Configuration PAYDUNYA absente (settings.PAYDUNYA).")
-    for k in ("master_key", "private_key", "public_key", "token"):
-        if k not in cfg or not cfg[k]:
-            raise RuntimeError(f"Clé PAYDUNYA manquante: {k}")
-    return cfg
-
-def _paydunya_headers(cfg):
-    return {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "PAYDUNYA-MASTER-KEY": cfg["master_key"],
-        "PAYDUNYA-PRIVATE-KEY": cfg["private_key"],
-        "PAYDUNYA-PUBLIC-KEY": cfg["public_key"],
-        "PAYDUNYA-TOKEN": cfg["token"],
-    }
-
-def _paydunya_base_url(cfg):
-    if cfg.get("sandbox", True):
-        return "https://app.paydunya.com/sandbox-api/v1"
-    return "https://app.paydunya.com/api/v1"
-
-def _as_int_fcfa(amount: Decimal) -> int:
-    """PayDunya attend des entiers (FCFA)."""
-    return int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-# -------------------------------
-# Vue: Initier un versement
-# -------------------------------
+@login_required
+def dashboard(request):
+    action_logs = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
+    return render(request, 'cotisationtontine/dashboard.html', {
+        'action_logs': action_logs
+    })
+
 # cotisationtontine/views.py
 
 import json
 from decimal import Decimal, ROUND_HALF_UP
-
 import requests
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -428,23 +402,18 @@ from .models import GroupMember, Versement
 
 
 # ===============================
-# Helpers PayDunya
+# Helpers PayDunya (cohérents avec settings.PAYDUNYA)
 # ===============================
-def _pd_conf():
-    """
-    Récupère la configuration PayDunya depuis settings.
-    Compatible avec PAYDUNYA_KEYS ou PAYDUNYA (préféré).
-    """
-    cfg = getattr(settings, "PAYDUNYA", None) or getattr(settings, "PAYDUNYA_KEYS", None)
+def _paydunya_conf():
+    cfg = getattr(settings, "PAYDUNYA", None)
     if not cfg:
-        raise RuntimeError("Configuration PayDunya absente (PAYDUNYA ou PAYDUNYA_KEYS).")
+        raise RuntimeError("Configuration PAYDUNYA absente (settings.PAYDUNYA).")
     for k in ("master_key", "private_key", "public_key", "token"):
-        if k not in cfg or not cfg[k]:
-            raise RuntimeError(f"Clé PayDunya manquante: {k}")
+        if not cfg.get(k):
+            raise RuntimeError(f"Clé PAYDUNYA manquante: {k}")
     return cfg
 
-
-def _pd_headers(cfg):
+def _paydunya_headers(cfg):
     return {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -454,27 +423,25 @@ def _pd_headers(cfg):
         "PAYDUNYA-TOKEN": cfg["token"],
     }
 
-
-def _pd_base_url(cfg):
-    # PAYDUNYA["sandbox"] recommandé ; sinon bascule sur DEBUG à défaut.
-    sandbox = cfg.get("sandbox", getattr(settings, "DEBUG", True)) if hasattr(cfg, "get") else getattr(settings, "DEBUG", True)
-    return "https://app.paydunya.com/sandbox-api/v1" if sandbox else "https://app.paydunya.com/api/v1"
-
+def _paydunya_base_url(cfg):
+    # sandbox True si PAYDUNYA_MODE != 'live'
+    return "https://app.paydunya.com/sandbox-api/v1" if cfg.get("sandbox", True) \
+           else "https://app.paydunya.com/api/v1"
 
 def _as_fcfa_int(amount: Decimal) -> int:
-    """PayDunya attend des entiers (FCFA)."""
+    """PayDunya attend des entiers (XOF)."""
     return int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 # ===============================
-# Vue: Initier un versement
+# Vue: Initier un versement (PAYDUNYA only)
 # ===============================
 @login_required
 @transaction.atomic
 def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
     """
-    - CAISSE : crée directement le Versement (pas de champ 'statut').
-    - PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement.
+    PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement.
+    (La méthode 'caisse' a été supprimée.)
     """
     member = get_object_or_404(GroupMember, id=member_id)
     group = member.group
@@ -493,7 +460,9 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
 
     # --- POST ---
     montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
-    methode = (request.POST.get("methode") or "paydunya").lower()
+
+    # Forcer la méthode à paydunya (suppression de 'caisse')
+    methode = "paydunya"
 
     # Valider le montant
     try:
@@ -506,26 +475,14 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         messages.error(request, "Le montant doit être supérieur à 0.")
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
-    # Forcer l'entier en FCFA
+    # Forcer l’entier (XOF)
     montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    # 1) CAISSE -> on écrit immédiatement
-    if methode == "caisse":
-        Versement.objects.create(
-            member=member,
-            montant=montant,
-            frais=Decimal("0"),
-            methode="CAISSE",
-            transaction_id=f"CAISSE-{member.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}",
-        )
-        messages.success(request, f"Versement de {_as_fcfa_int(montant)} FCFA enregistré via Caisse.")
-        return redirect("cotisationtontine:group_detail", group_id=group_id)
-
-    # 2) PAYDUNYA
+    # Charger config PayDunya
     try:
-        cfg = _pd_conf()
-        headers = _pd_headers(cfg)
-        base_url = _pd_base_url(cfg)
+        cfg = _paydunya_conf()
+        headers = _paydunya_headers(cfg)
+        base_url = _paydunya_base_url(cfg)
     except RuntimeError as e:
         messages.error(request, str(e))
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
@@ -536,7 +493,10 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
 
     # URLs
     callback_url = request.build_absolute_uri(reverse("cotisationtontine:versement_callback"))
-    return_url = request.build_absolute_uri(reverse("cotisationtontine:versement_merci"))
+    return_url = (
+            request.build_absolute_uri(reverse("cotisationtontine:versement_merci"))
+            + f"?group_id={group_id}"
+    )
     cancel_url = request.build_absolute_uri(reverse("cotisationtontine:group_detail", args=[group_id]))
 
     payload = {
@@ -562,12 +522,11 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
             "tagline": cfg.get("store_tagline", "Plateforme de gestion financière"),
             "website_url": cfg.get("website_url", "https://yaayess.com"),
         },
-        "actions": {  # ✅ URLs à cet endroit
+        "actions": {
             "callback_url": callback_url,
             "return_url": return_url,
             "cancel_url": cancel_url,
         },
-        # Ces données reviennent au callback (confirm) pour créer le Versement
         "custom_data": {
             "member_id": member.id,
             "user_id": request.user.id,
@@ -584,44 +543,40 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
     if resp.status_code != 200:
-        messages.error(request, f"Erreur PayDunya (HTTP {resp.status_code})")
-        if getattr(settings, "DEBUG", False):
-            try:
-                messages.info(request, f"DEBUG PayDunya: {resp.text[:600]}")
-            except Exception:
-                pass
+        # Essayer de remonter le message renvoyé par PayDunya pour aider au debug
+        txt = resp.text[:800] if resp.text else ""
+        messages.error(request, f"Erreur PayDunya (HTTP {resp.status_code}).")
+        if settings.DEBUG and txt:
+            messages.info(request, f"DEBUG PayDunya: {txt}")
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
     try:
         data = resp.json()
     except json.JSONDecodeError:
         messages.error(request, "Réponse PayDunya invalide (JSON).")
-        if getattr(settings, "DEBUG", False):
-            messages.info(request, f"DEBUG PayDunya: {resp.text[:600]}")
+        if settings.DEBUG:
+            messages.info(request, f"DEBUG PayDunya: {resp.text[:800]}")
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
-    if getattr(settings, "DEBUG", False):
+    if settings.DEBUG:
         try:
-            messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:600]}")
+            messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:800]}")
         except Exception:
             pass
 
-    # ===============================
-    # 🔁 BLOC REMPLACÉ (extraction/redirect)
-    # ===============================
-    # response_code "00" => facture créée
+    # Success ?
     if isinstance(data, dict) and data.get("response_code") == "00":
         invoice_url = None
-
         rt = data.get("response_text")
-        # ✅ Cas 1: l'URL est directement une chaîne (ton cas)
+
+        # 1) Parfois l'URL est directement une string dans response_text
         if isinstance(rt, str) and rt.startswith("http"):
             invoice_url = rt
-        # ✅ Cas 2: certaines versions renvoient un dict avec invoice_url
+        # 2) Parfois response_text est un dict avec 'invoice_url'
         elif isinstance(rt, dict):
-            invoice_url = rt.get("invoice_url")
+            invoice_url = rt.get("invoice_url") or rt.get("checkout_url")
 
-        # Fallbacks possibles selon versions/tenants
+        # 3) Fallbacks courants
         if not invoice_url:
             invoice_url = (
                 data.get("invoice_url")
@@ -633,22 +588,31 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         if invoice_url:
             return redirect(invoice_url)
 
-        # Pas d'URL : si token présent, on laisse le callback finaliser
+        # Pas d'URL mais token ? On laisse le callback finaliser
         token = data.get("token") or (rt.get("token") if isinstance(rt, dict) else None)
         if token:
             messages.warning(
                 request,
-                "Facture créée. Redirection indisponible ; le paiement doit être finalisé côté PayDunya."
+                "Facture créée. Redirection indisponible ; finalisez le paiement sur PayDunya."
             )
             return redirect("cotisationtontine:group_detail", group_id=group_id)
 
         messages.warning(request, "Facture créée mais URL manquante. Retour au groupe.")
         return redirect("cotisationtontine:group_detail", group_id=group_id)
-    # ===============================
-    # /FIN DU BLOC REMPLACÉ
-    # ===============================
 
-    messages.error(request, f"Échec de création de facture: {data.get('response_text', 'Erreur inconnue')}")
+    # Erreur métier PayDunya
+    # Ex: response_code=1001 -> Invalid Masterkey Specified
+    err_text = data.get("response_text", "Erreur inconnue")
+    code = data.get("response_code")
+
+    if code == "1001":
+        messages.error(request, "Échec de création: MasterKey invalide. Vérifiez PAYDUNYA_MASTER_KEY et le mode (test/live).")
+    else:
+        messages.error(request, f"Échec de création de facture: {err_text}")
+
+    if settings.DEBUG:
+        messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:800]}")
+
     return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
 
@@ -677,9 +641,9 @@ def versement_callback(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"message": "Déjà confirmé."}, status=200)
 
     try:
-        cfg = _pd_conf()
-        headers = _pd_headers(cfg)
-        base_url = _pd_base_url(cfg)
+        cfg = _paydunya_conf()
+        headers = _paydunya_headers(cfg)
+        base_url = _paydunya_base_url(cfg)
     except RuntimeError as e:
         return JsonResponse({"error": str(e)}, status=500)
 
@@ -730,17 +694,112 @@ def versement_callback(request: HttpRequest) -> JsonResponse:
 # ===============================
 # Page Merci (retour client)
 # ===============================
+from django.urls import reverse, NoReverseMatch
+from django.views.decorators.http import require_GET
+
+def _safe_reverse(candidates):
+    for name, args, kwargs in candidates:
+        try:
+            return reverse(name, args=args or None, kwargs=kwargs or None)
+        except NoReverseMatch:
+            continue
+    return "/"
+
+@require_GET
 def versement_merci(request: HttpRequest) -> HttpResponse:
-    return render(request, "cotisationtontine/versement_merci.html")
+    token = request.GET.get("token") or ""
+    group_id = request.GET.get("group_id")
 
+    # back_url intelligent
+    candidates = []
+    if group_id:
+        candidates.append(("cotisationtontine:group_detail", [group_id], {}))
+    candidates.append(("cotisationtontine:group_list", [], {}))
+    candidates.append(("epargnecredit:group_list", [], {}))
+    candidates.append(("landing:home", [], {}))
+    candidates.append(("home", [], {}))
+    back_url = _safe_reverse(candidates)
 
-@login_required
-def dashboard(request):
-    action_logs = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
-    return render(request, 'cotisationtontine/dashboard.html', {
-        'action_logs': action_logs
+    # Construire un lien "ouvrir la facture" si utile (sandbox vs live)
+    invoice_url = ""
+    if token:
+        invoice_url = (
+            f"https://paydunya.com/sandbox-checkout/invoice/{token}"
+            if (getattr(settings, "PAYDUNYA", {}).get("sandbox", True))
+            else f"https://paydunya.com/checkout/invoice/{token}"
+        )
+
+    # Confirmer l’état auprès de PayDunya
+    status = "unknown"   # paid | pending | failed | unknown | error
+    created_fallback = False
+    conf = {}
+
+    if token:
+        try:
+            cfg = _paydunya_conf()
+            headers = _paydunya_headers(cfg)
+            base_url = _paydunya_base_url(cfg)
+        except RuntimeError:
+            # settings mal configurés
+            return render(request, "cotisationtontine/versement_merci.html", {
+                "token": token,
+                "back_url": back_url,
+                "invoice_url": invoice_url,
+                "status": "error",
+                "created_fallback": False,
+            })
+
+        try:
+            r = requests.get(f"{base_url}/checkout-invoice/confirm/{token}", headers=headers, timeout=20)
+            if r.status_code == 200:
+                conf = r.json()
+                code_ok = (conf.get("response_code") == "00")
+                st = str(conf.get("status", "")).lower()
+                if code_ok and st in {"completed", "paid", "accepted"}:
+                    status = "paid"
+                    # Si le callback n’a pas encore créé l’écriture (ex: serveur local),
+                    # on peut (optionnel) créer en DEV uniquement.
+                    if not Versement.objects.filter(transaction_id=token).exists() and settings.DEBUG:
+                        custom = conf.get("custom_data") if isinstance(conf.get("custom_data"), dict) else {}
+                        try:
+                            member_id = int(custom.get("member_id", 0))
+                        except Exception:
+                            member_id = 0
+                        member = GroupMember.objects.filter(id=member_id).select_related("group", "user").first()
+                        if member:
+                            try:
+                                from decimal import Decimal, ROUND_HALF_UP
+                                montant = Decimal(str(custom.get("montant", "0"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                                frais = Decimal(str(custom.get("frais", "0"))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                            except Exception:
+                                montant, frais = Decimal("0"), Decimal("0")
+                            Versement.objects.create(
+                                transaction_id=token,
+                                member=member,
+                                montant=montant,
+                                frais=frais,
+                                methode="PAYDUNYA",
+                            )
+                            created_fallback = True
+                elif code_ok and st in {"pending", "new"}:
+                    status = "pending"
+                elif st in {"cancelled", "canceled", "failed"}:
+                    status = "failed"
+                else:
+                    status = st or "unknown"
+            else:
+                status = "error"
+        except requests.exceptions.RequestException:
+            status = "error"
+
+    return render(request, "cotisationtontine/versement_merci.html", {
+        "token": token,
+        "back_url": back_url,
+        "invoice_url": invoice_url,
+        "status": status,
+        "created_fallback": created_fallback,
+        # "conf": conf,  # décommente en DEBUG si tu veux afficher brut
     })
-
 
 
 
