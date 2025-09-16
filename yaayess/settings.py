@@ -73,8 +73,9 @@ PAYDUNYA = {
     "website_url": os.environ.get("PAYDUNYA_STORE_URL", "https://yaayess.com"),
 }
 
-
-
+# settings.py
+PAYDUNYA_FEE_RATE = float(os.getenv("PAYDUNYA_FEE_RATE", "0.025"))
+PAYDUNYA_FEE_FIXED = int(os.getenv("PAYDUNYA_FEE_FIXED", "75"))
 
 # ----------------------------------------------------
 # 📦 INSTALLED APPS (inchangé)

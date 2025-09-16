@@ -12,7 +12,10 @@
   <form method="post" id="versement-form" class="needs-validation" novalidate autocomplete="off">
     {% csrf_token %}
 
-    <!-- Champ montant -->
+    <!-- Méthode forcée à PayDunya -->
+    <input type="hidden" name="methode" value="paydunya" />
+
+    <!-- Montant -->
     <div class="mb-3">
       <label for="montant" class="form-label">Montant à verser (FCFA)</label>
       <input
@@ -26,32 +29,24 @@
         required
         placeholder="Ex : 5000"
       >
-      <div class="invalid-feedback">
-        Veuillez saisir un montant valide supérieur à 0.
-      </div>
-    </div>
-
-    <!-- Champ méthode de paiement -->
-    <div class="mb-3">
-      <label for="methode" class="form-label">Méthode de paiement</label>
-      <select name="methode" id="methode" class="form-select" required>
-        <option value="paydunya" selected>PayDunya</option>
-        <option value="caisse">Caisse (sans frais)</option>
-      </select>
-      <div class="invalid-feedback">
-        Veuillez sélectionner une méthode de paiement.
-      </div>
+      <div class="form-text">Saisissez un montant positif. Les décimales seront arrondies automatiquement.</div>
+      <div class="invalid-feedback">Veuillez saisir un montant valide supérieur à 0.</div>
     </div>
 
     <!-- Infos frais -->
-    <div class="mb-3" id="frais-section" style="display:none;">
-      <p class="mb-1">🧾 <strong>Frais :</strong> <span id="frais">0</span> FCFA</p>
-      <p class="mb-1">💳 <strong>Total à payer :</strong> <span id="total">0</span> FCFA</p>
+    <div class="card mb-3" id="frais-section" style="display:none;">
+      <div class="card-body d-flex flex-wrap align-items-center justify-content-between">
+        <div class="me-3">
+          <div class="mb-1">🧾 <strong>Frais estimés</strong> (2,5% + 75 FCFA) : <span id="frais" class="fw-semibold">0</span> FCFA</div>
+          <div>💳 <strong>Total à payer</strong> : <span id="total" class="fw-semibold">0</span> FCFA</div>
+        </div>
+        <div class="text-muted small">* Calcul indicatif avant redirection.</div>
+      </div>
     </div>
 
     <!-- Boutons -->
     <button type="submit" class="btn btn-success" id="submit-btn">💳 Payer avec PayDunya</button>
-    <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-secondary ms-2">Annuler</a>
+    <a href="{% url 'epargnecredit:group_detail' member.group.id %}" class="btn btn-secondary ms-2">Annuler</a>
   </form>
 </div>
 
@@ -67,7 +62,6 @@
       event.preventDefault();
       event.stopPropagation();
     } else {
-      // Empêche le double envoi
       submitBtn.disabled = true;
       submitBtn.innerText = 'Traitement en cours...';
     }
@@ -77,41 +71,43 @@
 
 document.addEventListener('DOMContentLoaded', function() {
   const montantInput = document.getElementById('montant');
-  const methodeSelect = document.getElementById('methode');
   const fraisEl = document.getElementById('frais');
   const totalEl = document.getElementById('total');
   const fraisSection = document.getElementById('frais-section');
-  const submitBtn = document.getElementById('submit-btn');
+
+  const fmt = new Intl.NumberFormat('fr-FR');
+
+  function arrondiFCFA(x) {
+    const n = Number(x);
+    return Number.isFinite(n) ? Math.round(n) : 0;
+  }
 
   function updateFrais() {
-    let montant = parseFloat(montantInput.value);
-    if (isNaN(montant) || montant <= 0) {
-      montant = 0;
-    }
+    const v = parseFloat(montantInput.value);
+    const montant = (!isNaN(v) && v > 0) ? v : 0;
 
-    const methode = methodeSelect.value;
+    if (montant > 0) {
+      // 2,5% + 75 FCFA
+      const fraisPourcent = montant * 0.025;
+      const fraisFixe = 75;
+      const fraisTotal = arrondiFCFA(fraisPourcent + fraisFixe);
+      const total = arrondiFCFA(montant + fraisTotal);
 
-    if (methode === 'paydunya' && montant > 0) {
-      const fraisPourcent = montant * 0.02;
-      const fraisFixe = 50;
-      const fraisTotal = fraisPourcent + fraisFixe;
-      const total = montant + fraisTotal;
-
-      fraisEl.textContent = Math.round(fraisTotal).toString();
-      totalEl.textContent = Math.round(total).toString();
+      fraisEl.textContent = fmt.format(fraisTotal);
+      totalEl.textContent = fmt.format(total);
       fraisSection.style.display = 'block';
-      submitBtn.textContent = '💳 Payer avec PayDunya';
     } else {
-      // Mode "Caisse"
       fraisSection.style.display = 'none';
-      submitBtn.textContent = '✅ Enregistrer le versement';
     }
   }
 
   montantInput.addEventListener('input', updateFrais);
-  methodeSelect.addEventListener('change', updateFrais);
+  montantInput.addEventListener('blur', () => {
+    const v = parseFloat(montantInput.value);
+    if (!isNaN(v) && v > 0) montantInput.value = arrondiFCFA(v);
+  });
 
-  updateFrais(); // Initialiser au chargement
+  updateFrais();
 });
 </script>
 {% endblock %}
