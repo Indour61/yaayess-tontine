@@ -139,6 +139,13 @@ def dashboard_epargne_credit(request):
     }
     return render(request, "epargnecredit/dashboard.html", context)
 
+from django.shortcuts import render
+
+def dashboard_view(request):
+    return render(request, "epargnecredit/dashboard.html")
+
+
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -726,6 +733,11 @@ def _as_fcfa_int(amount: Decimal) -> int:
 @login_required
 @transaction.atomic
 def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
+    k = settings.get_paydunya_keys()
+    if k["MODE"] == "live" and ("test_" in k["PUBLIC_KEY"] or "test_" in k["PRIVATE_KEY"]):
+        messages.error(request, "Clés TEST détectées alors que l'API LIVE est sélectionnée.")
+        return redirect("cotisationtontine:group_detail", group_id=group_id)
+
     """
     PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement.
     (La méthode 'caisse' est supprimée.)
@@ -1079,6 +1091,11 @@ from .models import GroupMember, Versement
 @login_required
 @transaction.atomic
 def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> HttpResponse:
+    k = settings.get_paydunya_keys()
+    if k["MODE"] == "live" and ("test_" in k["PUBLIC_KEY"] or "test_" in k["PRIVATE_KEY"]):
+        messages.error(request, "Clés TEST détectées alors que l'API LIVE est sélectionnée.")
+        return redirect("cotisationtontine:group_detail", group_id=group_id)
+
     """
     PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement.
     Contexte remboursement :

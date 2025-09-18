@@ -18,3 +18,4 @@ def generate_alias(nom):
     suffixe = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
     base = ''.join(e for e in nom if e.isalnum())  # supprime les espaces et caractères spéciaux
     return f"{base}-{suffixe}"
+

@@ -1,31 +1,55 @@
 import os
 from pathlib import Path
-from dotenv import load_dotenv  # Pour charger .env
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Charger les variables d'environnement dès le début
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+# Charge .env le plus tôt possible (et écrase les valeurs vides du système si besoin)
+load_dotenv(BASE_DIR / ".env", override=True)
 
-# ----------------------------------------------------
-# 🔐 SECURITY
-# ----------------------------------------------------
-
-SECRET_KEY = os.environ["SECRET_KEY"]  # Pas de valeur par défaut
-
+# ---- ensuite seulement, lis tes variables ----
+SECRET_KEY = os.environ["SECRET_KEY"]                 # déjà dans ton .env
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
-ALLOWED_HOSTS = os.environ.get(
-    "ALLOWED_HOSTS",
-    "localhost,127.0.0.1"
-).split(",")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")          # ⬅️ lira bien la valeur du .env
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY manquante. Vérifie .env ou les variables d'environnement.")
 
+
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
+"""
 CSRF_TRUSTED_ORIGINS = [
     "https://127.0.0.1:8000",
     "https://localhost:8000",
     "https://yaayess.com",
 ]
+"""
+# ----------------------------------------------------
+# 🗄 DATABASE - Version sécurisée
+# ----------------------------------------------------
 
+DATABASES = {
+    "default": {
+        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+        "NAME": os.getenv("DB_NAME"),
+        "USER": os.getenv("DB_USER"),
+        "PASSWORD": os.getenv("DB_PASSWORD"),
+        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+        "PORT": os.getenv("DB_PORT", "5432"),
+        "OPTIONS": {"sslmode": os.getenv("DB_SSLMODE", "prefer")},
+    }
+}
+# PROD security (activés automatiquement quand DEBUG=False)
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+"""
 if DEBUG:
     CSRF_COOKIE_SECURE = False
     SESSION_COOKIE_SECURE = False
@@ -41,7 +65,7 @@ else:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
+"""
 # ----------------------------------------------------
 # 🌍 OPENAI
 # ----------------------------------------------------
@@ -50,6 +74,50 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # ----------------------------------------------------
 # 💳 PAYDUNYA
 # ----------------------------------------------------
+# --- PayDunya ---
+PAYDUNYA = {
+    "MASTER_KEY": os.getenv("PAYDUNYA_MASTER_KEY", ""),
+    "MODE": os.getenv("PAYDUNYA_MODE", "test").lower(),  # "test" | "live"
+    "TEST": {
+        "PUBLIC_KEY": os.getenv("PAYDUNYA_TEST_PUBLIC_KEY", ""),
+        "PRIVATE_KEY": os.getenv("PAYDUNYA_TEST_PRIVATE_KEY", ""),
+        "TOKEN": os.getenv("PAYDUNYA_TEST_TOKEN", ""),
+        "BASE_URL": "https://app.paydunya.com/sandbox-api/v1",
+        "CHECKOUT_URL": "https://paydunya.com/sandbox-checkout/invoice",
+    },
+    "LIVE": {
+        "PUBLIC_KEY": os.getenv("PAYDUNYA_LIVE_PUBLIC_KEY", ""),
+        "PRIVATE_KEY": os.getenv("PAYDUNYA_LIVE_PRIVATE_KEY", ""),
+        "TOKEN": os.getenv("PAYDUNYA_LIVE_TOKEN", ""),
+        "BASE_URL": "https://app.paydunya.com/api/v1",
+        "CHECKOUT_URL": "https://paydunya.com/checkout/invoice",
+    },
+    "STORE": {
+        "NAME": os.getenv("PAYDUNYA_STORE_NAME", "YaayESS"),
+        "TAGLINE": os.getenv("PAYDUNYA_STORE_TAGLINE", ""),
+        "URL": os.getenv("PAYDUNYA_STORE_URL", ""),
+    },
+    "FEES": {
+        "RATE": float(os.getenv("PAYDUNYA_FEE_RATE", "0.025")),
+        "FIXED": int(float(os.getenv("PAYDUNYA_FEE_FIXED", "75"))),
+    },
+}
+
+def get_paydunya_keys():
+    mode = PAYDUNYA["MODE"]
+    assert mode in ("test", "live")
+    keys = PAYDUNYA["TEST"] if mode == "test" else PAYDUNYA["LIVE"]
+    return {
+        "MASTER_KEY": PAYDUNYA["MASTER_KEY"],
+        "PUBLIC_KEY": keys["PUBLIC_KEY"],
+        "PRIVATE_KEY": keys["PRIVATE_KEY"],
+        "TOKEN": keys["TOKEN"],
+        "BASE_URL": keys["BASE_URL"],
+        "CHECKOUT_URL": keys["CHECKOUT_URL"],
+        "MODE": mode,
+    }
+
+"""
 PAYDUNYA_MODE = os.environ.get("PAYDUNYA_MODE", "test").lower()
 PAYDUNYA_MASTER_KEY = os.environ.get("PAYDUNYA_MASTER_KEY")
 
@@ -72,6 +140,7 @@ PAYDUNYA = {
     "store_tagline": os.environ.get("PAYDUNYA_STORE_TAGLINE", "Plateforme de gestion financière"),
     "website_url": os.environ.get("PAYDUNYA_STORE_URL", "https://yaayess.com"),
 }
+"""
 
 # settings.py
 PAYDUNYA_FEE_RATE = float(os.getenv("PAYDUNYA_FEE_RATE", "0.025"))
@@ -143,19 +212,6 @@ TEMPLATES = [
     },
 ]
 
-# ----------------------------------------------------
-# 🗄 DATABASE - Version sécurisée
-# ----------------------------------------------------
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ["DB_NAME"],
-        'USER': os.environ["DB_USER"],
-        'PASSWORD': os.environ["DB_PASSWORD"],
-        'HOST': os.environ["DB_HOST"],
-        'PORT': os.environ["DB_PORT"],
-    }
-}
 
 # ----------------------------------------------------
 # ✉️ EMAIL CONFIG - Version sécurisée

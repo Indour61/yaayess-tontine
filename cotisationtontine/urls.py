@@ -72,4 +72,3 @@ urlpatterns = [
     path('<int:group_id>/historique-cycles/', views.historique_cycles_view, name='historique_cycles'),
     path("historique-actions/", views.historique_actions_view, name="historique_actions"),
 ]
-

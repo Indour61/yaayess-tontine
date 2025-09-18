@@ -372,8 +372,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from .models import GroupMember, Versement
 
-
-
+from django.shortcuts import render
 
 @login_required
 def dashboard(request):
@@ -381,6 +380,7 @@ def dashboard(request):
     return render(request, 'cotisationtontine/dashboard.html', {
         'action_logs': action_logs
     })
+
 
 # cotisationtontine/views.py
 
@@ -433,12 +433,21 @@ def _as_fcfa_int(amount: Decimal) -> int:
     return int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+
+
 # ===============================
 # Vue: Initier un versement (PAYDUNYA only)
 # ===============================
+
+
 @login_required
 @transaction.atomic
 def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
+    k = settings.get_paydunya_keys()
+    if k["MODE"] == "live" and ("test_" in k["PUBLIC_KEY"] or "test_" in k["PRIVATE_KEY"]):
+        messages.error(request, "Clés TEST détectées alors que l'API LIVE est sélectionnée.")
+        return redirect("cotisationtontine:group_detail", group_id=group_id)
+
     """
     PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement.
     (La méthode 'caisse' a été supprimée.)

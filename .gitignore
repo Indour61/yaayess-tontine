@@ -4,3 +4,10 @@ secrets.json
 .env
 *.env
 .env*
+*.env.*
+/env/
+/venv/
+/staticfiles/
+/media/
+__pycache__/
+*.py[cod]
