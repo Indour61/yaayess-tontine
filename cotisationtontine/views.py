@@ -381,9 +381,8 @@ def dashboard(request):
         'action_logs': action_logs
     })
 
-
-# cotisationtontine/views.py
-
+# views.py
+import os
 import json
 from decimal import Decimal, ROUND_HALF_UP
 import requests
@@ -392,71 +391,101 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 
 from .models import GroupMember, Versement
 
 
 # ===============================
-# Helpers PayDunya (cohérents avec settings.PAYDUNYA)
+# Helpers PayDunya (cohérents avec settings/.env)
 # ===============================
-def _paydunya_conf():
-    cfg = getattr(settings, "PAYDUNYA", None)
-    if not cfg:
-        raise RuntimeError("Configuration PAYDUNYA absente (settings.PAYDUNYA).")
-    for k in ("master_key", "private_key", "public_key", "token"):
-        if not cfg.get(k):
+def _paydunya_conf() -> dict:
+    """
+    Retourne une config normalisée à partir de settings.PAYDUNYA (dict) + fallback .env.
+    Clés obligatoires: master_key, private_key, token.
+    public_key est OPTIONNELLE pour l'API checkout.
+    """
+    s_cfg = getattr(settings, "PAYDUNYA", {}) or {}
+
+    # Fallback .env
+    env_flag = (s_cfg.get("env") or s_cfg.get("mode") or os.getenv("PAYDUNYA_ENV", "sandbox")).strip().lower()
+    if env_flag in ("production", "live"):
+        env_flag = "prod"
+    elif env_flag not in ("prod", "sandbox"):
+        env_flag = "sandbox"
+
+    cfg = {
+        "env": env_flag,  # "sandbox" | "prod"
+        "master_key": (s_cfg.get("master_key") or os.getenv("PAYDUNYA_MASTER_KEY", "")).strip(),
+        "private_key": (s_cfg.get("private_key") or os.getenv("PAYDUNYA_PRIVATE_KEY", "")).strip(),
+        "token": (s_cfg.get("token") or os.getenv("PAYDUNYA_TOKEN", "")).strip(),
+        # optionnel (non requis par l'appel HTTP)
+        "public_key": (s_cfg.get("public_key") or os.getenv("PAYDUNYA_PUBLIC_KEY", "")).strip(),
+        # infos boutique (facultatives)
+        "store_name": s_cfg.get("store_name", getattr(settings, "PAYDUNYA_STORE_NAME", "YaayESS")),
+        "store_tagline": s_cfg.get("store_tagline", getattr(settings, "PAYDUNYA_STORE_TAGLINE", "Plateforme de gestion financière")),
+        "website_url": s_cfg.get("website_url", getattr(settings, "PAYDUNYA_WEBSITE_URL", "https://yaayess.com")),
+    }
+
+    # Validations hard (obligatoires)
+    for k in ("master_key", "private_key", "token"):
+        if not cfg[k]:
             raise RuntimeError(f"Clé PAYDUNYA manquante: {k}")
+
     return cfg
 
-def _paydunya_headers(cfg):
+
+def _paydunya_headers(cfg: dict) -> dict:
+    """
+    Headers requis pour créer un checkout.
+    (Pas besoin d'envoyer le PUBLIC-KEY ici.)
+    """
     return {
         "Content-Type": "application/json",
-        "Accept": "application/json",
         "PAYDUNYA-MASTER-KEY": cfg["master_key"],
         "PAYDUNYA-PRIVATE-KEY": cfg["private_key"],
-        "PAYDUNYA-PUBLIC-KEY": cfg["public_key"],
         "PAYDUNYA-TOKEN": cfg["token"],
     }
 
-def _paydunya_base_url(cfg):
-    # sandbox True si PAYDUNYA_MODE != 'live'
-    return "https://app.paydunya.com/sandbox-api/v1" if cfg.get("sandbox", True) \
-           else "https://app.paydunya.com/api/v1"
 
-def _as_fcfa_int(amount: Decimal) -> int:
+def _paydunya_base_url(cfg: dict) -> str:
+    """
+    Base URL selon l'environnement.
+    """
+    return (
+        "https://app.paydunya.com/api/v1"
+        if cfg.get("env") == "prod"
+        else "https://app.paydunya.com/sandbox-api/v1"
+    )
+
+
+def _as_fcfa_int(amount: Decimal | int | str) -> int:
     """PayDunya attend des entiers (XOF)."""
-    return int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-
-
+    if isinstance(amount, Decimal):
+        d = amount
+    else:
+        d = Decimal(str(amount))
+    return int(d.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 # ===============================
 # Vue: Initier un versement (PAYDUNYA only)
 # ===============================
-
-
 @login_required
 @transaction.atomic
 def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
-    k = settings.get_paydunya_keys()
-    if k["MODE"] == "live" and ("test_" in k["PUBLIC_KEY"] or "test_" in k["PRIVATE_KEY"]):
-        messages.error(request, "Clés TEST détectées alors que l'API LIVE est sélectionnée.")
-        return redirect("cotisationtontine:group_detail", group_id=group_id)
-
     """
     PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement.
     (La méthode 'caisse' a été supprimée.)
     """
+    # 1) Récupération membre/groupe (pour avoir group_id dans tout redirect)
     member = get_object_or_404(GroupMember, id=member_id)
     group = member.group
     group_id = group.id
 
-    # --- Permissions ---
+    # 2) Permissions
     is_self = (request.user == member.user)
     is_group_admin = (request.user == getattr(group, "admin", None))
     is_super_admin = bool(getattr(request.user, "is_super_admin", False))
@@ -464,16 +493,14 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         messages.error(request, "Vous n'avez pas les droits pour effectuer un versement pour ce membre.")
         return redirect("cotisationtontine:group_detail", group_id=group_id)
 
+    # 3) GET => affichage du formulaire
     if request.method == "GET":
         return render(request, "cotisationtontine/initier_versement.html", {"member": member, "group": group})
 
-    # --- POST ---
+    # 4) POST => validation du montant
     montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
-
-    # Forcer la méthode à paydunya (suppression de 'caisse')
     methode = "paydunya"
 
-    # Valider le montant
     try:
         montant = Decimal(montant_raw)
     except Exception:
@@ -487,7 +514,7 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
     # Forcer l’entier (XOF)
     montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    # Charger config PayDunya
+    # 5) Charger config PayDunya (+ headers/base_url) et vérifier la cohérence mode/clefs
     try:
         cfg = _paydunya_conf()
         headers = _paydunya_headers(cfg)
@@ -496,18 +523,29 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         messages.error(request, str(e))
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
-    # Frais (exemple) : 2% + 50 FCFA
+    mode = (cfg.get("env") or cfg.get("mode") or "").lower()
+    has_test_tokens = any(
+        "test_" in (cfg.get(k, "") or "").lower()
+        for k in ("public_key", "private_key", "token")
+    )
+    if mode in ("prod", "production", "live") and has_test_tokens:
+        messages.error(request, "Clés TEST détectées alors que l'API LIVE est sélectionnée.")
+        return redirect("cotisationtontine:group_detail", group_id=group_id)
+    # (Optionnel) Bloquer l'inverse :
+    # if mode in ("", "sandbox") and not has_test_tokens:
+    #     messages.error(request, "Clés LIVE détectées alors que l'API SANDBOX est sélectionnée.")
+    #     return redirect("cotisationtontine:group_detail", group_id=group_id)
+
+    # 6) Frais : 2% + 50 FCFA
     frais_total = (montant * Decimal("0.02") + Decimal("50")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     montant_total = (montant + frais_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    # URLs
+    # 7) URLs
     callback_url = request.build_absolute_uri(reverse("cotisationtontine:versement_callback"))
-    return_url = (
-            request.build_absolute_uri(reverse("cotisationtontine:versement_merci"))
-            + f"?group_id={group_id}"
-    )
+    return_url = request.build_absolute_uri(reverse("cotisationtontine:versement_merci")) + f"?group_id={group_id}"
     cancel_url = request.build_absolute_uri(reverse("cotisationtontine:group_detail", args=[group_id]))
 
+    # 8) Payload PayDunya
     payload = {
         "invoice": {
             "items": [
@@ -517,7 +555,7 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
                     "unit_price": _as_fcfa_int(montant_total),
                     "total_price": _as_fcfa_int(montant_total),
                     "description": (
-                        f"Versement membre {member.user.nom or member.user.phone} "
+                        f"Versement membre {getattr(member.user, 'nom', None) or member.user.phone} "
                         f"(frais: {_as_fcfa_int(frais_total)} FCFA)"
                     ),
                 }
@@ -541,10 +579,12 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
             "user_id": request.user.id,
             "montant": _as_fcfa_int(montant),   # hors frais
             "frais": _as_fcfa_int(frais_total),
+            "methode": methode,
+            "group_id": group_id,
         },
     }
 
-    # Création de la facture
+    # 9) Création de la facture
     try:
         resp = requests.post(f"{base_url}/checkout-invoice/create", headers=headers, json=payload, timeout=20)
     except requests.exceptions.RequestException as e:
@@ -552,13 +592,13 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
     if resp.status_code != 200:
-        # Essayer de remonter le message renvoyé par PayDunya pour aider au debug
         txt = resp.text[:800] if resp.text else ""
         messages.error(request, f"Erreur PayDunya (HTTP {resp.status_code}).")
         if settings.DEBUG and txt:
             messages.info(request, f"DEBUG PayDunya: {txt}")
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
+    # 10) Parsing JSON
     try:
         data = resp.json()
     except json.JSONDecodeError:
@@ -573,19 +613,19 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         except Exception:
             pass
 
-    # Success ?
+    # 11) Succès ?
     if isinstance(data, dict) and data.get("response_code") == "00":
         invoice_url = None
         rt = data.get("response_text")
 
-        # 1) Parfois l'URL est directement une string dans response_text
+        # a) URL directe
         if isinstance(rt, str) and rt.startswith("http"):
             invoice_url = rt
-        # 2) Parfois response_text est un dict avec 'invoice_url'
+        # b) Dictionnaire
         elif isinstance(rt, dict):
             invoice_url = rt.get("invoice_url") or rt.get("checkout_url")
 
-        # 3) Fallbacks courants
+        # c) Fallbacks fréquents
         if not invoice_url:
             invoice_url = (
                 data.get("invoice_url")
@@ -597,20 +637,16 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         if invoice_url:
             return redirect(invoice_url)
 
-        # Pas d'URL mais token ? On laisse le callback finaliser
+        # d) Pas d'URL mais token => on laisse le callback finaliser
         token = data.get("token") or (rt.get("token") if isinstance(rt, dict) else None)
         if token:
-            messages.warning(
-                request,
-                "Facture créée. Redirection indisponible ; finalisez le paiement sur PayDunya."
-            )
+            messages.warning(request, "Facture créée. Redirection indisponible ; finalisez le paiement sur PayDunya.")
             return redirect("cotisationtontine:group_detail", group_id=group_id)
 
         messages.warning(request, "Facture créée mais URL manquante. Retour au groupe.")
         return redirect("cotisationtontine:group_detail", group_id=group_id)
 
-    # Erreur métier PayDunya
-    # Ex: response_code=1001 -> Invalid Masterkey Specified
+    # 12) Erreur métier PayDunya
     err_text = data.get("response_text", "Erreur inconnue")
     code = data.get("response_code")
 
@@ -620,7 +656,10 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         messages.error(request, f"Échec de création de facture: {err_text}")
 
     if settings.DEBUG:
-        messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:800]}")
+        try:
+            messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:800]}")
+        except Exception:
+            pass
 
     return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
@@ -1039,189 +1078,281 @@ def historique_cycles_view(request, group_id):
         },
     )
 
-
 import logging
-import requests
 import json
 from decimal import Decimal, ROUND_HALF_UP
+
+import requests
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
 
 from .models import Group, Tirage, PaiementGagnant
 
+# Helpers PayDunya (importés depuis ton module utilitaire)
+from .paydunya_utils import (
+    paydunya_conf as _paydunya_conf,
+    paydunya_headers as _paydunya_headers,
+    paydunya_base_url as _paydunya_base_url,
+    as_fcfa_int as _as_fcfa_int,
+)
+
 logger = logging.getLogger(__name__)
+
 
 @login_required
 def payer_gagnant(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
-    # Récupérer le dernier tirage gagnant
-    dernier_tirage = Tirage.objects.filter(group=group).order_by('-date_tirage').first()
-
+    # 1) Récupérer le dernier tirage gagnant
+    dernier_tirage = (
+        Tirage.objects.filter(group=group).order_by("-date_tirage").first()
+    )
     if not dernier_tirage or not dernier_tirage.gagnant:
         messages.error(request, "Aucun gagnant défini pour ce groupe.")
-        return redirect('group_detail', group_id=group.id)
+        return redirect("group_detail", group_id=group.id)
 
     gagnant = dernier_tirage.gagnant
 
-    # 💡 Utiliser le montant fixe si défini, sinon le calculer
-    if group.montant_fixe_gagnant is not None:
-        montant_total = group.montant_fixe_gagnant
-    else:
-        montant_total = group.montant_base * group.membres.filter(actif=True, exit_liste=False).count()
-
-    if request.method == 'POST':
-        montant_total = Decimal(montant_total)
-
-        frais_pourcent = montant_total * Decimal('0.02')
-        frais_fixe = Decimal('50')
-        frais_total = (frais_pourcent + frais_fixe).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-        montant_total_avec_frais = (montant_total + frais_total).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
-
-        montant_total_avec_frais_int = int(montant_total_avec_frais)
-        frais_total_int = int(frais_total)
-
-        if settings.DEBUG and getattr(settings, 'NGROK_BASE_URL', None):
-            base_url = settings.NGROK_BASE_URL.rstrip('/') + '/'
+    # 2) Montant total (fixe si défini, sinon = montant_base * nb_membres_actifs)
+    try:
+        if group.montant_fixe_gagnant is not None:
+            montant_total = Decimal(str(group.montant_fixe_gagnant))
         else:
-            base_url = request.build_absolute_uri('/')
+            nb_actifs = group.membres.filter(actif=True, exit_liste=False).count()
+            montant_total = Decimal(str(group.montant_base)) * Decimal(nb_actifs)
+    except Exception:
+        messages.error(request, "Montant du paiement invalide pour ce groupe.")
+        return redirect("group_detail", group_id=group.id)
 
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "PAYDUNYA-MASTER-KEY": settings.PAYDUNYA_KEYS["master_key"],
-            "PAYDUNYA-PRIVATE-KEY": settings.PAYDUNYA_KEYS["private_key"],
-            "PAYDUNYA-PUBLIC-KEY": settings.PAYDUNYA_KEYS["public_key"],
-            "PAYDUNYA-TOKEN": settings.PAYDUNYA_KEYS["token"],
-        }
+    if request.method == "POST":
+        # 3) Frais : 2% + 50 FCFA (arrondi entier XOF)
+        frais_total = (montant_total * Decimal("0.02") + Decimal("50")).quantize(
+            Decimal("1"), rounding=ROUND_HALF_UP
+        )
+        montant_total_avec_frais = (montant_total + frais_total).quantize(
+            Decimal("1"), rounding=ROUND_HALF_UP
+        )
 
+        montant_total_int = _pay = _as_fcfa_int(montant_total)              # hors frais
+        frais_total_int = _as_fcfa_int(frais_total)
+        montant_total_avec_frais_int = _as_fcfa_int(montant_total_avec_frais)
+
+        # 4) Base URL publique pour callback/return (ngrok en dev si dispo)
+        if settings.DEBUG and getattr(settings, "NGROK_BASE_URL", None):
+            site_base = settings.NGROK_BASE_URL.rstrip("/") + "/"
+        else:
+            site_base = request.build_absolute_uri("/")
+
+        # 5) Charge config PayDunya + headers + endpoint
+        try:
+            cfg = _paydunya_conf()
+            headers = _paydunya_headers(cfg)
+            api_base = _paydunya_base_url(cfg)
+        except RuntimeError as e:
+            messages.error(request, str(e))
+            return redirect("group_detail", group_id=group.id)
+
+        # 6) (option) Cohérence mode/clefs
+        mode = (cfg.get("env") or cfg.get("mode") or "").lower()
+        has_test_tokens = any(
+            "test_" in (cfg.get(k, "") or "").lower()
+            for k in ("public_key", "private_key", "token")
+        )
+        if mode in ("prod", "production", "live") and has_test_tokens:
+            messages.error(
+                request, "Clés TEST détectées alors que l'API LIVE est sélectionnée."
+            )
+            return redirect("group_detail", group_id=group.id)
+
+        # 7) Payload PayDunya — structure standard (invoice/store/actions/custom_data)
         payload = {
             "invoice": {
-                "items": [{
-                    "name": "Paiement gagnant Tontine",
-                    "quantity": 1,
-                    "unit_price": montant_total_avec_frais_int,
-                    "total_price": montant_total_avec_frais_int,
-                    "description": f"Paiement {gagnant.user.nom} - Frais {frais_total_int} FCFA"
-                }],
+                "items": [
+                    {
+                        "name": "Paiement gagnant Tontine",
+                        "quantity": 1,
+                        "unit_price": montant_total_avec_frais_int,
+                        "total_price": montant_total_avec_frais_int,
+                        "description": (
+                            f"Paiement {getattr(gagnant.user, 'nom', None) or gagnant.user.phone} "
+                            f"- Frais {frais_total_int} FCFA"
+                        ),
+                    }
+                ],
                 "description": f"Versement gagnant (+{frais_total_int} FCFA de frais)",
                 "total_amount": montant_total_avec_frais_int,
-                "callback_url": f"{base_url}cotisationtontine/paiement_gagnant/callback/",
-                "return_url": f"{base_url}cotisationtontine/paiement_gagnant/merci/"
+                "currency": "XOF",
             },
             "store": {
-                "name": "YaayESS",
-                "tagline": "Plateforme de gestion financière",
-                "website_url": "https://yaayess.com"
+                "name": cfg.get("store_name", "YaayESS"),
+                "tagline": cfg.get("store_tagline", "Plateforme de gestion financière"),
+                "website_url": cfg.get("website_url", "https://yaayess.com"),
+            },
+            "actions": {
+                "callback_url": f"{site_base}cotisationtontine/paiement_gagnant/callback/",
+                "return_url": f"{site_base}cotisationtontine/paiement_gagnant/merci/",
+                "cancel_url": f"{site_base}cotisationtontine/groupe/{group.id}/",  # adapte si besoin
             },
             "custom_data": {
                 "group_id": group.id,
                 "gagnant_id": gagnant.id,
-                "montant_saisi": int(montant_total),
-                "frais_total": frais_total_int
-            }
+                "montant_saisi": montant_total_int,  # hors frais
+                "frais_total": frais_total_int,
+            },
         }
 
+        # 8) Appel API
         try:
             logger.info("⏳ Envoi requête PayDunya...")
-            response = requests.post(
-                "https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create",
+            resp = requests.post(
+                f"{api_base}/checkout-invoice/create",
                 headers=headers,
                 json=payload,
-                timeout=15
+                timeout=20,
             )
-            logger.info(f"✅ Statut HTTP PayDunya : {response.status_code}")
-
-            if response.status_code != 200:
-                messages.error(request, f"Erreur PayDunya : {response.text}")
-                return redirect('group_detail', group_id=group.id)
-
-            data = response.json()
-            logger.debug(f"🧾 Réponse JSON PayDunya : {json.dumps(data, indent=2)}")
-
-            if data.get("response_code") == "00":
-                PaiementGagnant.objects.create(
-                    group=group,
-                    gagnant=gagnant,
-                    montant=montant_total,
-                    statut='EN_ATTENTE',
-                    transaction_id=data.get("token"),
-                    message="Paiement en attente validation PayDunya"
-                )
-                return redirect(data.get("response_text"))  # Redirection vers PayDunya
-            else:
-                messages.error(request, f"Échec création paiement : {data.get('response_text')}")
         except requests.exceptions.RequestException as e:
             logger.error(f"Erreur réseau PayDunya: {e}")
-            messages.error(request, f"Erreur réseau PayDunya: {str(e)}")
+            messages.error(request, f"Erreur réseau PayDunya: {e}")
+            return redirect("group_detail", group_id=group.id)
 
-        return redirect('group_detail', group_id=group.id)
+        logger.info(f"✅ Statut HTTP PayDunya : {resp.status_code}")
 
-    return render(request, 'cotisationtontine/payer_gagnant.html', {
-        'group': group,
-        'gagnant': gagnant,
-        'montant_total': montant_total,
-    })
+        if resp.status_code != 200:
+            txt = (resp.text or "")[:800]
+            messages.error(request, "Erreur PayDunya (HTTP).")
+            if settings.DEBUG and txt:
+                messages.info(request, f"DEBUG PayDunya: {txt}")
+            return redirect("group_detail", group_id=group.id)
 
-import json
-import logging
-from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+        # 9) JSON parsing + success handling
+        try:
+            data = resp.json()
+        except json.JSONDecodeError:
+            messages.error(request, "Réponse PayDunya invalide (JSON).")
+            if settings.DEBUG:
+                messages.info(request, f"DEBUG PayDunya: {(resp.text or '')[:800]}")
+            return redirect("group_detail", group_id=group.id)
 
-from .models import PaiementGagnant
+        if settings.DEBUG:
+            try:
+                logger.debug(f"🧾 Réponse JSON PayDunya : {json.dumps(data)[:800]}")
+            except Exception:
+                pass
 
-logger = logging.getLogger(__name__)
+        if isinstance(data, dict) and data.get("response_code") == "00":
+            # extraire l'URL de redirection
+            invoice_url = None
+            rt = data.get("response_text")
 
-@csrf_exempt  # PayDunya ne peut pas envoyer le CSRF token
+            if isinstance(rt, str) and rt.startswith("http"):
+                invoice_url = rt
+            elif isinstance(rt, dict):
+                invoice_url = rt.get("invoice_url") or rt.get("checkout_url")
+
+            if not invoice_url:
+                invoice_url = (
+                    data.get("invoice_url")
+                    or data.get("checkout_url")
+                    or data.get("url")
+                    or (
+                        data.get("data", {}).get("invoice_url")
+                        if isinstance(data.get("data"), dict)
+                        else None
+                    )
+                )
+
+            # Créer l'écriture locale EN_ATTENTE
+            PaiementGagnant.objects.create(
+                group=group,
+                gagnant=gagnant,
+                montant=montant_total,  # hors frais
+                statut="EN_ATTENTE",
+                transaction_id=data.get("token"),
+                message="Paiement en attente validation PayDunya",
+            )
+
+            if invoice_url:
+                return redirect(invoice_url)
+
+            messages.warning(
+                request,
+                "Facture créée mais URL manquante. Retour au groupe.",
+            )
+            return redirect("group_detail", group_id=group.id)
+
+        # Erreur PayDunya (métier)
+        err_text = data.get("response_text", "Erreur inconnue")
+        code = data.get("response_code")
+        if code == "1001":
+            messages.error(
+                request,
+                "Échec création: MasterKey invalide. Vérifiez PAYDUNYA_MASTER_KEY et le mode (test/live).",
+            )
+        else:
+            messages.error(request, f"Échec création paiement : {err_text}")
+
+        return redirect("group_detail", group_id=group.id)
+
+    # GET — affichage
+    return render(
+        request,
+        "cotisationtontine/payer_gagnant.html",
+        {"group": group, "gagnant": gagnant, "montant_total": montant_total},
+    )
+
+
+@csrf_exempt  # PayDunya n'envoie pas de CSRF token
 def paiement_gagnant_callback(request):
-    if request.method != 'POST':
+    if request.method != "POST":
         return JsonResponse({"error": "Méthode non autorisée"}, status=405)
 
+    # Accepter JSON ou x-www-form-urlencoded
     try:
-        data = json.loads(request.body)
-        logger.info(f"Callback PayDunya reçu: {json.dumps(data)}")
-
-        token = data.get('token')
-        status = data.get('status')  # Ex: "PAID", "FAILED", etc.
-        response_code = data.get('response_code')
-        response_text = data.get('response_text', '')
-
-        if not token:
-            return JsonResponse({"error": "Token manquant"}, status=400)
-
-        # Chercher le PaiementGagnant par transaction_id (token)
-        paiement = PaiementGagnant.objects.filter(transaction_id=token).first()
-        if not paiement:
-            logger.error(f"PaiementGagnant introuvable pour token={token}")
-            return JsonResponse({"error": "Paiement introuvable"}, status=404)
-
-        # Mettre à jour le statut selon la réponse
-        if response_code == "00" and status == "PAID":
-            paiement.statut = 'SUCCES'
+        if request.content_type and "application/json" in request.content_type:
+            data = json.loads(request.body or b"{}")
         else:
-            paiement.statut = 'ECHEC'
-
-        paiement.message = response_text
-        paiement.save()
-
-        logger.info(f"PaiementGagnant {token} mis à jour avec statut {paiement.statut}")
-
-        return JsonResponse({"success": True})
-
+            data = request.POST.dict()
     except json.JSONDecodeError:
         logger.error("Corps JSON invalide dans callback PayDunya")
         return JsonResponse({"error": "JSON invalide"}, status=400)
     except Exception as e:
-        logger.error(f"Erreur inattendue dans callback PayDunya: {e}")
+        logger.error(f"Erreur parse callback: {e}")
         return JsonResponse({"error": "Erreur serveur"}, status=500)
 
-from django.shortcuts import render
+    logger.info(f"Callback PayDunya reçu: {json.dumps(data)}")
+
+    token = data.get("token")
+    status = data.get("status")                 # ex: "PAID" | "FAILED" ...
+    response_code = data.get("response_code")   # ex: "00"
+    response_text = data.get("response_text", "")
+
+    if not token:
+        return JsonResponse({"error": "Token manquant"}, status=400)
+
+    paiement = PaiementGagnant.objects.filter(transaction_id=token).first()
+    if not paiement:
+        logger.error(f"PaiementGagnant introuvable pour token={token}")
+        return JsonResponse({"error": "Paiement introuvable"}, status=404)
+
+    # MAJ statut
+    if response_code == "00" and (status or "").upper() in {"PAID", "SUCCESS", "SUCCEEDED"}:
+        paiement.statut = "SUCCES"
+    else:
+        paiement.statut = "ECHEC"
+
+    paiement.message = response_text
+    paiement.save()
+
+    logger.info(f"PaiementGagnant {token} mis à jour avec statut {paiement.statut}")
+    return JsonResponse({"success": True})
+
 
 def paiement_gagnant_merci(request):
-    return render(request, 'cotisationtontine/paiement_gagnant_merci.html')
-
+    return render(request, "cotisationtontine/paiement_gagnant_merci.html")
 
 from django.shortcuts import render
 from .models import PaiementGagnant

@@ -71,10 +71,22 @@ else:
 # ----------------------------------------------------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# ----------------------------------------------------
-# 💳 PAYDUNYA
-# ----------------------------------------------------
 # --- PayDunya ---
+PAYDUNYA = {
+    "env": "sandbox",  # "sandbox" | "prod"
+    "master_key": os.getenv("PAYDUNYA_MASTER_KEY", ""),
+    "private_key": os.getenv("PAYDUNYA_PRIVATE_KEY", ""),
+    "token": os.getenv("PAYDUNYA_TOKEN", ""),
+    # "public_key": os.getenv("PAYDUNYA_PUBLIC_KEY", ""),  # optionnel
+
+    "store_name": os.getenv("PAYDUNYA_STORE_NAME", "YaayESS"),
+    "store_tagline": os.getenv("PAYDUNYA_STORE_TAGLINE", "Plateforme de gestion financière"),
+    "website_url": os.getenv("PAYDUNYA_WEBSITE_URL", "https://yaayess.com"),
+}
+
+
+"""
+
 PAYDUNYA = {
     "MASTER_KEY": os.getenv("PAYDUNYA_MASTER_KEY", ""),
     "MODE": os.getenv("PAYDUNYA_MODE", "test").lower(),  # "test" | "live"
@@ -102,7 +114,7 @@ PAYDUNYA = {
         "FIXED": int(float(os.getenv("PAYDUNYA_FEE_FIXED", "75"))),
     },
 }
-
+"""
 def get_paydunya_keys():
     mode = PAYDUNYA["MODE"]
     assert mode in ("test", "live")
@@ -117,30 +129,6 @@ def get_paydunya_keys():
         "MODE": mode,
     }
 
-"""
-PAYDUNYA_MODE = os.environ.get("PAYDUNYA_MODE", "test").lower()
-PAYDUNYA_MASTER_KEY = os.environ.get("PAYDUNYA_MASTER_KEY")
-
-if PAYDUNYA_MODE == "live":
-    PAYDUNYA_PUBLIC_KEY = os.environ.get("PAYDUNYA_LIVE_PUBLIC_KEY")
-    PAYDUNYA_PRIVATE_KEY = os.environ.get("PAYDUNYA_LIVE_PRIVATE_KEY")
-    PAYDUNYA_TOKEN = os.environ.get("PAYDUNYA_LIVE_TOKEN")
-else:
-    PAYDUNYA_PUBLIC_KEY = os.environ.get("PAYDUNYA_TEST_PUBLIC_KEY")
-    PAYDUNYA_PRIVATE_KEY = os.environ.get("PAYDUNYA_TEST_PRIVATE_KEY")
-    PAYDUNYA_TOKEN = os.environ.get("PAYDUNYA_TEST_TOKEN")
-
-PAYDUNYA = {
-    "master_key": PAYDUNYA_MASTER_KEY,
-    "private_key": PAYDUNYA_PRIVATE_KEY,
-    "public_key": PAYDUNYA_PUBLIC_KEY,
-    "token": PAYDUNYA_TOKEN,
-    "sandbox": PAYDUNYA_MODE != "live",
-    "store_name": os.environ.get("PAYDUNYA_STORE_NAME", "YaayESS"),
-    "store_tagline": os.environ.get("PAYDUNYA_STORE_TAGLINE", "Plateforme de gestion financière"),
-    "website_url": os.environ.get("PAYDUNYA_STORE_URL", "https://yaayess.com"),
-}
-"""
 
 # settings.py
 PAYDUNYA_FEE_RATE = float(os.getenv("PAYDUNYA_FEE_RATE", "0.025"))

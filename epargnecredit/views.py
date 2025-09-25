@@ -656,75 +656,89 @@ def group_detail_remboursement(request, group_id):
         "totals": totals,
     })
 
+# epargnecredit/views.py
+import os
 import json
 from decimal import Decimal, ROUND_HALF_UP
-import requests
 
+import requests
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
-
-# ⬇️ Adapte ces imports selon tes modèles réels côté epargnecredit
-from .models import GroupMember, Versement  # ex: from .models import Member as GroupMember, Epargne as Versement
-
-
-# ===============================
-# Helpers PayDunya
-# ===============================
-# epargnecredit/views.py
-
-import json
-from decimal import Decimal, ROUND_HALF_UP
-import requests
-
-from django.conf import settings
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.db import transaction
-from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse, NoReverseMatch
-from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET
 
 from .models import GroupMember, Versement
+from django.views.decorators.http import require_GET, require_POST
 
 
 # ===============================
-# Helpers PayDunya (cohérents avec settings.PAYDUNYA)
+# Helpers PayDunya (cohérents avec settings/.env)
 # ===============================
-def _paydunya_conf():
-    cfg = getattr(settings, "PAYDUNYA", None)
-    if not cfg:
-        raise RuntimeError("Configuration PAYDUNYA absente (settings.PAYDUNYA).")
-    for k in ("master_key", "private_key", "public_key", "token"):
-        if not cfg.get(k):
+def _paydunya_conf() -> dict:
+    """
+    Construit la config depuis settings.PAYDUNYA (dict) + fallback .env.
+    Clés obligatoires: master_key, private_key, token.
+    public_key est OPTIONNELLE pour l'API checkout.
+    """
+    s_cfg = getattr(settings, "PAYDUNYA", {}) or {}
+
+    # Fallback .env
+    env_flag = (s_cfg.get("env") or s_cfg.get("mode") or os.getenv("PAYDUNYA_ENV", "sandbox")).strip().lower()
+    if env_flag in ("production", "live"):
+        env_flag = "prod"
+    elif env_flag not in ("prod", "sandbox"):
+        env_flag = "sandbox"
+
+    cfg = {
+        "env": env_flag,  # "sandbox" | "prod"
+        "master_key": (s_cfg.get("master_key") or os.getenv("PAYDUNYA_MASTER_KEY", "")).strip(),
+        "private_key": (s_cfg.get("private_key") or os.getenv("PAYDUNYA_PRIVATE_KEY", "")).strip(),
+        "token": (s_cfg.get("token") or os.getenv("PAYDUNYA_TOKEN", "")).strip(),
+        # optionnel (non requis par l'appel HTTP)
+        "public_key": (s_cfg.get("public_key") or os.getenv("PAYDUNYA_PUBLIC_KEY", "")).strip(),
+        # infos boutique (facultatives)
+        "store_name": s_cfg.get("store_name", getattr(settings, "PAYDUNYA_STORE_NAME", "YaayESS")),
+        "store_tagline": s_cfg.get("store_tagline", getattr(settings, "PAYDUNYA_STORE_TAGLINE", "Plateforme de gestion financière")),
+        "website_url": s_cfg.get("website_url", getattr(settings, "PAYDUNYA_WEBSITE_URL", "https://yaayess.com")),
+    }
+
+    # Validations hard (obligatoires)
+    for k in ("master_key", "private_key", "token"):
+        if not cfg[k]:
             raise RuntimeError(f"Clé PAYDUNYA manquante: {k}")
+
     return cfg
 
-def _paydunya_headers(cfg):
+
+def _paydunya_headers(cfg: dict) -> dict:
+    """
+    Headers requis pour créer un checkout (sans PUBLIC-KEY).
+    """
     return {
         "Content-Type": "application/json",
-        "Accept": "application/json",
         "PAYDUNYA-MASTER-KEY": cfg["master_key"],
         "PAYDUNYA-PRIVATE-KEY": cfg["private_key"],
-        "PAYDUNYA-PUBLIC-KEY": cfg["public_key"],
         "PAYDUNYA-TOKEN": cfg["token"],
     }
 
-def _paydunya_base_url(cfg):
-    return "https://app.paydunya.com/sandbox-api/v1" if cfg.get("sandbox", True) \
-           else "https://app.paydunya.com/api/v1"
 
-def _as_fcfa_int(amount: Decimal) -> int:
-    return int(amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+def _paydunya_base_url(cfg: dict) -> str:
+    """
+    Base URL selon l'environnement.
+    """
+    return "https://app.paydunya.com/api/v1" if cfg.get("env") == "prod" else "https://app.paydunya.com/sandbox-api/v1"
+
+
+def _as_fcfa_int(amount) -> int:
+    """PayDunya attend des entiers (XOF)."""
+    if isinstance(amount, Decimal):
+        d = amount
+    else:
+        d = Decimal(str(amount))
+    return int(d.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 # ===============================
@@ -733,20 +747,16 @@ def _as_fcfa_int(amount: Decimal) -> int:
 @login_required
 @transaction.atomic
 def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
-    k = settings.get_paydunya_keys()
-    if k["MODE"] == "live" and ("test_" in k["PUBLIC_KEY"] or "test_" in k["PRIVATE_KEY"]):
-        messages.error(request, "Clés TEST détectées alors que l'API LIVE est sélectionnée.")
-        return redirect("cotisationtontine:group_detail", group_id=group_id)
-
     """
     PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement.
     (La méthode 'caisse' est supprimée.)
     """
+    # 1) Récupération membre/groupe (pour avoir group_id dans tout redirect)
     member = get_object_or_404(GroupMember, id=member_id)
     group = member.group
     group_id = group.id
 
-    # --- Permissions ---
+    # 2) Permissions
     is_self = (request.user == member.user)
     is_group_admin = (request.user == getattr(group, "admin", None))
     is_super_admin = bool(getattr(request.user, "is_super_admin", False))
@@ -754,16 +764,14 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         messages.error(request, "Vous n'avez pas les droits pour effectuer un versement pour ce membre.")
         return redirect("epargnecredit:group_detail", group_id=group_id)
 
+    # 3) GET => affichage du formulaire
     if request.method == "GET":
         return render(request, "epargnecredit/initier_versement.html", {"member": member, "group": group})
 
-    # --- POST ---
+    # 4) POST => validation du montant
     montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
+    methode = "paydunya"  # méthode unique
 
-    # Forcer méthode PayDunya
-    methode = "paydunya"
-
-    # Valider le montant
     try:
         montant = Decimal(montant_raw)
     except Exception:
@@ -774,10 +782,10 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         messages.error(request, "Le montant doit être supérieur à 0.")
         return redirect("epargnecredit:initier_versement", member_id=member_id)
 
-    # Arrondi XOF
+    # Forcer l’entier (XOF)
     montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    # Config PayDunya
+    # 5) Charger config PayDunya (+ headers/base_url) et vérifier la cohérence mode/clefs
     try:
         cfg = _paydunya_conf()
         headers = _paydunya_headers(cfg)
@@ -786,20 +794,31 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         messages.error(request, str(e))
         return redirect("epargnecredit:initier_versement", member_id=member_id)
 
-    # Frais : 2,5% + 75 (paramétrables via settings si tu veux)
+    mode = (cfg.get("env") or cfg.get("mode") or "").lower()
+    has_test_tokens = any(
+        "test_" in (cfg.get(k, "") or "").lower()
+        for k in ("public_key", "private_key", "token")
+    )
+    if mode in ("prod", "production", "live") and has_test_tokens:
+        messages.error(request, "Clés TEST détectées alors que l'API LIVE est sélectionnée.")
+        return redirect("epargnecredit:group_detail", group_id=group_id)
+    # (Optionnel) Bloquer l'inverse :
+    # if mode in ("", "sandbox") and not has_test_tokens:
+    #     messages.error(request, "Clés LIVE détectées alors que l'API SANDBOX est sélectionnée.")
+    #     return redirect("epargnecredit:group_detail", group_id=group_id)
+
+    # 6) Frais (paramétrables) : défaut 2,5% + 75 FCFA
     fee_rate = Decimal(str(getattr(settings, "PAYDUNYA_FEE_RATE", 0.025)))
     fee_fixed = Decimal(str(getattr(settings, "PAYDUNYA_FEE_FIXED", 75)))
     frais_total = (montant * fee_rate + fee_fixed).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     montant_total = (montant + frais_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    # URLs
+    # 7) URLs
     callback_url = request.build_absolute_uri(reverse("epargnecredit:versement_callback"))
-    return_url = (
-        request.build_absolute_uri(reverse("epargnecredit:versement_merci"))
-        + f"?group_id={group_id}"
-    )
+    return_url = request.build_absolute_uri(reverse("epargnecredit:versement_merci")) + f"?group_id={group_id}"
     cancel_url = request.build_absolute_uri(reverse("epargnecredit:group_detail", args=[group_id]))
 
+    # 8) Payload PayDunya
     payload = {
         "invoice": {
             "items": [
@@ -809,7 +828,7 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
                     "unit_price": _as_fcfa_int(montant_total),
                     "total_price": _as_fcfa_int(montant_total),
                     "description": (
-                        f"Versement membre {member.user.nom or member.user.phone} "
+                        f"Versement membre {getattr(member.user, 'nom', None) or member.user.phone} "
                         f"(frais: {_as_fcfa_int(frais_total)} FCFA)"
                     ),
                 }
@@ -833,10 +852,12 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
             "user_id": request.user.id,
             "montant": _as_fcfa_int(montant),   # hors frais
             "frais": _as_fcfa_int(frais_total),
+            "methode": methode,
+            "group_id": group_id,
         },
     }
 
-    # Création de la facture
+    # 9) Création de la facture
     try:
         resp = requests.post(f"{base_url}/checkout-invoice/create", headers=headers, json=payload, timeout=20)
     except requests.exceptions.RequestException as e:
@@ -850,6 +871,7 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
             messages.info(request, f"DEBUG PayDunya: {txt}")
         return redirect("epargnecredit:initier_versement", member_id=member_id)
 
+    # 10) Parsing JSON
     try:
         data = resp.json()
     except json.JSONDecodeError:
@@ -864,16 +886,19 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         except Exception:
             pass
 
-    # Success ?
+    # 11) Succès ?
     if isinstance(data, dict) and data.get("response_code") == "00":
         invoice_url = None
         rt = data.get("response_text")
 
+        # a) URL directe
         if isinstance(rt, str) and rt.startswith("http"):
             invoice_url = rt
+        # b) Dictionnaire
         elif isinstance(rt, dict):
             invoice_url = rt.get("invoice_url") or rt.get("checkout_url")
 
+        # c) Fallbacks fréquents
         if not invoice_url:
             invoice_url = (
                 data.get("invoice_url")
@@ -885,30 +910,31 @@ def initier_versement(request: HttpRequest, member_id: int) -> HttpResponse:
         if invoice_url:
             return redirect(invoice_url)
 
+        # d) Pas d'URL mais token => on laisse le callback finaliser
         token = data.get("token") or (rt.get("token") if isinstance(rt, dict) else None)
         if token:
-            messages.warning(
-                request,
-                "Facture créée. Redirection indisponible ; finalisez le paiement sur PayDunya."
-            )
+            messages.warning(request, "Facture créée. Redirection indisponible ; finalisez le paiement sur PayDunya.")
             return redirect("epargnecredit:group_detail", group_id=group_id)
 
         messages.warning(request, "Facture créée mais URL manquante. Retour au groupe.")
         return redirect("epargnecredit:group_detail", group_id=group_id)
 
-    # Erreur métier PayDunya
+    # 12) Erreur métier PayDunya
     err_text = data.get("response_text", "Erreur inconnue")
     code = data.get("response_code")
+
     if code == "1001":
         messages.error(request, "Échec de création: MasterKey invalide. Vérifiez PAYDUNYA_MASTER_KEY et le mode (test/live).")
     else:
         messages.error(request, f"Échec de création de facture: {err_text}")
 
     if settings.DEBUG:
-        messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:800]}")
+        try:
+            messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:800]}")
+        except Exception:
+            pass
 
     return redirect("epargnecredit:initier_versement", member_id=member_id)
-
 
 # ===============================
 # Callback PayDunya (idempotent)
@@ -1083,35 +1109,38 @@ from django.db import transaction
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
 
 from .models import GroupMember, Versement
+
+# ⬇️ Réutilise les helpers centralisés créés dans l’app cotisationtontine
+from cotisationtontine.paydunya_utils import (
+    paydunya_conf as _paydunya_conf,
+    paydunya_headers as _paydunya_headers,
+    paydunya_base_url as _paydunya_base_url,
+    as_fcfa_int as _as_fcfa_int,
+)
 
 
 @login_required
 @transaction.atomic
 def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> HttpResponse:
-    k = settings.get_paydunya_keys()
-    if k["MODE"] == "live" and ("test_" in k["PUBLIC_KEY"] or "test_" in k["PRIVATE_KEY"]):
-        messages.error(request, "Clés TEST détectées alors que l'API LIVE est sélectionnée.")
-        return redirect("cotisationtontine:group_detail", group_id=group_id)
-
     """
     PAYDUNYA : crée la facture, redirige l’utilisateur, et attend le callback pour créer le Versement.
     Contexte remboursement :
       * Le member doit appartenir à un group is_remboursement=True
-      * Redirections -> group_detail_remboursement
+      * Redirections -> epargnecredit:group_detail_remboursement
     """
+    # 1) Membre / groupe (garder group_id dispo pour tout redirect)
     member = get_object_or_404(GroupMember.objects.select_related("group", "user"), id=member_id)
     group = member.group
     group_id = group.id
 
-    # --- Vérification contexte remboursement ---
+    # 2) Vérification contexte remboursement
     if not getattr(group, "is_remboursement", False):
         messages.error(request, "Ce membre n'appartient pas à un groupe de remboursement.")
         return redirect("epargnecredit:group_detail", group_id=getattr(group, "parent_group_id", group_id))
 
-    # --- Permissions ---
+    # 3) Permissions
     is_self = (request.user == member.user)
     is_group_admin = (request.user == getattr(group, "admin", None))
     is_super_admin = bool(getattr(request.user, "is_super_admin", False))
@@ -1119,22 +1148,18 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
         messages.error(request, "Vous n'avez pas les droits pour effectuer un versement pour ce membre.")
         return redirect("epargnecredit:group_detail_remboursement", group_id=group_id)
 
-    # --- GET: page de saisie ---
+    # 4) GET => page de saisie
     if request.method == "GET":
-        # On réutilise le template versement standard avec un flag de contexte
         return render(
             request,
             "epargnecredit/initier_versement.html",
             {"member": member, "group": group, "is_remboursement": True},
         )
 
-    # --- POST ---
+    # 5) POST => validation du montant
     montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
-
-    # Forcer la méthode à PayDunya (pas de "caisse" ici)
     methode = "paydunya"
 
-    # Valider le montant
     try:
         montant = Decimal(montant_raw)
     except Exception:
@@ -1145,10 +1170,10 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
         messages.error(request, "Le montant doit être supérieur à 0.")
         return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
 
-    # Arrondi (XOF)
+    # XOF entier
     montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    # Config PayDunya
+    # 6) Config PayDunya + cohérence mode/clefs
     try:
         cfg = _paydunya_conf()
         headers = _paydunya_headers(cfg)
@@ -1157,20 +1182,24 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
         messages.error(request, str(e))
         return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
 
-    # Frais : 2,5% + 75 (paramétrables via settings)
+    mode = (cfg.get("env") or cfg.get("mode") or "").lower()
+    has_test_tokens = any("test_" in (cfg.get(k, "") or "").lower() for k in ("public_key", "private_key", "token"))
+    if mode in ("prod", "production", "live") and has_test_tokens:
+        messages.error(request, "Clés TEST détectées alors que l'API LIVE est sélectionnée.")
+        return redirect("epargnecredit:group_detail_remboursement", group_id=group_id)
+
+    # 7) Frais : 2,5% + 75 (paramétrables)
     fee_rate = Decimal(str(getattr(settings, "PAYDUNYA_FEE_RATE", 0.025)))
     fee_fixed = Decimal(str(getattr(settings, "PAYDUNYA_FEE_FIXED", 75)))
     frais_total = (montant * fee_rate + fee_fixed).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     montant_total = (montant + frais_total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    # URLs spécifiques remboursement
+    # 8) URLs spécifiques remboursement
     callback_url = request.build_absolute_uri(reverse("epargnecredit:versement_callback"))
-    return_url = (
-        request.build_absolute_uri(reverse("epargnecredit:versement_merci"))
-        + f"?group_id={group_id}"
-    )
+    return_url = request.build_absolute_uri(reverse("epargnecredit:versement_merci")) + f"?group_id={group_id}&ctx=remboursement"
     cancel_url = request.build_absolute_uri(reverse("epargnecredit:group_detail_remboursement", args=[group_id]))
 
+    # 9) Payload PayDunya
     payload = {
         "invoice": {
             "items": [
@@ -1180,7 +1209,7 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
                     "unit_price": _as_fcfa_int(montant_total),
                     "total_price": _as_fcfa_int(montant_total),
                     "description": (
-                        f"Remboursement membre {member.user.nom or member.user.phone} "
+                        f"Remboursement membre {getattr(member.user, 'nom', None) or member.user.phone} "
                         f"(frais: {_as_fcfa_int(frais_total)} FCFA)"
                     ),
                 }
@@ -1205,10 +1234,12 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
             "montant": _as_fcfa_int(montant),   # hors frais
             "frais": _as_fcfa_int(frais_total),
             "context": "remboursement",
+            "group_id": group_id,
+            "methode": methode,
         },
     }
 
-    # Création de la facture
+    # 10) Appel API PayDunya
     try:
         resp = requests.post(f"{base_url}/checkout-invoice/create", headers=headers, json=payload, timeout=20)
     except requests.exceptions.RequestException as e:
@@ -1222,6 +1253,7 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
             messages.info(request, f"DEBUG PayDunya: {txt}")
         return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
 
+    # 11) Parsing JSON
     try:
         data = resp.json()
     except json.JSONDecodeError:
@@ -1236,19 +1268,19 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
         except Exception:
             pass
 
-    # Success ?
+    # 12) Succès ?
     if isinstance(data, dict) and data.get("response_code") == "00":
         invoice_url = None
         rt = data.get("response_text")
 
-        # URL directe
+        # a) URL directe
         if isinstance(rt, str) and rt.startswith("http"):
             invoice_url = rt
-        # Variante dict
+        # b) Dictionnaire
         elif isinstance(rt, dict):
             invoice_url = rt.get("invoice_url") or rt.get("checkout_url")
 
-        # Fallbacks
+        # c) Fallbacks
         if not invoice_url:
             invoice_url = (
                 data.get("invoice_url")
@@ -1260,7 +1292,7 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
         if invoice_url:
             return redirect(invoice_url)
 
-        # Pas d'URL mais token -> on laisse le callback finaliser
+        # d) Pas d'URL mais token => on laisse le callback finaliser
         token = data.get("token") or (rt.get("token") if isinstance(rt, dict) else None)
         if token:
             messages.warning(request, "Facture créée. Redirection indisponible ; finalisez le paiement sur PayDunya.")
@@ -1269,7 +1301,7 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
         messages.warning(request, "Facture créée mais URL manquante. Retour au groupe de remboursement.")
         return redirect("epargnecredit:group_detail_remboursement", group_id=group_id)
 
-    # Erreur métier PayDunya
+    # 13) Erreur métier PayDunya
     err_text = data.get("response_text", "Erreur inconnue")
     code = data.get("response_code")
     if code == "1001":
@@ -1278,10 +1310,12 @@ def initier_paiement_remboursement(request: HttpRequest, member_id: int) -> Http
         messages.error(request, f"Échec de création de facture: {err_text}")
 
     if settings.DEBUG:
-        messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:800]}")
+        try:
+            messages.info(request, f"DEBUG PayDunya: {json.dumps(data)[:800]}")
+        except Exception:
+            pass
 
     return redirect("epargnecredit:initier_paiement_remboursement", member_id=member_id)
-
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404
