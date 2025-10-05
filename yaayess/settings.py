@@ -49,23 +49,8 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-"""
-if DEBUG:
-    CSRF_COOKIE_SECURE = False
-    SESSION_COOKIE_SECURE = False
-    SECURE_SSL_REDIRECT = False
-    CSRF_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_SAMESITE = "Lax"
-    CSRF_USE_SESSIONS = True
-else:
-    CSRF_COOKIE_SECURE = True
-    SESSION_COOKIE_SECURE = True
-    SECURE_SSL_REDIRECT = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-"""
+
+
 # ----------------------------------------------------
 # 🌍 OPENAI
 # ----------------------------------------------------
@@ -84,37 +69,6 @@ PAYDUNYA = {
     "website_url": os.getenv("PAYDUNYA_WEBSITE_URL", "https://yaayess.com"),
 }
 
-
-"""
-
-PAYDUNYA = {
-    "MASTER_KEY": os.getenv("PAYDUNYA_MASTER_KEY", ""),
-    "MODE": os.getenv("PAYDUNYA_MODE", "test").lower(),  # "test" | "live"
-    "TEST": {
-        "PUBLIC_KEY": os.getenv("PAYDUNYA_TEST_PUBLIC_KEY", ""),
-        "PRIVATE_KEY": os.getenv("PAYDUNYA_TEST_PRIVATE_KEY", ""),
-        "TOKEN": os.getenv("PAYDUNYA_TEST_TOKEN", ""),
-        "BASE_URL": "https://app.paydunya.com/sandbox-api/v1",
-        "CHECKOUT_URL": "https://paydunya.com/sandbox-checkout/invoice",
-    },
-    "LIVE": {
-        "PUBLIC_KEY": os.getenv("PAYDUNYA_LIVE_PUBLIC_KEY", ""),
-        "PRIVATE_KEY": os.getenv("PAYDUNYA_LIVE_PRIVATE_KEY", ""),
-        "TOKEN": os.getenv("PAYDUNYA_LIVE_TOKEN", ""),
-        "BASE_URL": "https://app.paydunya.com/api/v1",
-        "CHECKOUT_URL": "https://paydunya.com/checkout/invoice",
-    },
-    "STORE": {
-        "NAME": os.getenv("PAYDUNYA_STORE_NAME", "YaayESS"),
-        "TAGLINE": os.getenv("PAYDUNYA_STORE_TAGLINE", ""),
-        "URL": os.getenv("PAYDUNYA_STORE_URL", ""),
-    },
-    "FEES": {
-        "RATE": float(os.getenv("PAYDUNYA_FEE_RATE", "0.025")),
-        "FIXED": int(float(os.getenv("PAYDUNYA_FEE_FIXED", "75"))),
-    },
-}
-"""
 def get_paydunya_keys():
     mode = PAYDUNYA["MODE"]
     assert mode in ("test", "live")
@@ -158,9 +112,12 @@ INSTALLED_APPS = [
     # Outils
     'whitenoise.runserver_nostatic',
     'sslserver',
+
+
 ]
 
 TERMS_VERSION = "v1.0-2025-09-07"
+
 
 # ----------------------------------------------------
 # ⚙️ MIDDLEWARE
@@ -177,7 +134,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     "legal.middleware.TermsGateMiddleware"
+
+
 ]
+
 
 ROOT_URLCONF = 'yaayess.urls'
 WSGI_APPLICATION = 'yaayess.wsgi.application'
