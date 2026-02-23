@@ -30,16 +30,31 @@ CSRF_TRUSTED_ORIGINS = [
 # ----------------------------------------------------
 
 DATABASES = {
-    "default": {
-        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-        "PORT": os.getenv("DB_PORT", "5432"),
-        "OPTIONS": {"sslmode": os.getenv("DB_SSLMODE", "prefer")},
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'bd_yaayess',
+        'USER': 'bd_yaayess_user',
+        'PASSWORD': 'EJG8HXqiEakEIMekrZcLCY05xoSZBgXk',
+        'HOST': '127.0.0.1',
+        'PORT': '5432',
     }
 }
+
+
+# DATABASES = {
+#    "default": {
+#        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+#        "NAME": os.getenv("DB_NAME"),
+#        "USER": os.getenv("DB_USER"),
+#        "PASSWORD": os.getenv("DB_PASSWORD"),
+#        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+#        "PORT": os.getenv("DB_PORT", "5432"),
+#        "OPTIONS": {"sslmode": os.getenv("DB_SSLMODE", "prefer")},
+#    }
+#}
+
+
+
 # PROD security (activés automatiquement quand DEBUG=False)
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
