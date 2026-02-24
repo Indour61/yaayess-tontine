@@ -3,6 +3,17 @@ from rest_framework.routers import DefaultRouter
 from . import views
 from .views_api import GroupViewSet, GroupMemberViewSet, VersementViewSet, ActionLogViewSet
 
+from django.urls import path
+from .api_views import (
+    DashboardEpargneAPI,
+    UserGroupsAPI,
+    GroupMembersAPI,
+    UserVersementsAPI,
+    CreateVersementAPI,
+    UserStatsAPI,
+)
+
+
 app_name = 'epargnecredit'
 
 # --- Router API REST ---
@@ -73,4 +84,14 @@ urlpatterns = [
         views.share_cycle_view,
         name="share_cycle"
     ),
+
+    path("api/epargne/dashboard/", DashboardEpargneAPI.as_view()),
+    path("api/epargne/groupes/", UserGroupsAPI.as_view()),
+    path("api/epargne/group/<int:group_id>/membres/", GroupMembersAPI.as_view()),
+    path("api/epargne/versements/", UserVersementsAPI.as_view()),
+    path("api/epargne/versement/create/", CreateVersementAPI.as_view()),
+    path("api/epargne/stats/", UserStatsAPI.as_view()),
+
 ]
+
+

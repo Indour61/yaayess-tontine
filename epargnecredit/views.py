@@ -1388,3 +1388,30 @@ def share_cycle_view(request, group_id):
     }
     messages.success(request, "La répartition de fin de cycle a été calculée.")
     return render(request, "epargnecredit/group_detail.html", context)
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from accounts.permissions import IsOptionTwo
+from rest_framework.permissions import BasePermission
+
+class DashboardEpargneView(APIView):
+    permission_classes = [IsAuthenticated, IsOptionTwo]
+
+    def get(self, request):
+        return Response({"message": "Bienvenue Épargne & Crédit"})
+
+from accounts.permissions import IsSuperAdmin
+
+
+class AdminOnlyView(APIView):
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+
+
+class IsAdminOrSuper(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and (
+            request.user.is_staff or request.user.is_super_admin
+        )
+

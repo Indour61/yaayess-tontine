@@ -53,17 +53,6 @@
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
           <!-- Assistant IA visible partout -->
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" id="assistantDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              <i class="fas fa-robot me-1"></i>Assistant IA
-            </a>
-            <ul class="dropdown-menu" aria-labelledby="assistantDropdown">
-              <li><a class="dropdown-item" href="{% url 'assistant_ai:chat_ui' %}">💬 Interface Assistant</a></li>
-              <li><a class="dropdown-item" href="{% url 'assistant_ai:chat_text' %}">⚡ API Texte</a></li>
-              <li><a class="dropdown-item" href="{% url 'assistant_ai:chat_voice' %}">🎙️ API Voix</a></li>
-              <li><a class="dropdown-item" href="{% url 'assistant_ai:tts' %}">🔊 API TTS</a></li>
-            </ul>
-          </li>
 
           {% if user.is_authenticated %}
             {% if user.type_adhesion == 1 %}
@@ -129,12 +118,12 @@
         <div class="col-md-3 mb-3 mb-md-0">
           <h6 class="fw-bold">Liens rapides</h6>
           <ul class="list-unstyled">
-            <li><a href="{% url 'landing' %}" class="text-white text-decoration- none">Accueil</a></li>
-            <li><a href="{% url 'legal:terms' %}">Conditions d’utilisation</a></li>
-            <li><a href="{% url 'legal:privacy' %}">Politique de confidentialité</a></li>
-            <li><a href="{% url 'legal:cookies' %}">Cookies</a></li>
+            <li><a href="{% url 'landing' %}" class="text-white text-decoration-none">Accueil</a></li>
+            <li><a href="#" class="text-white text-decoration-none">Conditions d’utilisation</a></li>
+            <li><a href="#" class="text-white text-decoration-none">Politique de confidentialité</a></li>
+            <li><a href="#" class="text-white text-decoration-none">Cookies</a></li>
 
-          </ul>
+           </ul>
         </div>
         <div class="col-md-3">
           <h6 class="fw-bold">Contact</h6>

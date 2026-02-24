@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -18,13 +19,7 @@ if not OPENAI_API_KEY:
 
 
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
-"""
-CSRF_TRUSTED_ORIGINS = [
-    "https://127.0.0.1:8000",
-    "https://localhost:8000",
-    "https://yaayess.com",
-]
-"""
+
 # ----------------------------------------------------
 # 🗄 DATABASE - Version sécurisée
 # ----------------------------------------------------
@@ -39,20 +34,6 @@ DATABASES = {
         'PORT': '5432',
     }
 }
-
-
-# DATABASES = {
-#    "default": {
-#        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
-#        "NAME": os.getenv("DB_NAME"),
-#        "USER": os.getenv("DB_USER"),
-#        "PASSWORD": os.getenv("DB_PASSWORD"),
-#        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-#        "PORT": os.getenv("DB_PORT", "5432"),
-#        "OPTIONS": {"sslmode": os.getenv("DB_SSLMODE", "prefer")},
-#    }
-#}
-
 
 
 # PROD security (activés automatiquement quand DEBUG=False)
@@ -71,37 +52,6 @@ if not DEBUG:
 # ----------------------------------------------------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# --- PayDunya ---
-PAYDUNYA = {
-    "env": "sandbox",  # "sandbox" | "prod"
-    "master_key": os.getenv("PAYDUNYA_MASTER_KEY", ""),
-    "private_key": os.getenv("PAYDUNYA_PRIVATE_KEY", ""),
-    "token": os.getenv("PAYDUNYA_TOKEN", ""),
-    # "public_key": os.getenv("PAYDUNYA_PUBLIC_KEY", ""),  # optionnel
-
-    "store_name": os.getenv("PAYDUNYA_STORE_NAME", "YaayESS"),
-    "store_tagline": os.getenv("PAYDUNYA_STORE_TAGLINE", "Plateforme de gestion financière"),
-    "website_url": os.getenv("PAYDUNYA_WEBSITE_URL", "https://yaayess.com"),
-}
-
-def get_paydunya_keys():
-    mode = PAYDUNYA["MODE"]
-    assert mode in ("test", "live")
-    keys = PAYDUNYA["TEST"] if mode == "test" else PAYDUNYA["LIVE"]
-    return {
-        "MASTER_KEY": PAYDUNYA["MASTER_KEY"],
-        "PUBLIC_KEY": keys["PUBLIC_KEY"],
-        "PRIVATE_KEY": keys["PRIVATE_KEY"],
-        "TOKEN": keys["TOKEN"],
-        "BASE_URL": keys["BASE_URL"],
-        "CHECKOUT_URL": keys["CHECKOUT_URL"],
-        "MODE": mode,
-    }
-
-
-# settings.py
-PAYDUNYA_FEE_RATE = float(os.getenv("PAYDUNYA_FEE_RATE", "0.025"))
-PAYDUNYA_FEE_FIXED = int(os.getenv("PAYDUNYA_FEE_FIXED", "75"))
 
 # ----------------------------------------------------
 # 📦 INSTALLED APPS (inchangé)
@@ -117,7 +67,6 @@ INSTALLED_APPS = [
 
     # Apps locales
     'accounts',
-    'assistant_ai',
     'cotisationtontine',
     'epargnecredit',
     'legal',
@@ -128,8 +77,25 @@ INSTALLED_APPS = [
     'whitenoise.runserver_nostatic',
     'sslserver',
 
-
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
+
 
 TERMS_VERSION = "v1.0-2025-09-07"
 
@@ -149,7 +115,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     "legal.middleware.TermsGateMiddleware"
-
 
 ]
 
@@ -189,6 +154,7 @@ EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"] # Doit être défini
 # ----------------------------------------------------
 # 🔑 AUTHENTICATION
 # ----------------------------------------------------
+
 AUTH_USER_MODEL = 'accounts.CustomUser'
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
@@ -226,15 +192,12 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
+# AUTHENTICATION_BACKENDS = [
+#    'accounts.backends.NomBackend',
+#]
 AUTHENTICATION_BACKENDS = [
-    'accounts.backends.NomBackend',
+    'accounts.auth_backend.PhoneBackend',
 ]
-"""
-AUTHENTICATION_BACKENDS = [
-    'accounts.backend.NomBackend',
-    'django.contrib.auth.backends.ModelBackend',  # fallback par défaut
-]
-"""
 
 
 # settings.py
