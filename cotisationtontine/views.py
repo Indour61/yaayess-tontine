@@ -20,48 +20,72 @@ def landing_view(request):
     # Sinon, afficher la page d'accueil publique
     return render(request, 'landing.html')
 
+from django.db.models import Sum
+from django.utils import timezone
+from datetime import timedelta
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+
+from .models import Group, GroupMember, Versement, ActionLog
 
 @login_required
 def dashboard_tontine_simple(request):
-    """
-    Dashboard principal avec aperçu des groupes, activités récentes et statistiques.
-    """
-    # Groupes dont l'utilisateur est administrateur
+
     groupes_admin = Group.objects.filter(admin=request.user)
 
-    # Groupes dont l'utilisateur est membre (mais pas admin)
     groupes_membre = Group.objects.filter(
-        membres__user=request.user
+        membres__user=request.user   # ✅ CORRECTION ICI
     ).exclude(admin=request.user).distinct()
 
-    # Dernières actions de l'utilisateur
-    dernieres_actions = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
+    dernieres_actions = (
+        ActionLog.objects
+        .filter(user=request.user)
+        .order_by('-date')[:10]
+    )
 
-    # Total des versements de l'utilisateur - CORRECTION ICI
-    # On passe par GroupMember pour accéder aux versements
-    total_versements = Versement.objects.filter(
-        member__user=request.user
-    ).aggregate(total=Sum('montant'))['total'] or 0
+    total_versements = (
+        Versement.objects
+        .filter(
+            member__user=request.user,
+            statut="VALIDE"
+        )
+        .aggregate(total=Sum('montant'))['total'] or 0
+    )
 
-    # Nombre total de groupes où l'utilisateur est membre
-    total_groupes = Group.objects.filter(
-        membres__user=request.user
-    ).distinct().count()
+    total_groupes = (
+        Group.objects
+        .filter(membres__user=request.user)   # ✅ CORRECTION ICI
+        .distinct()
+        .count()
+    )
 
-    # Récupérer les versements récents (30 derniers jours)
     date_limite = timezone.now() - timedelta(days=30)
-    versements_recents = Versement.objects.filter(
-        member__user=request.user,
-        date__gte=date_limite  # Utilisez le nom correct du champ date
-    ).select_related('member__user', 'member__group').order_by('-date')[:5]
 
-    # Statistiques des groupes administrés
+    versements_recents = (
+        Versement.objects
+        .filter(
+            member__user=request.user,
+            date_creation__gte=date_limite
+        )
+        .select_related('member__user', 'member__group')
+        .order_by('-date_creation')
+    )[:5]
+
     stats_groupes_admin = []
+
     for groupe in groupes_admin:
-        total_membres = groupe.membres.count()
-        total_versements_groupe = Versement.objects.filter(
-            member__group=groupe
-        ).aggregate(total=Sum('montant'))['total'] or 0
+
+        total_membres = groupe.membres.count()   # ✅ CORRECTION ICI
+
+        total_versements_groupe = (
+            Versement.objects
+            .filter(
+                member__group=groupe,
+                statut="VALIDE"
+            )
+            .aggregate(total=Sum('montant'))['total'] or 0
+        )
+
         stats_groupes_admin.append({
             'groupe': groupe,
             'membres_count': total_membres,
@@ -79,7 +103,6 @@ def dashboard_tontine_simple(request):
     }
 
     return render(request, "cotisationtontine/dashboard.html", context)
-
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -261,8 +284,8 @@ from django.db.models import Sum, OuterRef, Subquery, Q, Value, DecimalField
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 
-#from .models import Group, GroupMember, Versement, ActionLog
-from .models import Group, GroupMember, Tirage, Versement
+from .models import Group, GroupMember, Tirage, Versement, ActionLog
+
 
 @login_required
 def group_detail(request, group_id):
@@ -273,24 +296,36 @@ def group_detail(request, group_id):
         or GroupMember.objects.filter(group=group, user=request.user).exists()
         or getattr(request.user, "is_super_admin", False)
     )
+
     if not has_access:
         messages.error(request, "⚠️ Vous n'avez pas accès à ce groupe.")
         return redirect("cotisationtontine:group_list")
 
-    # --- Nom de la relation reverse GroupMember -> Versement ---
-    # D'après ton log, c'est bien "versements"
-    rel_lookup = "versements"
+    # ==========================================
+    # Relation reverse GroupMember -> Versement
+    # ==========================================
 
-    # --- Sous-requête : dernier versement (date + montant) depuis date_reset si définie ---
+    rel_lookup = "versements"  # ⚠️ Vérifie que ton related_name est bien "versements"
+
+    # ==========================================
+    # Sous-requête : dernier versement
+    # ==========================================
+
     last_qs = Versement.objects.filter(member=OuterRef("pk"))
-    if getattr(group, "date_reset", None):
-        last_qs = last_qs.filter(date__gte=group.date_reset)
-    last_qs = last_qs.order_by("-date")
 
-    # --- Agrégations par membre ---
-    sum_filter = Q()
     if getattr(group, "date_reset", None):
-        sum_filter &= Q(**{f"{rel_lookup}__date__gte": group.date_reset})
+        last_qs = last_qs.filter(date_creation__gte=group.date_reset)
+
+    last_qs = last_qs.order_by("-date_creation")
+
+    # ==========================================
+    # Agrégations par membre
+    # ==========================================
+
+    sum_filter = Q()
+
+    if getattr(group, "date_reset", None):
+        sum_filter &= Q(**{f"{rel_lookup}__date_creation__gte": group.date_reset})
 
     membres = (
         GroupMember.objects.filter(group=group)
@@ -298,55 +333,71 @@ def group_detail(request, group_id):
         .annotate(
             total_montant=Coalesce(
                 Sum(f"{rel_lookup}__montant", filter=sum_filter),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=2)),
-                output_field=DecimalField(max_digits=12, decimal_places=2),
+                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
+                output_field=DecimalField(max_digits=12, decimal_places=0),
             ),
             last_amount=Subquery(last_qs.values("montant")[:1]),
-            last_date=Subquery(last_qs.values("date")[:1]),
+            last_date=Subquery(last_qs.values("date_creation")[:1]),
         )
         .order_by("id")
     )
 
-    # --- Total groupe (filtré par reset si présent) ---
+    # ==========================================
+    # Total du groupe
+    # ==========================================
+
     total_filter = Q(member__group=group)
+
     if getattr(group, "date_reset", None):
-        total_filter &= Q(date__gte=group.date_reset)
+        total_filter &= Q(date_creation__gte=group.date_reset)
 
     total_montant = (
         Versement.objects.filter(total_filter)
         .aggregate(
             total=Coalesce(
                 Sum("montant"),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=2)),
-                output_field=DecimalField(max_digits=12, decimal_places=2),
+                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
+                output_field=DecimalField(max_digits=12, decimal_places=0),
             )
         )["total"]
     )
 
-    # --- Actions ---
+    # ==========================================
+    # Actions
+    # ==========================================
+
     try:
         actions = ActionLog.objects.filter(group=group).order_by("-date")[:10]
     except Exception:
         actions = []
 
-    # --- Lien d'invitation robuste ---
+    # ==========================================
+    # Lien d'invitation
+    # ==========================================
+
     code = None
     for field in ("code_invitation", "invitation_code", "uuid", "code"):
         if hasattr(group, field) and getattr(group, field):
             code = str(getattr(group, field))
             break
+
     invite_arg = code if code else str(group.id)
+
     invite_url = request.build_absolute_uri(
         reverse("accounts:inscription_et_rejoindre", args=[invite_arg])
     )
 
-    user_is_admin = (request.user == group.admin) or getattr(request.user, "is_super_admin", False)
+    user_is_admin = (
+        request.user == group.admin
+        or getattr(request.user, "is_super_admin", False)
+    )
+
     if user_is_admin:
         request.session["last_invitation_link"] = invite_url
 
     context = {
         "group": group,
-        "membres": membres,                # total_montant / last_date / last_amount
+        "membres": membres,
         "total_montant": total_montant,
         "admin_user": group.admin,
         "actions": actions,
@@ -354,6 +405,7 @@ def group_detail(request, group_id):
         "invite_url": invite_url,
         "last_invitation_link": request.session.get("last_invitation_link"),
     }
+
     return render(request, "cotisationtontine/group_detail.html", context)
 
 import json

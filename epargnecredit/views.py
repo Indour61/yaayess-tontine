@@ -775,10 +775,11 @@ def valider_versement(request, versement_id):
         messages.error(request, "Accès refusé.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
-    versement.statut = "VALIDE"
-    versement.valide_par = request.user
-    versement.date_validation = timezone.now()
-    versement.save()
+    versement.valider(request.user)
+#    versement.statut = "VALIDE"
+#    versement.valide_par = request.user
+#    versement.date_validation = timezone.now()
+#    versement.save()
 
     messages.success(request, "Versement validé avec succès.")
     return redirect("epargnecredit:group_detail", group_id=group.id)
@@ -799,10 +800,11 @@ def refuser_versement(request, versement_id):
         messages.error(request, "Accès refusé.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
-    versement.statut = "REFUSE"
-    versement.valide_par = request.user
-    versement.date_validation = timezone.now()
-    versement.save()
+    versement.refuser(request.user)
+#    versement.statut = "REFUSE"
+#    versement.valide_par = request.user
+#    versement.date_validation = timezone.now()
+#    versement.save()
 
     messages.success(request, "Versement refusé.")
     return redirect("epargnecredit:group_detail", group_id=group.id)

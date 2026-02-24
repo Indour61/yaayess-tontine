@@ -142,6 +142,14 @@ class Versement(models.Model):
         related_name="versements_valides_ec"
     )
 
+    # 🔥 NOUVEAU : Numéro de reçu unique
+    numero_recu = models.CharField(
+        max_length=30,
+        unique=True,
+        null=True,
+        blank=True
+    )
+
     date_creation = models.DateTimeField(auto_now_add=True)
     date_validation = models.DateTimeField(null=True, blank=True)
 
@@ -153,6 +161,7 @@ class Versement(models.Model):
         indexes = [
             models.Index(fields=["statut"]),
             models.Index(fields=["methode"]),
+            models.Index(fields=["numero_recu"]),
         ]
 
     def __str__(self):
@@ -161,6 +170,42 @@ class Versement(models.Model):
     @property
     def montant_total(self):
         return self.montant + self.frais
+
+    # =====================================================
+    # GENERATION AUTOMATIQUE NUMERO RECU
+    # =====================================================
+
+    def generer_numero_recu(self):
+        """
+        Format :
+        YESS-20260224-000123
+        """
+        if not self.numero_recu and self.id:
+            date_str = timezone.now().strftime("%Y%m%d")
+            self.numero_recu = f"YESS-{date_str}-{self.id:06d}"
+            self.save(update_fields=["numero_recu"])
+
+    # =====================================================
+    # VALIDATION PROPRE
+    # =====================================================
+
+    def valider(self, admin_user):
+        """
+        Méthode centralisée pour valider un versement.
+        """
+        if self.statut != "VALIDE":
+            self.statut = "VALIDE"
+            self.valide_par = admin_user
+            self.date_validation = timezone.now()
+            self.save()
+            self.generer_numero_recu()
+
+    def refuser(self, admin_user):
+        if self.statut != "REFUSE":
+            self.statut = "REFUSE"
+            self.valide_par = admin_user
+            self.date_validation = timezone.now()
+            self.save()
 
 
 # =========================================================
