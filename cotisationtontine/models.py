@@ -1,59 +1,64 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from decimal import Decimal
 import uuid
 
+
+# =====================================================
+# GROUPE TONTINE
+# =====================================================
+
 class Group(models.Model):
-    nom = models.CharField(max_length=255, verbose_name="Nom du groupe")
-    date_creation = models.DateTimeField(auto_now_add=True, verbose_name="Date de création")
+
+    nom = models.CharField(max_length=255)
+    date_creation = models.DateTimeField(auto_now_add=True)
     date_reset = models.DateTimeField(null=True, blank=True)
+
     code_invitation = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     invitation_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
     admin = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="groupes_administres",
-        verbose_name="Administrateur"
+        related_name="groupes_administres_tontine"
     )
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, verbose_name="Code d'invitation")
-    montant_base = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Montant de base")
 
-    montant_fixe_gagnant = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name="Montant fixe pour les gagnants"
-    )
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+
+    montant_base = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+    montant_fixe_gagnant = models.DecimalField(max_digits=12, decimal_places=0, null=True, blank=True)
 
     prochain_gagnant = models.ForeignKey(
         'GroupMember',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="groupes_prochain_gagnant",
-        verbose_name="Prochain gagnant à exclure"
+        related_name="groupes_prochain_gagnant"
     )
 
     class Meta:
         ordering = ['-date_creation']
-        verbose_name = "Groupe"
-        verbose_name_plural = "Groupes"
 
     def __str__(self):
-        return f"{self.nom} (admin : {self.admin})"
+        return f"{self.nom}"
 
-from django.db import models
-from django.conf import settings
-from django.utils import timezone
+
+# =====================================================
+# MEMBRE
+# =====================================================
 
 class GroupMember(models.Model):
-    group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name='membres')
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='membres')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
     alias = models.CharField(max_length=100, blank=True, null=True)
-    montant = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    montant = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+
     actif = models.BooleanField(default=True)
     exit_liste = models.BooleanField(default=False)
+
     date_ajout = models.DateTimeField(auto_now_add=True)
     date_joined = models.DateTimeField(default=timezone.now)
 
@@ -61,143 +66,89 @@ class GroupMember(models.Model):
         unique_together = ('group', 'user')
 
     def __str__(self):
-        return f"{self.user.nom} - {self.group.nom}"
+        return f"{self.user} - {self.group.nom}"
 
 
-# ✅ Historique des tirages
-class TirageHistorique(models.Model):
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='tirages_historiques')
-    gagnant = models.ForeignKey(GroupMember, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Gagnant")
-    montant = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    date_tirage = models.DateTimeField(auto_now_add=True)
+# =====================================================
+# VERSEMENT CAISSE
+# =====================================================
 
-    def __str__(self):
-        return f"Tirage {self.date_tirage.strftime('%d/%m/%Y')} - {self.gagnant} - {self.montant} FCFA"
-
-# ✅ Cotisation par membre (versement dans le cycle)
-class CotisationTontine(models.Model):
-    member = models.ForeignKey(GroupMember, on_delete=models.CASCADE, related_name='cotisations')
-    montant = models.DecimalField(max_digits=10, decimal_places=2)
-    date = models.DateTimeField(auto_now_add=True)
-    statut = models.CharField(
-        max_length=20,
-        choices=[
-            ("VALIDE", "Validé"),
-            ("EN_ATTENTE", "En attente"),
-            ("REFUSE", "Refusé"),
-        ],
-        default="EN_ATTENTE"
-    )
-
-    def __str__(self):
-        return f"{self.member.user.nom} - {self.montant} FCFA - {self.get_statut_display()}"
-
-
-from django.db import models
-#from .group import Group
-#from .groupmember import GroupMember
-
-class Tirage(models.Model):
-    """
-    Représente un tirage au sort dans un groupe de tontine.
-    Chaque tirage est lié à un groupe, un gagnant, et un membre participant.
-    """
-    group = models.ForeignKey(
-        Group,
-        on_delete=models.CASCADE,
-        related_name="tirages",  # ✅ Ajout du related_name pour accéder via group.tirages.all()
-        verbose_name="Groupe"
-    )
-
-    date_tirage = models.DateField(
-        auto_now_add=True,
-        verbose_name="Date du tirage"
-    )
-
-    montant = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        verbose_name="Montant du tirage"
-    )
-
-    gagnant = models.ForeignKey(
-        GroupMember,
-        on_delete=models.CASCADE,
-        related_name="tirages_gagnes",
-        verbose_name="Membre gagnant"
-    )
-
-    membre = models.ForeignKey(
-        GroupMember,
-        on_delete=models.CASCADE,
-        related_name="tirages_participes",
-        verbose_name="Membre tiré"
-    )
-
-    def __str__(self):
-        return f"Tirage {self.date_tirage} - {self.group.nom}"
-
-# ✅ Invitation pour rejoindre un groupe
-
-
-from django.db import models
-from django.conf import settings
-#from cotisationtontine.models import GroupMember  # 🛠️ Assure-toi que le chemin est correct
-
-# ✅ Versement d’un membre
 class Versement(models.Model):
-    METHODE_CHOICES = [
-        ('PAYDUNYA', 'PayDunya'),
-        ('CASH', 'Caisse'),
-    ]
+
+    STATUT_CHOICES = (
+        ("EN_ATTENTE", "En attente"),
+        ("VALIDE", "Validé"),
+        ("REFUSE", "Refusé"),
+    )
 
     member = models.ForeignKey(
         GroupMember,
         on_delete=models.CASCADE,
         related_name='versements'
     )
-    montant = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        help_text="Montant net du versement (hors frais)."
-    )
-    frais = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=0,
-        help_text="Frais appliqués sur le paiement."
-    )
-    date = models.DateTimeField(auto_now_add=True)
 
-    methode = models.CharField(
-        max_length=50,
-        choices=METHODE_CHOICES,
-        default='PAYDUNYA'
+    montant = models.DecimalField(max_digits=12, decimal_places=0)
+    frais = models.DecimalField(max_digits=12, decimal_places=0, default=Decimal("0"))
+
+    methode = models.CharField(max_length=20, default="CAISSE")
+
+    statut = models.CharField(
+        max_length=20,
+        choices=STATUT_CHOICES,
+        default="EN_ATTENTE"
     )
-    transaction_id = models.CharField(
-        max_length=255,
+
+    valide_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
         blank=True,
-        null=True
+        on_delete=models.SET_NULL,
+        related_name="versements_valides_tontine"
     )
+
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_validation = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-date_creation"]
 
     def __str__(self):
-        return f"Versement {self.montant} FCFA (+{self.frais} FCFA frais) par {self.member.user.nom}"
+        return f"{self.member.user} - {self.montant} FCFA ({self.statut})"
 
     @property
     def montant_total(self):
-        """Montant total payé = montant + frais (utile pour PayDunya)."""
         return self.montant + self.frais
 
-# ✅ Historique des actions générales
-class ActionLog(models.Model):
-    group = models.ForeignKey(
-        Group,
+
+# =====================================================
+# TIRAGE
+# =====================================================
+
+class Tirage(models.Model):
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="tirages")
+    date_tirage = models.DateField(auto_now_add=True)
+    montant = models.DecimalField(max_digits=12, decimal_places=0)
+
+    gagnant = models.ForeignKey(
+        GroupMember,
         on_delete=models.CASCADE,
-        related_name="action_logs",  # <- NOM CHANGÉ
-        null=True,
-        blank=True
+        related_name="tirages_gagnes"
     )
+
+    def __str__(self):
+        return f"Tirage {self.date_tirage} - {self.group.nom}"
+
+
+# =====================================================
+# HISTORIQUE ACTIONS
+# =====================================================
+
+class ActionLog(models.Model):
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="action_logs", null=True, blank=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
     action = models.TextField()
     date = models.DateTimeField(auto_now_add=True)
 
@@ -205,68 +156,38 @@ class ActionLog(models.Model):
         ordering = ['-date']
 
     def __str__(self):
-        return f"{self.date} - {self.user} : {self.action}"
+        return f"{self.date} - {self.user}"
 
 
-# ✅ Historique spécifique (avec types d'actions prédéfinis)
 class HistoriqueAction(models.Model):
+
     ACTION_CHOICES = [
         ('RESET_CYCLE', 'Réinitialisation du cycle'),
         ('AUTRE', 'Autre action'),
     ]
 
-    group = models.ForeignKey(
-        'Group',
-        on_delete=models.CASCADE,
-        related_name='historique_actions'  # <- NOM CHANGÉ
-    )
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='historique_actions')
     action = models.CharField(max_length=50, choices=ACTION_CHOICES)
     description = models.TextField()
     date = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
-        return f"{self.get_action_display()} - {self.group.nom} - {self.date.strftime('%d/%m/%Y %H:%M')}"
+        return f"{self.get_action_display()} - {self.group.nom}"
 
 
-from django.db import models
-from django.conf import settings
-from .models import Group, GroupMember  # Assure-toi que c’est bien dans le même fichier
-
-class PaiementGagnant(models.Model):
-    STATUT_CHOICES = [
-        ('SUCCES', 'Succès'),
-        ('ECHEC', 'Échec'),
-    ]
-
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="paiements")
-    gagnant = models.ForeignKey(GroupMember, on_delete=models.CASCADE, related_name="paiements_reçus")
-    montant = models.DecimalField(max_digits=10, decimal_places=2)
-    statut = models.CharField(max_length=10, choices=STATUT_CHOICES)
-    message = models.TextField(blank=True, null=True)
-    transaction_id = models.CharField(max_length=100, blank=True, null=True)
-    date_paiement = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-date_paiement']
-        verbose_name = "Paiement gagnant"
-        verbose_name_plural = "Paiements des gagnants"
-
-    def __str__(self):
-        return f"{self.gagnant.user.nom} - {self.montant} FCFA - {self.statut}"
-
-import uuid
-from django.db import models
-from django.utils import timezone
+# =====================================================
+# INVITATION
+# =====================================================
 
 class Invitation(models.Model):
-    group = models.ForeignKey('Group', on_delete=models.CASCADE, related_name="invitations")
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="invitations")
     phone = models.CharField(max_length=20)
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
-        # Si tu veux garder la logique d’expiration, par ex. après 7 jours
         return timezone.now() > self.created_at + timezone.timedelta(days=7)
 
     def __str__(self):
-        return f"Invitation for {self.phone} to join {self.group.nom}"
+        return f"Invitation {self.phone} - {self.group.nom}"

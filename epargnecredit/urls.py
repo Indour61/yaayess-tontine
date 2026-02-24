@@ -13,48 +13,64 @@ router.register(r'versements', VersementViewSet)
 router.register(r'logs', ActionLogViewSet)
 
 urlpatterns = [
-    # --- API ---
+
+    # ================= API =================
     path('api/', include(router.urls)),
 
-    # --- Dashboard ---
+    # ================= Dashboard =================
     path('dashboard/', views.dashboard_epargne_credit, name='dashboard_epargne_credit'),
 
-    # --- Groupes ---
+    # ================= Groupes =================
     path('', views.group_list_view, name='group_list'),
     path('create/', views.ajouter_groupe_view, name='ajouter_groupe'),
     path('<int:group_id>/', views.group_detail, name='group_detail'),
 
-    # --- Membres ---
+    # ================= Membres =================
     path('<int:group_id>/membre/ajouter/', views.ajouter_membre_view, name='ajouter_membre'),
 
-    # --- Versements ---
-    path('versement/initier/<int:member_id>/', views.initier_versement, name='initier_versement'),
-    path('versement/callback/', views.versement_callback, name='versement_callback'),
-    path('versement/merci/', views.versement_merci, name='versement_merci'),
+    # ================= Versements CAISSE =================
+    path(
+        'versement/initier/<int:member_id>/',
+        views.initier_versement,
+        name='initier_versement'
+    ),
 
-    # --- Invitations ---
-#    path('<int:group_id>/inviter/', views.inviter_membre_view, name='inviter_membre'),
+    path(
+        'versement/valider/<int:versement_id>/',
+        views.valider_versement,
+        name='valider_versement'
+    ),
 
+    path(
+        'versement/refuser/<int:versement_id>/',
+        views.refuser_versement,
+        name='refuser_versement'
+    ),
 
-    # --- Cycle ---
+    # ================= Cycle =================
     path('<int:group_id>/reset-cycle/', views.reset_cycle_view, name='reset_cycle'),
 
-
-    # --- Historique cycles & actions ---
+    # ================= Historique =================
     path('<int:group_id>/historique-cycles/', views.historique_cycles_view, name='historique_cycles'),
     path("historique-actions/", views.historique_actions_view, name="historique_actions"),
 
+    # ================= Prêts =================
     path("pret/nouveau/<int:member_id>/", views.demande_pret, name="demande_pret"),
     path("pret/<int:pk>/valider/", views.pret_valider, name="pret_valider"),
     path("pret/<int:pk>/refuser/", views.pret_refuser, name="pret_refuser"),
-
     path("pret/<int:pk>/remboursement/", views.pret_remboursement_detail, name="pret_remboursement_detail"),
-    path("remboursement/<int:group_id>/", views.group_detail_remboursement, name="group_detail_remboursement"),
-    path(
-            "remboursement/paiement/<int:member_id>/",
-            views.initier_paiement_remboursement,
-            name="initier_paiement_remboursement",
-        ),
 
-    path("epargne/<int:group_id>/partager-fin-de-cycle/", views.share_cycle_view, name="share_cycle"),
+    # ================= Groupe remboursement =================
+    path(
+        "remboursement/<int:group_id>/",
+        views.group_detail_remboursement,
+        name="group_detail_remboursement"
+    ),
+
+    # ================= Partage fin de cycle =================
+    path(
+        "epargne/<int:group_id>/partager-fin-de-cycle/",
+        views.share_cycle_view,
+        name="share_cycle"
+    ),
 ]

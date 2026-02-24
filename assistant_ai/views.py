@@ -25,9 +25,9 @@ from gtts import gTTS
 from gtts.lang import tts_langs
 
 # Domain models
-from epargnecredit.models import EpargneCredit, Group as EpargneGroup
-from cotisationtontine.models import CotisationTontine, Group as TontineGroup
-
+#from epargnecredit.models import EpargneCredit, Group as EpargneGroup
+#from cotisationtontine.models import CotisationTontine, Group as TontineGroup
+from epargnecredit.models import Versement, Group as EpargneGroup
 
 # -------------------------------------------------------------------
 # Constantes / Helpers
