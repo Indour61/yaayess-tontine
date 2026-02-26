@@ -277,59 +277,65 @@ def group_list_view(request):
         'groupes': groupes
     })
 
+
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Sum, OuterRef, Subquery, Q, Value, DecimalField
-from django.db.models.functions import Coalesce
 from django.urls import reverse
+from django.db.models import Sum, Q, Value, DecimalField, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 
-from .models import Group, GroupMember, Tirage, Versement, ActionLog
-
+from .models import Group, GroupMember, Versement, ActionLog
 
 @login_required
 def group_detail(request, group_id):
+
     group = get_object_or_404(Group, id=group_id)
 
+    # =====================================================
+    # 🔒 Vérification accès
+    # =====================================================
+
     has_access = (
-        group.admin_id == getattr(request.user, "id", None)
+        group.admin_id == request.user.id
         or GroupMember.objects.filter(group=group, user=request.user).exists()
         or getattr(request.user, "is_super_admin", False)
+        or request.user.is_superuser
     )
 
     if not has_access:
         messages.error(request, "⚠️ Vous n'avez pas accès à ce groupe.")
         return redirect("cotisationtontine:group_list")
 
-    # ==========================================
-    # Relation reverse GroupMember -> Versement
-    # ==========================================
+    # =====================================================
+    # Relation reverse (GroupMember -> Versement)
+    # =====================================================
 
-    rel_lookup = "versements"  # ⚠️ Vérifie que ton related_name est bien "versements"
+    rel_lookup = "versements"  # doit correspondre au related_name du modèle Versement
 
-    # ==========================================
+    # =====================================================
     # Sous-requête : dernier versement
-    # ==========================================
+    # =====================================================
 
     last_qs = Versement.objects.filter(member=OuterRef("pk"))
 
-    if getattr(group, "date_reset", None):
+    if group.date_reset:
         last_qs = last_qs.filter(date_creation__gte=group.date_reset)
 
     last_qs = last_qs.order_by("-date_creation")
 
-    # ==========================================
+    # =====================================================
     # Agrégations par membre
-    # ==========================================
+    # =====================================================
 
     sum_filter = Q()
 
-    if getattr(group, "date_reset", None):
+    if group.date_reset:
         sum_filter &= Q(**{f"{rel_lookup}__date_creation__gte": group.date_reset})
 
     membres = (
         GroupMember.objects.filter(group=group)
-        .select_related("user", "group")
+        .select_related("user")
         .annotate(
             total_montant=Coalesce(
                 Sum(f"{rel_lookup}__montant", filter=sum_filter),
@@ -342,13 +348,13 @@ def group_detail(request, group_id):
         .order_by("id")
     )
 
-    # ==========================================
-    # Total du groupe
-    # ==========================================
+    # =====================================================
+    # Total global du groupe
+    # =====================================================
 
     total_filter = Q(member__group=group)
 
-    if getattr(group, "date_reset", None):
+    if group.date_reset:
         total_filter &= Q(date_creation__gte=group.date_reset)
 
     total_montant = (
@@ -362,21 +368,23 @@ def group_detail(request, group_id):
         )["total"]
     )
 
-    # ==========================================
-    # Actions
-    # ==========================================
+    # =====================================================
+    # Dernières actions
+    # =====================================================
 
-    try:
-        actions = ActionLog.objects.filter(group=group).order_by("-date")[:10]
-    except Exception:
-        actions = []
+    actions = (
+        ActionLog.objects
+        .filter(group=group)
+        .select_related("user")
+        .order_by("-date")[:10]
+    )
 
-    # ==========================================
-    # Lien d'invitation
-    # ==========================================
+    # =====================================================
+    # Lien d’invitation
+    # =====================================================
 
     code = None
-    for field in ("code_invitation", "invitation_code", "uuid", "code"):
+    for field in ("code_invitation", "invitation_token", "uuid"):
         if hasattr(group, field) and getattr(group, field):
             code = str(getattr(group, field))
             break
@@ -390,10 +398,15 @@ def group_detail(request, group_id):
     user_is_admin = (
         request.user == group.admin
         or getattr(request.user, "is_super_admin", False)
+        or request.user.is_superuser
     )
 
     if user_is_admin:
         request.session["last_invitation_link"] = invite_url
+
+    # =====================================================
+    # Context final
+    # =====================================================
 
     context = {
         "group": group,
@@ -570,538 +583,218 @@ def reset_cycle_view(request, group_id):
     messages.info(request, f"Cycle réinitialisé pour le groupe {group.nom} (à implémenter).")
     return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.contrib import messages
 import random
-from cotisationtontine.models import Group, Tirage, GroupMember
+
+from cotisationtontine.models import Group, Tirage, Versement
+
+
+# =====================================================
+# TIRAGE AU SORT (SANS PAIEMENT / SANS PAYDUNYA)
+# =====================================================
 
 @login_required
+@transaction.atomic
 def tirage_au_sort_view(request, group_id):
+
     group = get_object_or_404(Group, id=group_id)
 
-    # ✅ Vérifier que seul l'admin ou un superuser peut tirer au sort
+    # 🔒 Sécurité : admin ou superuser uniquement
     if request.user != group.admin and not request.user.is_superuser:
-        return render(request, '403.html', status=403)
+        messages.error(request, "Accès non autorisé.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-    def membres_eligibles_pour_tirage(group):
-        membres = list(group.membres.filter(actif=True, exit_liste=False))
-        total = len(membres)
+    # Membres actifs
+    membres_actifs = group.membres.filter(actif=True, exit_liste=False)
 
-        if total <= 1:
-            return membres  # tout le monde éligible
+    if not membres_actifs.exists():
+        messages.error(request, "Aucun membre actif.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-        # Exclure le prochain gagnant s'il est défini et qu'il reste plus de 2 membres
-        if group.prochain_gagnant and total > 2:
-            membres = [m for m in membres if m.id != group.prochain_gagnant.id]
+    # =====================================================
+    # 1️⃣ BLOQUER SI VERSEMENTS NON VALIDÉS
+    # =====================================================
+    versements_en_attente = Versement.objects.filter(
+        member__group=group,
+        statut="EN_ATTENTE"
+    )
 
-        return membres
+    if versements_en_attente.exists():
+        messages.error(request, "Tous les versements doivent être validés avant le tirage.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-    membres_eligibles = membres_eligibles_pour_tirage(group)
+    # =====================================================
+    # 2️⃣ MEMBRES AYANT DÉJÀ GAGNÉ (cycle courant)
+    # =====================================================
+    gagnants_ids = group.tirages.values_list("gagnant_id", flat=True)
+
+    membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
+
+    # =====================================================
+    # 3️⃣ SI TOUT LE MONDE A GAGNÉ → RESET
+    # =====================================================
+    if not membres_restants.exists():
+        messages.success(
+            request,
+            "Tous les membres ont gagné. Le cycle va être réinitialisé."
+        )
+        return redirect("cotisationtontine:reset_cycle", group_id=group.id)
+
+    # =====================================================
+    # 4️⃣ TIRAGE
+    # =====================================================
+    gagnant = random.choice(list(membres_restants))
+
+    # Calcul du montant
+    if group.montant_fixe_gagnant is None:
+        montant_total = group.montant_base * membres_actifs.count()
+        group.montant_fixe_gagnant = montant_total
+        group.save(update_fields=["montant_fixe_gagnant"])
+    else:
+        montant_total = group.montant_fixe_gagnant
+
+    # Création du tirage
+    Tirage.objects.create(
+        group=group,
+        gagnant=gagnant,
+        montant=montant_total,
+    )
+
+    messages.success(
+        request,
+        f"🎉 {gagnant.user.username} a gagné {montant_total} FCFA !"
+    )
+
+    return redirect("cotisationtontine:tirage_resultat", group_id=group.id)
+
+
+# =====================================================
+# PAGE RÉSULTAT DU TIRAGE
+# =====================================================
+
+@login_required
+def tirage_resultat_view(request, group_id):
+
+    group = get_object_or_404(Group, id=group_id)
+
+    tirages = group.tirages.select_related("gagnant__user").order_by("-date_tirage")
+    dernier_tirage = tirages.first()
 
     gagnant = None
     montant_total = 0
 
-    if membres_eligibles:
-        gagnant = random.choice(membres_eligibles)
+    if dernier_tirage:
+        gagnant = dernier_tirage.gagnant
+        montant_total = dernier_tirage.montant
 
-        # 💡 Si c'est le premier tirage, on fixe le montant pour tous les gagnants
-        if group.montant_fixe_gagnant is None:
-            montant_total = group.montant_base * group.membres.filter(actif=True, exit_liste=False).count()
-            group.montant_fixe_gagnant = montant_total
-            group.save()
-        else:
-            montant_total = group.montant_fixe_gagnant
+    # Vérifier s’il reste des membres à tirer
+    membres_actifs = group.membres.filter(actif=True, exit_liste=False)
+    gagnants_ids = tirages.values_list("gagnant_id", flat=True)
+    membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
 
-        with transaction.atomic():
-            # Enregistrer le tirage
-            Tirage.objects.create(
-                group=group,
-                gagnant=gagnant,
-                membre=gagnant,
-                montant=montant_total,
-            )
-
-            # Déterminer le prochain gagnant à ignorer
-            total_apres_tirage = group.membres.filter(actif=True, exit_liste=False).count() - 1
-            if total_apres_tirage > 2:
-                group.prochain_gagnant = gagnant
-            else:
-                group.prochain_gagnant = None
-            group.save()
+    tirage_possible = membres_restants.exists()
 
     context = {
-        'group': group,
-        'gagnant': gagnant,
-        'montant_total': montant_total,
+        "group": group,
+        "tirages": tirages,
+        "gagnant": gagnant,
+        "montant_total": montant_total,
+        "tirage_possible": tirage_possible,
     }
-    return render(request, 'cotisationtontine/tirage_resultat.html', context)
 
-# cotisationtontine/views.py
+    return render(
+        request,
+        "cotisationtontine/tirage_resultat.html",
+        context
+    )
 
-from django.shortcuts import render, get_object_or_404, redirect
+
+from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.db import transaction
-from django.utils import timezone
-from django.urls import reverse
-from django.apps import apps
-
-#from .models import Group, GroupMember, CotisationTontine, Tirage, TirageHistorique
-# Si Versement est dans l’app cotisationtontine, importe-le si nécessaire pour d’autres vues
-# from .models import Versement
-from .models import Group, GroupMember, Tirage, Versement
-
-# ============================================================
-# Réinitialisation d’un cycle de tontine (fusion + durcissement)
-# ============================================================
-@login_required
-@transaction.atomic
-def reset_cycle_view(request, group_id):
-    """
-    Réinitialise le cycle d’un groupe :
-      - Permissions : admin du groupe ou superuser/super_admin.
-      - GET : page de confirmation (avec rappel des membres non gagnants).
-      - POST :
-          * Archive les tirages en cours -> TirageHistorique
-          * Supprime tirages actifs et cotisations du cycle
-          * Met à jour group.date_reset (+ cycle_en_cours=True si présent)
-      - NE SUPPRIME PAS les Versement (traçabilité).
-    """
-    group = get_object_or_404(Group, id=group_id)
-
-    user = request.user
-    is_group_admin = (user == getattr(group, "admin", None))
-    is_superuser = getattr(user, "is_superuser", False) or getattr(user, "is_super_admin", False)
-    if not (is_group_admin or is_superuser):
-        messages.error(request, "Seul l’administrateur du groupe ou un superutilisateur peut réinitialiser le cycle.")
-        return redirect("cotisationtontine:group_detail", group_id=group.id)
-
-    # Prépare l’info des non-gagnants (utilisée en GET et vérifiée en POST)
-    membres = list(group.membres.select_related("user").all())  # GroupMember
-    gagnants_actuels = {t.gagnant for t in group.tirages.select_related("gagnant").all() if t.gagnant}
-    gagnants_historiques = {t.gagnant for t in group.tirages_historiques.select_related("gagnant").all() if t.gagnant}
-    tous_les_gagnants = gagnants_actuels.union(gagnants_historiques)
-    membres_non_gagnants = [m for m in membres if m not in tous_les_gagnants]
-
-    if request.method != "POST":
-        return render(
-            request,
-            "cotisationtontine/confirm_reset_cycle.html",
-            {
-                "group": group,
-                "membres_non_gagnants": membres_non_gagnants,
-                "nb_tirages_actuels": group.tirages.count(),
-                "nb_tirages_historiques": group.tirages_historiques.count(),
-                "date_reset_precedent": getattr(group, "date_reset", None),
-            },
-        )
-
-    # En POST : si certains membres n’ont pas gagné, on avertit et on sort
-    if membres_non_gagnants:
-        noms = ", ".join(getattr(m.user, "nom", None) or getattr(m.user, "username", "") or str(m.user_id) for m in membres_non_gagnants)
-        messages.warning(request, f"Les membres suivants n’ont pas encore gagné : {noms}.")
-        return redirect("cotisationtontine:group_detail", group_id=group.id)
-
-    # 1) Archiver les tirages en cours -> TirageHistorique
-    tirages_actuels = list(group.tirages.select_related("gagnant").all())
-    if tirages_actuels:
-        TirageHistorique.objects.bulk_create(
-            [
-                TirageHistorique(
-                    group=group,
-                    gagnant=t.gagnant,
-                    montant=t.montant,
-                    date_tirage=t.date_tirage or timezone.now(),
-                )
-                for t in tirages_actuels
-            ]
-        )
-
-    # 2) Supprimer les tirages en cours
-    if tirages_actuels:
-        group.tirages.all().delete()
-
-    # 3) Supprimer les cotisations du cycle (on laisse les Versement pour l’audit)
-    CotisationTontine.objects.filter(member__group=group).delete()
-
-    # 4) Mettre à jour le groupe
-    group.date_reset = timezone.now()
-    if hasattr(group, "cycle_en_cours"):
-        group.cycle_en_cours = True
-    group.save(update_fields=["date_reset"] + (["cycle_en_cours"] if hasattr(group, "cycle_en_cours") else []))
-
-    messages.success(request, f"✅ Cycle du groupe « {getattr(group, 'nom', group.id)} » réinitialisé avec succès. Les versements peuvent reprendre.")
-    return redirect("cotisationtontine:group_detail", group_id=group.id)
+from .models import Group, Tirage
 
 
-# =====================
-# Résultats d’un tirage
-# =====================
-@login_required
-def tirage_resultat_view(request, group_id):
-    """
-    Affiche une page de résultats (à compléter selon ton besoin).
-    """
-    group = get_object_or_404(Group, id=group_id)
-    # Ex : derniers tirages, prochain ordre, etc.
-    tirages = group.tirages.select_related("gagnant__user").order_by("-date_tirage")
-    return render(request, "cotisationtontine/tirage_resultat.html", {"group": group, "tirages": tirages})
-
-
-# ==================================
-# Historique des cycles (si disponible)
-# ==================================
 @login_required
 def historique_cycles_view(request, group_id):
     """
-    Affiche l'historique des cycles passés d'un groupe si le modèle Cycle existe.
-    Tolérant : si le modèle n’existe pas, on rend une page vide (sans 500).
+    Affiche l'historique des tirages d'un groupe.
     """
+
     group = get_object_or_404(Group, id=group_id)
 
-    # Récupère Cycle dynamiquement pour éviter un crash si non migré/commenté
-    try:
-        Cycle = apps.get_model("cotisationtontine", "Cycle")
-    except LookupError:
-        Cycle = None
-
-    anciens_cycles = []
-    if Cycle is not None:
-        anciens_cycles = (
-            Cycle.objects.filter(group=group)
-            .exclude(date_fin__isnull=True)  # cycles terminés
-            .prefetch_related("etapes__tirage__beneficiaire__user")
-            .order_by("-date_debut")
-        )
+    tirages = (
+        group.tirages
+        .select_related("gagnant__user")
+        .order_by("-date_tirage")
+    )
 
     return render(
         request,
         "cotisationtontine/historique_cycles.html",
         {
             "group": group,
-            "anciens_cycles": anciens_cycles,
-        },
-    )
-
-import logging
-import json
-from decimal import Decimal, ROUND_HALF_UP
-
-import requests
-from django.conf import settings
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-
-#from .models import Group, Tirage, PaiementGagnant
-
-# Helpers PayDunya (importés depuis ton module utilitaire)
-from .paydunya_utils import (
-    paydunya_conf as _paydunya_conf,
-    paydunya_headers as _paydunya_headers,
-    paydunya_base_url as _paydunya_base_url,
-    as_fcfa_int as _as_fcfa_int,
-)
-
-logger = logging.getLogger(__name__)
-
-
-@login_required
-def payer_gagnant(request, group_id):
-    group = get_object_or_404(Group, id=group_id)
-
-    # 1) Récupérer le dernier tirage gagnant
-    dernier_tirage = (
-        Tirage.objects.filter(group=group).order_by("-date_tirage").first()
-    )
-    if not dernier_tirage or not dernier_tirage.gagnant:
-        messages.error(request, "Aucun gagnant défini pour ce groupe.")
-        return redirect("group_detail", group_id=group.id)
-
-    gagnant = dernier_tirage.gagnant
-
-    # 2) Montant total (fixe si défini, sinon = montant_base * nb_membres_actifs)
-    try:
-        if group.montant_fixe_gagnant is not None:
-            montant_total = Decimal(str(group.montant_fixe_gagnant))
-        else:
-            nb_actifs = group.membres.filter(actif=True, exit_liste=False).count()
-            montant_total = Decimal(str(group.montant_base)) * Decimal(nb_actifs)
-    except Exception:
-        messages.error(request, "Montant du paiement invalide pour ce groupe.")
-        return redirect("group_detail", group_id=group.id)
-
-    if request.method == "POST":
-        # 3) Frais : 2% + 50 FCFA (arrondi entier XOF)
-        frais_total = (montant_total * Decimal("0.02") + Decimal("50")).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP
-        )
-        montant_total_avec_frais = (montant_total + frais_total).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP
-        )
-
-        montant_total_int = _pay = _as_fcfa_int(montant_total)              # hors frais
-        frais_total_int = _as_fcfa_int(frais_total)
-        montant_total_avec_frais_int = _as_fcfa_int(montant_total_avec_frais)
-
-        # 4) Base URL publique pour callback/return (ngrok en dev si dispo)
-        if settings.DEBUG and getattr(settings, "NGROK_BASE_URL", None):
-            site_base = settings.NGROK_BASE_URL.rstrip("/") + "/"
-        else:
-            site_base = request.build_absolute_uri("/")
-
-        # 5) Charge config PayDunya + headers + endpoint
-        try:
-            cfg = _paydunya_conf()
-            headers = _paydunya_headers(cfg)
-            api_base = _paydunya_base_url(cfg)
-        except RuntimeError as e:
-            messages.error(request, str(e))
-            return redirect("group_detail", group_id=group.id)
-
-        # 6) (option) Cohérence mode/clefs
-        mode = (cfg.get("env") or cfg.get("mode") or "").lower()
-        has_test_tokens = any(
-            "test_" in (cfg.get(k, "") or "").lower()
-            for k in ("public_key", "private_key", "token")
-        )
-        if mode in ("prod", "production", "live") and has_test_tokens:
-            messages.error(
-                request, "Clés TEST détectées alors que l'API LIVE est sélectionnée."
-            )
-            return redirect("group_detail", group_id=group.id)
-
-        # 7) Payload PayDunya — structure standard (invoice/store/actions/custom_data)
-        payload = {
-            "invoice": {
-                "items": [
-                    {
-                        "name": "Paiement gagnant Tontine",
-                        "quantity": 1,
-                        "unit_price": montant_total_avec_frais_int,
-                        "total_price": montant_total_avec_frais_int,
-                        "description": (
-                            f"Paiement {getattr(gagnant.user, 'nom', None) or gagnant.user.phone} "
-                            f"- Frais {frais_total_int} FCFA"
-                        ),
-                    }
-                ],
-                "description": f"Versement gagnant (+{frais_total_int} FCFA de frais)",
-                "total_amount": montant_total_avec_frais_int,
-                "currency": "XOF",
-            },
-            "store": {
-                "name": cfg.get("store_name", "YaayESS"),
-                "tagline": cfg.get("store_tagline", "Plateforme de gestion financière"),
-                "website_url": cfg.get("website_url", "https://yaayess.com"),
-            },
-            "actions": {
-                "callback_url": f"{site_base}cotisationtontine/paiement_gagnant/callback/",
-                "return_url": f"{site_base}cotisationtontine/paiement_gagnant/merci/",
-                "cancel_url": f"{site_base}cotisationtontine/groupe/{group.id}/",  # adapte si besoin
-            },
-            "custom_data": {
-                "group_id": group.id,
-                "gagnant_id": gagnant.id,
-                "montant_saisi": montant_total_int,  # hors frais
-                "frais_total": frais_total_int,
-            },
+            "tirages": tirages,
         }
-
-        # 8) Appel API
-        try:
-            logger.info("⏳ Envoi requête PayDunya...")
-            resp = requests.post(
-                f"{api_base}/checkout-invoice/create",
-                headers=headers,
-                json=payload,
-                timeout=20,
-            )
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erreur réseau PayDunya: {e}")
-            messages.error(request, f"Erreur réseau PayDunya: {e}")
-            return redirect("group_detail", group_id=group.id)
-
-        logger.info(f"✅ Statut HTTP PayDunya : {resp.status_code}")
-
-        if resp.status_code != 200:
-            txt = (resp.text or "")[:800]
-            messages.error(request, "Erreur PayDunya (HTTP).")
-            if settings.DEBUG and txt:
-                messages.info(request, f"DEBUG PayDunya: {txt}")
-            return redirect("group_detail", group_id=group.id)
-
-        # 9) JSON parsing + success handling
-        try:
-            data = resp.json()
-        except json.JSONDecodeError:
-            messages.error(request, "Réponse PayDunya invalide (JSON).")
-            if settings.DEBUG:
-                messages.info(request, f"DEBUG PayDunya: {(resp.text or '')[:800]}")
-            return redirect("group_detail", group_id=group.id)
-
-        if settings.DEBUG:
-            try:
-                logger.debug(f"🧾 Réponse JSON PayDunya : {json.dumps(data)[:800]}")
-            except Exception:
-                pass
-
-        if isinstance(data, dict) and data.get("response_code") == "00":
-            # extraire l'URL de redirection
-            invoice_url = None
-            rt = data.get("response_text")
-
-            if isinstance(rt, str) and rt.startswith("http"):
-                invoice_url = rt
-            elif isinstance(rt, dict):
-                invoice_url = rt.get("invoice_url") or rt.get("checkout_url")
-
-            if not invoice_url:
-                invoice_url = (
-                    data.get("invoice_url")
-                    or data.get("checkout_url")
-                    or data.get("url")
-                    or (
-                        data.get("data", {}).get("invoice_url")
-                        if isinstance(data.get("data"), dict)
-                        else None
-                    )
-                )
-
-            # Créer l'écriture locale EN_ATTENTE
-            PaiementGagnant.objects.create(
-                group=group,
-                gagnant=gagnant,
-                montant=montant_total,  # hors frais
-                statut="EN_ATTENTE",
-                transaction_id=data.get("token"),
-                message="Paiement en attente validation PayDunya",
-            )
-
-            if invoice_url:
-                return redirect(invoice_url)
-
-            messages.warning(
-                request,
-                "Facture créée mais URL manquante. Retour au groupe.",
-            )
-            return redirect("group_detail", group_id=group.id)
-
-        # Erreur PayDunya (métier)
-        err_text = data.get("response_text", "Erreur inconnue")
-        code = data.get("response_code")
-        if code == "1001":
-            messages.error(
-                request,
-                "Échec création: MasterKey invalide. Vérifiez PAYDUNYA_MASTER_KEY et le mode (test/live).",
-            )
-        else:
-            messages.error(request, f"Échec création paiement : {err_text}")
-
-        return redirect("group_detail", group_id=group.id)
-
-    # GET — affichage
-    return render(
-        request,
-        "cotisationtontine/payer_gagnant.html",
-        {"group": group, "gagnant": gagnant, "montant_total": montant_total},
     )
-
-
-@csrf_exempt  # PayDunya n'envoie pas de CSRF token
-def paiement_gagnant_callback(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Méthode non autorisée"}, status=405)
-
-    # Accepter JSON ou x-www-form-urlencoded
-    try:
-        if request.content_type and "application/json" in request.content_type:
-            data = json.loads(request.body or b"{}")
-        else:
-            data = request.POST.dict()
-    except json.JSONDecodeError:
-        logger.error("Corps JSON invalide dans callback PayDunya")
-        return JsonResponse({"error": "JSON invalide"}, status=400)
-    except Exception as e:
-        logger.error(f"Erreur parse callback: {e}")
-        return JsonResponse({"error": "Erreur serveur"}, status=500)
-
-    logger.info(f"Callback PayDunya reçu: {json.dumps(data)}")
-
-    token = data.get("token")
-    status = data.get("status")                 # ex: "PAID" | "FAILED" ...
-    response_code = data.get("response_code")   # ex: "00"
-    response_text = data.get("response_text", "")
-
-    if not token:
-        return JsonResponse({"error": "Token manquant"}, status=400)
-
-    paiement = PaiementGagnant.objects.filter(transaction_id=token).first()
-    if not paiement:
-        logger.error(f"PaiementGagnant introuvable pour token={token}")
-        return JsonResponse({"error": "Paiement introuvable"}, status=404)
-
-    # MAJ statut
-    if response_code == "00" and (status or "").upper() in {"PAID", "SUCCESS", "SUCCEEDED"}:
-        paiement.statut = "SUCCES"
-    else:
-        paiement.statut = "ECHEC"
-
-    paiement.message = response_text
-    paiement.save()
-
-    logger.info(f"PaiementGagnant {token} mis à jour avec statut {paiement.statut}")
-    return JsonResponse({"success": True})
-
-
-def paiement_gagnant_merci(request):
-    return render(request, "cotisationtontine/paiement_gagnant_merci.html")
-
-from django.shortcuts import render
-#from .models import PaiementGagnant
-
-def liste_paiements_gagnants(request):
-    paiements = PaiementGagnant.objects.select_related('gagnant__user', 'group').order_by('-date_paiement')
-    return render(request, 'cotisationtontine/paiement_gagnant.html', {
-        'paiements': paiements
-    })
 
 # cotisationtontine/views.py
 
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count
 from .models import ActionLog
+
+
+# =====================================================
+# HISTORIQUE DES ACTIONS
+# =====================================================
 
 @login_required
 def historique_actions_view(request):
     """
-    Affiche l'historique des actions enregistrées dans ActionLog.
+    Affiche l'historique global des actions enregistrées dans ActionLog.
     """
-    # Récupération des logs déjà triés via Meta.ordering
-    logs = ActionLog.objects.select_related("user")
 
-    return render(request, "cotisationtontine/historique_actions.html", {
-        "logs": logs
-    })
+    logs = (
+        ActionLog.objects
+        .select_related("user", "group")
+        .order_by("-date")
+    )
+
+    return render(
+        request,
+        "cotisationtontine/historique_actions.html",
+        {
+            "logs": logs
+        }
+    )
 
 
-from django.db.models import Count
-
+# =====================================================
+# MEMBRES ÉLIGIBLES POUR TIRAGE
+# =====================================================
 
 def membres_eligibles_pour_tirage(group):
-    # Récupère le dernier tirage et son gagnant
-    dernier_tirage = group.tirages.order_by('-date').first()  # adapte selon ton related_name
-    membres = group.members.all()  # adapte selon ton related_name
+    """
+    Retourne les membres actifs éligibles au tirage.
+    Exclut le dernier gagnant si nécessaire.
+    """
 
-    # Si le groupe a 1 membre ou moins, tous sont éligibles (pas d'exclusion)
+    # Membres actifs du groupe
+    membres = group.membres.filter(actif=True, exit_liste=False)
+
+    # Si 1 membre ou moins → pas d'exclusion
     if membres.count() <= 1:
         return membres
 
-    # Sinon, exclut le dernier gagnant du tirage
-    if dernier_tirage:
+    # Récupérer le dernier tirage
+    dernier_tirage = group.tirages.order_by("-date_tirage").first()
+
+    # Exclure le dernier gagnant si existant
+    if dernier_tirage and dernier_tirage.gagnant:
         membres = membres.exclude(id=dernier_tirage.gagnant.id)
 
     return membres

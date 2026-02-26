@@ -5,48 +5,59 @@
 
 {% block content %}
 <div class="container mt-5 text-center" style="max-width: 600px;">
+
     <h1 class="mb-4 text-primary fw-bold">🎲 Tirage au sort</h1>
 
     <h4 class="mb-3">
-        Groupe : <span class="text-success fw-semibold">{{ group.nom }}</span>
+        Groupe :
+        <span class="text-success fw-semibold">
+            {{ group.nom }}
+        </span>
     </h4>
 
     {% if erreur %}
-      <div class="alert alert-danger" role="alert">
-        ⚠️ {{ erreur }}
-      </div>
+        <div class="alert alert-danger" role="alert">
+            ⚠️ {{ erreur }}
+        </div>
     {% endif %}
 
     {% if tirage_possible %}
-      <a href="{% url 'cotisationtontine:lancer_tirage' group.id %}"
-         class="btn btn-primary btn-lg mb-3">
-         🎲 Lancer le tirage au sort
-      </a>
+        <a href="{% url 'cotisationtontine:lancer_tirage' group.id %}"
+           class="btn btn-primary btn-lg mb-3">
+           🎲 Lancer le tirage au sort
+        </a>
     {% else %}
-      <a href="#"
-         class="btn btn-primary btn-lg disabled mb-3"
-         tabindex="-1"
-         aria-disabled="true">
-         🎲 tirage au sort bien lancé
-      </a>
+        <a href="#"
+           class="btn btn-secondary btn-lg disabled mb-3"
+           tabindex="-1"
+           aria-disabled="true">
+           🎲 Tirage déjà effectué
+        </a>
     {% endif %}
 
     {% if gagnant %}
-        <div class="mt-5">
-            <h2 class="text-success">👏 Félicitations à 🎉</h2>
-            <h1 class="display-4 fw-bold text-dark">
-                {{ gagnant.user.nom }}
+        <div class="mt-5 p-4 border rounded shadow-sm bg-light">
+
+            <h2 class="text-success">👏 Félicitations 🎉</h2>
+
+            <h1 class="display-4 fw-bold text-dark mt-3">
+                {{ gagnant.user.username }}
             </h1>
+
             <p class="fs-4 mt-3">
-                Il/Elle a gagné :
+                Montant remporté :
                 <strong class="text-danger">
                     {{ montant_total|floatformat:0|intcomma }} FCFA
                 </strong>
             </p>
-            <!-- Bouton Payer le gagnant -->
-            <a href="{% url 'cotisationtontine:payer_gagnant' group.id %}" class="btn btn-warning btn-lg mt-4">
-                💸 Payer le gagnant maintenant
-            </a>
+
+            <div class="mt-4">
+                <a href="{% url 'cotisationtontine:group_detail' group.id %}"
+                   class="btn btn-success btn-lg px-4">
+                   📊 Voir le détail du groupe
+                </a>
+            </div>
+
         </div>
     {% else %}
         <div class="alert alert-warning mt-5" role="alert">
@@ -54,8 +65,10 @@
         </div>
     {% endif %}
 
-    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-outline-primary mt-4 px-4">
+    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}"
+       class="btn btn-outline-primary mt-4 px-4">
         ⬅ Retour au tableau de bord
     </a>
+
 </div>
 {% endblock %}
