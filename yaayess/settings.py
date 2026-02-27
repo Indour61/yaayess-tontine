@@ -8,6 +8,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Charge .env le plus tôt possible (et écrase les valeurs vides du système si besoin)
 load_dotenv(BASE_DIR / ".env", override=True)
 
+#ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+
 # ---- ensuite seulement, lis tes variables ----
 SECRET_KEY = os.environ["SECRET_KEY"]                 # déjà dans ton .env
 DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
@@ -103,6 +106,7 @@ TERMS_VERSION = "v1.0-2025-09-07"
 # ----------------------------------------------------
 # ⚙️ MIDDLEWARE
 # ----------------------------------------------------
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
