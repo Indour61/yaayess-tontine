@@ -41,7 +41,7 @@ class Group(models.Model):
         ordering = ['-date_creation']
 
     def __str__(self):
-        return f"{self.nom}"
+        return self.nom
 
 
 # =====================================================
@@ -121,14 +121,16 @@ class Versement(models.Model):
 
 
 # =====================================================
-# TIRAGE
+# TIRAGE (AVEC CYCLE NUMBER)
 # =====================================================
 
 class Tirage(models.Model):
 
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="tirages")
-    date_tirage = models.DateField(auto_now_add=True)
-    montant = models.DecimalField(max_digits=12, decimal_places=0)
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        related_name="tirages"
+    )
 
     gagnant = models.ForeignKey(
         GroupMember,
@@ -136,8 +138,17 @@ class Tirage(models.Model):
         related_name="tirages_gagnes"
     )
 
+    montant = models.DecimalField(max_digits=12, decimal_places=0)
+
+    cycle_number = models.PositiveIntegerField(default=1)
+
+    date_tirage = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date_tirage"]
+
     def __str__(self):
-        return f"Tirage {self.date_tirage} - {self.group.nom}"
+        return f"Groupe: {self.group.nom} | Cycle {self.cycle_number}"
 
 
 # =====================================================
@@ -146,8 +157,20 @@ class Tirage(models.Model):
 
 class ActionLog(models.Model):
 
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="action_logs", null=True, blank=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        related_name="action_logs",
+        null=True,
+        blank=True
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
 
     action = models.TextField()
     date = models.DateTimeField(auto_now_add=True)
@@ -159,31 +182,22 @@ class ActionLog(models.Model):
         return f"{self.date} - {self.user}"
 
 
-class HistoriqueAction(models.Model):
-
-    ACTION_CHOICES = [
-        ('RESET_CYCLE', 'Réinitialisation du cycle'),
-        ('AUTRE', 'Autre action'),
-    ]
-
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='historique_actions')
-    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
-    description = models.TextField()
-    date = models.DateTimeField(default=timezone.now)
-
-    def __str__(self):
-        return f"{self.get_action_display()} - {self.group.nom}"
-
-
 # =====================================================
 # INVITATION
 # =====================================================
 
 class Invitation(models.Model):
 
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="invitations")
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        related_name="invitations"
+    )
+
     phone = models.CharField(max_length=20)
+
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
@@ -191,3 +205,5 @@ class Invitation(models.Model):
 
     def __str__(self):
         return f"Invitation {self.phone} - {self.group.nom}"
+
+

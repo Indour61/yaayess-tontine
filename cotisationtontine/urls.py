@@ -56,9 +56,9 @@ urlpatterns = [
     # ============================
     # Tirage
     # ============================
-#    path("<int:group_id>/tirage/", views.tirage_au_sort_view, name="tirage"),
     path("<int:group_id>/tirage/resultat/", views.tirage_resultat_view, name="tirage_resultat"),
     path("<int:group_id>/tirage/", views.tirage_au_sort_view, name="tirage_au_sort"),
+
     # ============================
     # Cycle
     # ============================

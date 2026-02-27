@@ -22,7 +22,7 @@
     {% endif %}
 
     {% if tirage_possible %}
-        <a href="{% url 'cotisationtontine:lancer_tirage' group.id %}"
+        <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}"
            class="btn btn-primary btn-lg mb-3">
            🎲 Lancer le tirage au sort
         </a>
@@ -40,9 +40,16 @@
 
             <h2 class="text-success">👏 Félicitations 🎉</h2>
 
-            <h1 class="display-4 fw-bold text-dark mt-3">
-                {{ gagnant.user.username }}
+            <h1 class="display-5 fw-bold text-dark mt-3">
+                🏆
+                {{ gagnant.alias|default:gagnant.user.nom|default:gagnant.user.phone }}
             </h1>
+
+            {% if cycle_actuel %}
+                <p class="text-muted">
+                    Cycle : {{ cycle_actuel }}
+                </p>
+            {% endif %}
 
             <p class="fs-4 mt-3">
                 Montant remporté :
