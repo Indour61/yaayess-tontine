@@ -418,45 +418,41 @@ def group_list_view(request):
 # epargnecredit/views.py (extrait)
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Sum, Subquery, OuterRef
-from django.shortcuts import get_object_or_404, render, redirect
-from django.urls import reverse
-
-from .models import Group, GroupMember, Versement, ActionLog  # adapte si noms différents
-from django.db.models import Q, Sum, Value, OuterRef, Subquery
+from django.db.models import Q, Sum, OuterRef, Subquery, Value, DecimalField
 from django.db.models.functions import Coalesce
-from django.db.models import DecimalField
 from django.shortcuts import get_object_or_404, render, redirect
-from django.contrib import messages
 from django.urls import reverse
-from django.contrib.auth.decorators import login_required
 
-#from .models import Group, GroupMember, Versement, ActionLog, PretDemande
+from .models import Group, GroupMember, Versement, ActionLog, PretDemande
+
 
 @login_required
 def group_detail(request, group_id):
     group = get_object_or_404(Group, id=group_id)
 
-    # Accès
+    # =============================
+    # Vérification accès
+    # =============================
     has_access = (
         group.admin_id == request.user.id
         or GroupMember.objects.filter(group=group, user=request.user).exists()
         or getattr(request.user, "is_super_admin", False)
     )
+
     if not has_access:
         messages.error(request, "⚠️ Vous n'avez pas accès à ce groupe.")
         return redirect("epargnecredit:group_list")
 
+    # =============================
+    # Groupe remboursement
+    # =============================
     remb_group = None
-    if hasattr(group, "get_remboursement_group") and not getattr(group, "is_remboursement", False):
+    if hasattr(group, "get_remboursement_group") and not group.is_remboursement:
         remb_group = group.get_remboursement_group()
-
-    rel_lookup = "versements_ec"
 
     # =============================
     # Sous-requête dernier versement
     # =============================
-
     last_qs = Versement.objects.filter(member=OuterRef("pk"))
 
     if group.date_reset:
@@ -465,19 +461,18 @@ def group_detail(request, group_id):
     last_qs = last_qs.order_by("-date_creation")
 
     # =============================
-    # Agrégations membres
+    # Agrégation montants membres
     # =============================
-
     sum_filter = Q()
     if group.date_reset:
-        sum_filter &= Q(**{f"{rel_lookup}__date_creation__gte": group.date_reset})
+        sum_filter &= Q(versements_ec__date_creation__gte=group.date_reset)
 
     membres = (
         GroupMember.objects.filter(group=group)
         .select_related("user")
         .annotate(
             total_montant=Coalesce(
-                Sum(f"{rel_lookup}__montant", filter=sum_filter),
+                Sum("versements_ec__montant", filter=sum_filter),
                 Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
             ),
             last_amount=Subquery(last_qs.values("montant")[:1]),
@@ -489,7 +484,6 @@ def group_detail(request, group_id):
     # =============================
     # Total groupe
     # =============================
-
     total_filter = Q(member__group=group)
     if group.date_reset:
         total_filter &= Q(date_creation__gte=group.date_reset)
@@ -505,15 +499,21 @@ def group_detail(request, group_id):
     )
 
     # =============================
-    # Actions
+    # Logs actions
     # =============================
-
     actions = ActionLog.objects.filter(group=group).order_by("-date")[:10]
 
     # =============================
-    # Invitation
+    # Demandes de prêt en attente
     # =============================
+    pending_prets = PretDemande.objects.filter(
+        member__group=group,
+        statut="PENDING"
+    ).select_related("member__user").order_by("-created_at")
 
+    # =============================
+    # Lien invitation
+    # =============================
     code = None
     for field in ("code_invitation", "uuid"):
         if hasattr(group, field) and getattr(group, field):
@@ -521,11 +521,15 @@ def group_detail(request, group_id):
             break
 
     invite_arg = code if code else str(group.id)
+
     invite_url = request.build_absolute_uri(
         reverse("accounts:inscription_et_rejoindre", args=[invite_arg])
     )
 
-    user_is_admin = request.user == group.admin or getattr(request.user, "is_super_admin", False)
+    user_is_admin = (
+        request.user == group.admin
+        or getattr(request.user, "is_super_admin", False)
+    )
 
     context = {
         "group": group,
@@ -536,6 +540,7 @@ def group_detail(request, group_id):
         "user_is_admin": user_is_admin,
         "invite_url": invite_url,
         "remb_group": remb_group,
+        "pending_prets": pending_prets,
     }
 
     return render(request, "epargnecredit/group_detail.html", context)
@@ -721,13 +726,20 @@ from .models import GroupMember, Versement
 # ==========================================
 # DECLARATION VERSEMENT CAISSE (EN ATTENTE)
 # ==========================================
-
 @login_required
 @transaction.atomic
 def initier_versement(request, member_id):
 
-    member = get_object_or_404(GroupMember.objects.select_related("group", "user"), id=member_id)
+    member = get_object_or_404(
+        GroupMember.objects.select_related("group", "user"),
+        id=member_id
+    )
     group = member.group
+
+    # 🔒 Sécurité : seul le membre lui-même ou admin peut verser
+    if request.user != member.user and request.user != group.admin and not request.user.is_superuser:
+        messages.error(request, "Vous n’avez pas l’autorisation d’effectuer ce versement.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
 
     if request.method == "GET":
         return render(request, "epargnecredit/initier_versement.html", {
@@ -756,55 +768,88 @@ def initier_versement(request, member_id):
         statut="EN_ATTENTE"
     )
 
-    messages.success(request, "Versement enregistré. En attente de validation par l'administrateur.")
+    messages.success(request, "Versement enregistré. En attente de validation.")
     return redirect("epargnecredit:group_detail", group_id=group.id)
 
 
 # ==========================================
 # VALIDATION ADMIN
 # ==========================================
+from django.views.decorators.http import require_POST
+
+from django.views.decorators.http import require_POST
+from django.db.models import Sum
+from .utils_pdf import generer_recu_pdf
+from .utils_notification import notifier_validation_versement
+
 
 @login_required
+@require_POST
 @transaction.atomic
 def valider_versement(request, versement_id):
 
-    versement = get_object_or_404(Versement.objects.select_related("member__group"), id=versement_id)
+    versement = get_object_or_404(
+        Versement.objects.select_related("member__group", "member__user"),
+        id=versement_id
+    )
     group = versement.member.group
 
-    if request.user != group.admin and not request.user.is_superuser:
+    # 🔒 Permission admin uniquement
+    is_group_admin = (request.user == group.admin)
+    is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+    is_superuser = request.user.is_superuser
+
+    if not (is_group_admin or is_super_admin or is_superuser):
         messages.error(request, "Accès refusé.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
-    versement.valider(request.user)
-#    versement.statut = "VALIDE"
-#    versement.valide_par = request.user
-#    versement.date_validation = timezone.now()
-#    versement.save()
+    # 🔒 Empêcher double validation
+    if versement.statut != "EN_ATTENTE":
+        messages.warning(request, "Ce versement a déjà été traité.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
 
-    messages.success(request, "Versement validé avec succès.")
+    # ✅ Validation métier centralisée
+    versement.valider(request.user)
+
+    # 📄 Génération automatique reçu PDF
+    try:
+        generer_recu_pdf(versement)
+    except Exception as e:
+        print(f"Erreur génération PDF: {e}")
+
+    # 📲 Notification WhatsApp simulée
+    try:
+        notifier_validation_versement(
+            versement.member.user,
+            versement.montant
+        )
+    except Exception as e:
+        print(f"Erreur notification: {e}")
+
+    messages.success(request, "Versement validé avec succès et reçu généré.")
     return redirect("epargnecredit:group_detail", group_id=group.id)
 
 
-# ==========================================
-# REFUSER VERSEMENT
-# ==========================================
-
 @login_required
+@require_POST
 @transaction.atomic
 def refuser_versement(request, versement_id):
 
-    versement = get_object_or_404(Versement.objects.select_related("member__group"), id=versement_id)
+    versement = get_object_or_404(
+        Versement.objects.select_related("member__group"),
+        id=versement_id
+    )
     group = versement.member.group
 
     if request.user != group.admin and not request.user.is_superuser:
         messages.error(request, "Accès refusé.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
+    if versement.statut != "EN_ATTENTE":
+        messages.warning(request, "Ce versement a déjà été traité.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
+
     versement.refuser(request.user)
-#    versement.statut = "REFUSE"
-#    versement.valide_par = request.user
-#    versement.date_validation = timezone.now()
-#    versement.save()
 
     messages.success(request, "Versement refusé.")
     return redirect("epargnecredit:group_detail", group_id=group.id)
@@ -1005,55 +1050,50 @@ def demande_pret(request, member_id: int):
     )
     group = member.group
 
-    # Permissions: le membre lui-même, l'admin du groupe, ou super_admin
+    # Permissions
     is_self = (request.user == member.user)
     is_group_admin = (request.user == getattr(group, "admin", None))
     is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+
     if not (is_self or is_group_admin or is_super_admin):
-        messages.error(request, "Vous n’avez pas les droits pour créer une demande de prêt pour ce membre.")
+        messages.error(request, "Vous n’avez pas les droits pour créer une demande de prêt.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
     if request.method == "POST":
         form = PretDemandeForm(request.POST)
-        if form.is_valid():
-            try:
-                # Empêcher plusieurs demandes “en attente” (contrainte DB + garde applicative)
-                if PretDemande.objects.filter(member=member, statut="PENDING").exists():
-                    messages.warning(request, "Une demande de prêt est déjà en attente pour ce membre.")
-                    return redirect("epargnecredit:group_detail", group_id=group.id)
 
-                demande: PretDemande = form.save(commit=False)
+        if form.is_valid():
+
+            # 🔒 1) Bloquer si prêt en attente
+            if PretDemande.objects.filter(member=member, statut="PENDING").exists():
+                messages.warning(request, "Une demande est déjà en attente.")
+                return redirect("epargnecredit:group_detail", group_id=group.id)
+
+            # 🔒 2) Bloquer si prêt déjà approuvé (actif)
+            if PretDemande.objects.filter(member=member, statut="APPROVED").exists():
+                messages.error(request, "Ce membre a déjà un prêt actif non soldé.")
+                return redirect("epargnecredit:group_detail", group_id=group.id)
+
+            try:
+                demande = form.save(commit=False)
                 demande.member = member
                 demande.statut = "PENDING"
                 demande.save()
-            except IntegrityError as e:
-                # Cas de collision avec l'unique constraint conditionnelle
-                if "uniq_pending_pret_par_membre_ec" in str(e):
-                    messages.warning(request, "Une demande de prêt est déjà en attente pour ce membre.")
-                    return redirect("epargnecredit:group_detail", group_id=group.id)
-                messages.error(request, f"Erreur base de données: {e}")
-                return render(request, "epargnecredit/demande_pret_form.html", {
-                    "form": form, "member": member, "group": group
-                }, status=400)
-            except Exception as e:
-                messages.error(request, f"Erreur inattendue: {e}")
-                return render(request, "epargnecredit/demande_pret_form.html", {
-                    "form": form, "member": member, "group": group
-                }, status=400)
+            except IntegrityError:
+                messages.warning(request, "Une demande de prêt est déjà en attente.")
+                return redirect("epargnecredit:group_detail", group_id=group.id)
 
-            messages.success(request, "Votre demande de prêt a été enregistrée et est en attente de validation.")
+            messages.success(request, "Demande de prêt enregistrée.")
             return redirect("epargnecredit:group_detail", group_id=group.id)
-        else:
-            # Réafficher le formulaire avec les erreurs
-            return render(request, "epargnecredit/demande_pret_form.html", {
-                "form": form, "member": member, "group": group
-            }, status=400)
-    else:
-        # GET
-        form = PretDemandeForm()
+
         return render(request, "epargnecredit/demande_pret_form.html", {
             "form": form, "member": member, "group": group
-        })
+        }, status=400)
+
+    form = PretDemandeForm()
+    return render(request, "epargnecredit/demande_pret_form.html", {
+        "form": form, "member": member, "group": group
+    })
 
 # ------------------------------------------------
 # Valider / Refuser une demande (ADMIN SEULEMENT)
@@ -1067,47 +1107,53 @@ from django.contrib import messages
 
 from .models import PretDemande, Group, GroupMember
 
-
 @login_required
 @require_http_methods(["POST"])
 @transaction.atomic
 def pret_valider(request, pk: int):
-    # Charge la demande + le membre et son groupe en 1 requête
+
     demande = get_object_or_404(
-        PretDemande.objects.select_related("member", "member__group", "member__user"),
+        PretDemande.objects.select_related("member__group", "member__user"),
         pk=pk
     )
     group = demande.member.group
 
-    # Permissions : admin du groupe ou super admin
     is_group_admin = (request.user == getattr(group, "admin", None))
     is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+
     if not (is_group_admin or is_super_admin):
-        messages.error(request, "Seul l’admin du groupe peut valider un prêt.")
+        messages.error(request, "Seul l’admin peut valider.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
-    # Idempotence : si déjà traité, on renvoie vers la page remboursement
     if demande.statut != "PENDING":
-        # essaie de retrouver le groupe de remboursement pour rediriger utilement
-        remb = getattr(group, "get_remboursement_group", lambda: None)() if hasattr(group, "get_remboursement_group") else None
-        if remb is None:
-            return redirect("epargnecredit:group_detail", group_id=group.id)
-        return redirect("epargnecredit:group_detail_remboursement", group_id=remb.id)
+        messages.info(request, "Cette demande a déjà été traitée.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
 
-    # 1) Approuve la demande
+    # 🔒 Vérification caisse disponible
+    caisse_disponible = (
+        Versement.objects.filter(
+            member__group=group,
+            statut="VALIDE"
+        ).aggregate(total=Sum("montant"))["total"] or 0
+    )
+
+    if caisse_disponible < demande.montant:
+        messages.error(request, "❌ Caisse insuffisante pour valider ce prêt.")
+        return redirect("epargnecredit:group_detail", group_id=group.id)
+
+    # Validation
     demande.statut = "APPROVED"
     demande.decided_by = request.user
     demande.decided_at = timezone.now()
     demande.commentaire = request.POST.get("commentaire", "")
-    demande.save(update_fields=["statut", "decided_by", "decided_at", "commentaire"])
+    demande.save()
 
-    # 2) Assure l'existence du group_remboursement (sécurité si jamais manquant)
+    # Création groupe remboursement si nécessaire
     remb = None
     if hasattr(group, "get_remboursement_group"):
         remb = group.get_remboursement_group()
 
     if remb is None:
-        # crée le groupe remboursement si inexistant (cohérent avec ton modèle)
         remb = Group.objects.create(
             nom=f"{group.nom} — Remboursement",
             admin=group.admin,
@@ -1116,33 +1162,31 @@ def pret_valider(request, pk: int):
             montant_base=0
         )
 
-    # 3) Ajoute le bénéficiaire au groupe remboursement (idempotent)
-    try:
-        GroupMember.objects.get_or_create(
-            group=remb,
-            user=demande.member.user,
-            defaults={"montant": 0}
-        )
-    except IntegrityError:
-        # En cas de course ou contrainte, on ignore si déjà présent
-        pass
+    GroupMember.objects.get_or_create(
+        group=remb,
+        user=demande.member.user,
+        defaults={"montant": 0}
+    )
 
-    messages.success(request, "Demande de prêt approuvée ✅ Le membre a été ajouté au groupe de remboursement.")
-    # 4) Redirige vers la page de remboursement
+    messages.success(request, "Prêt approuvé et ajouté au groupe remboursement.")
     return redirect("epargnecredit:group_detail_remboursement", group_id=remb.id)
-
 
 @login_required
 @require_http_methods(["POST"])
 @transaction.atomic
 def pret_refuser(request, pk: int):
-    demande = get_object_or_404(PretDemande.objects.select_related("member", "member__group"), pk=pk)
+
+    demande = get_object_or_404(
+        PretDemande.objects.select_related("member__group"),
+        pk=pk
+    )
     group = demande.member.group
 
     is_group_admin = (request.user == getattr(group, "admin", None))
     is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+
     if not (is_group_admin or is_super_admin):
-        messages.error(request, "Seul l’admin du groupe peut refuser un prêt.")
+        messages.error(request, "Seul l’admin peut refuser.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
     if demande.statut != "PENDING":
@@ -1153,10 +1197,11 @@ def pret_refuser(request, pk: int):
     demande.decided_by = request.user
     demande.decided_at = timezone.now()
     demande.commentaire = request.POST.get("commentaire", "")
-    demande.save(update_fields=["statut", "decided_by", "decided_at", "commentaire"])
+    demande.save()
 
-    messages.success(request, "Demande de prêt refusée ❌")
+    messages.success(request, "Demande refusée.")
     return redirect("epargnecredit:group_detail", group_id=group.id)
+
 
 from decimal import Decimal, ROUND_HALF_UP
 from django.db.models import Q, Sum, OuterRef, Subquery, Value, DecimalField

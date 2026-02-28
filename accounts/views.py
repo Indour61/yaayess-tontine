@@ -6,9 +6,9 @@ from django.urls import reverse
 from django.utils import timezone
 from django.db import IntegrityError
 from django.core.exceptions import ValidationError
-
+from cotisationtontine.models import GroupMember
+from epargnecredit.models import GroupMember
 from .forms import CustomUserCreationForm, CustomAuthenticationForm
-from cotisationtontine.models import Group, GroupMember
 
 from django.contrib.auth import login, authenticate
 from django.contrib import messages
@@ -18,7 +18,6 @@ from django.utils import timezone
 from django.urls import reverse
 from accounts.forms import CustomUserCreationForm, CustomAuthenticationForm
 from accounts.models import CustomUser
-from cotisationtontine.models import Group, GroupMember
 
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -28,7 +27,6 @@ from django.db import transaction
 from django.urls import reverse
 from .forms import CustomUserCreationForm, CustomAuthenticationForm
 from .models import CustomUser
-from epargnecredit.models import Group, GroupMember
 
 # ----------------------------------------------------
 # Vue d'inscription
@@ -90,6 +88,9 @@ def signup_view(request):
 
     return render(request, "accounts/signup.html", {"form": form, "group": group})
 
+from django.apps import apps
+from django.urls import reverse
+
 # ----------------------------------------------------
 # Vue de connexion
 # ----------------------------------------------------
@@ -99,16 +100,34 @@ def login_view(request):
     - Redirection vers le dashboard selon l'option
     - Si utilisateur membre d'un groupe, redirection vers ce groupe
     """
+
+    # 🔹 Si déjà connecté
     if request.user.is_authenticated:
         messages.info(request, "Vous êtes déjà connecté.")
-        if request.user.option == '1':
-            member = GroupMember.objects.filter(user=request.user).first()
-            return redirect(
-                reverse("cotisationtontine:group_detail", args=[member.group.id])
-            ) if member else redirect("cotisationtontine:dashboard_tontine_simple")
-        else:
+
+        if request.user.option == '1':  # Cotisation & Tontine
+            try:
+                TMember = apps.get_model("cotisationtontine", "GroupMember")
+                member = TMember.objects.filter(user=request.user).first()
+                if member:
+                    return redirect("cotisationtontine:group_detail", member.group.id)
+            except Exception:
+                pass
+
+            return redirect("cotisationtontine:dashboard_tontine_simple")
+
+        else:  # Épargne & Crédit
+            try:
+                EMember = apps.get_model("epargnecredit", "GroupMember")
+                member = EMember.objects.filter(user=request.user).first()
+                if member:
+                    return redirect("epargnecredit:group_detail", member.group.id)
+            except Exception:
+                pass
+
             return redirect("epargnecredit:dashboard_epargne_credit")
 
+    # 🔹 POST (connexion)
     if request.method == "POST":
         form = CustomAuthenticationForm(request, data=request.POST)
         if form.is_valid():
@@ -116,16 +135,31 @@ def login_view(request):
             login(request, user)
             messages.success(request, f"Connexion réussie. Bienvenue {user.nom} !")
 
-            # Redirection selon l'option
-            if user.option == '1':
-                member = GroupMember.objects.filter(user=user).first()
-                return redirect(
-                    reverse("cotisationtontine:group_detail", args=[member.group.id])
-                ) if member else redirect("cotisationtontine:dashboard_tontine_simple")
-            else:
+            if user.option == '1':  # Cotisation
+                try:
+                    TMember = apps.get_model("cotisationtontine", "GroupMember")
+                    member = TMember.objects.filter(user=user).first()
+                    if member:
+                        return redirect("cotisationtontine:group_detail", member.group.id)
+                except Exception:
+                    pass
+
+                return redirect("cotisationtontine:dashboard_tontine_simple")
+
+            else:  # Épargne
+                try:
+                    EMember = apps.get_model("epargnecredit", "GroupMember")
+                    member = EMember.objects.filter(user=user).first()
+                    if member:
+                        return redirect("epargnecredit:group_detail", member.group.id)
+                except Exception:
+                    pass
+
                 return redirect("epargnecredit:dashboard_epargne_credit")
+
         else:
             messages.error(request, "Numéro/nom ou mot de passe incorrect, ou option invalide.")
+
     else:
         form = CustomAuthenticationForm()
 
@@ -218,7 +252,6 @@ from django.utils import timezone
 
 from .forms import CustomAuthenticationForm, CustomUserCreationForm
 # IMPORTANT : utilisez le Group/GroupMember de l'app Tontine (où se fait l'invitation)
-from cotisationtontine.models import Group, GroupMember
 
 import random
 import string
@@ -299,56 +332,45 @@ def _find_group_in_model(Model, code: str):
     return None
 
 def _resolve_group_by_code(code: str):
-    """
-    Recherche un Group par code dans:
-      1) cotisationtontine.Group
-      2) epargnecredit.Group
-      3) via Invitation.* -> group (accounts / cotisationtontine / epargnecredit)
-    Lève Http404 si rien n'est trouvé.
-    """
     code = (code or "").strip()
     if not code:
         raise Http404("Invitation ou groupe introuvable.")
 
-    # 1) Cherche directement dans les modèles Group
-    for app_label in ("cotisationtontine", "epargnecredit"):
+    # 1️⃣ Recherche directe dans Group (priorité epargnecredit)
+    for app_label in ("epargnecredit", "cotisationtontine"):
         try:
             GroupModel = apps.get_model(app_label, "Group")
         except LookupError:
-            GroupModel = None
-        g = _find_group_in_model(GroupModel, code) if GroupModel else None
+            continue
+
+        g = _find_group_in_model(GroupModel, code)
         if g:
             return g
 
-    # 2) Cherche via les modèles Invitation possédant un FK 'group'
-    for app_label in ("accounts", "cotisationtontine", "epargnecredit"):
+    # 2️⃣ Recherche via Invitation (priorité epargnecredit)
+    for app_label in ("epargnecredit", "cotisationtontine", "accounts"):
         try:
-            Invitation = apps.get_model(app_label, "Invitation")
+            InvitationModel = apps.get_model(app_label, "Invitation")
         except LookupError:
-            Invitation = None
-        if not Invitation:
             continue
 
-        fields = _get_field_names(Invitation)
+        fields = _get_field_names(InvitationModel)
         q = Q()
+
         if "code" in fields:
             q |= Q(code=code)
         if "token" in fields:
-            q |= Q(token=code)  # string vers UUID fonctionne, Django castera
+            q |= Q(token=code)
         if "uuid" in fields:
             q |= Q(uuid=code)
 
-        if q:
-            inv = (
-                Invitation.objects.select_related("group")
-                .filter(q)
-                .order_by("-id")
-                .first()
-            )
-            if inv and getattr(inv, "group", None):
-                return inv.group
+        if not q:
+            continue
 
-    # 3) Rien trouvé
+        inv = InvitationModel.objects.select_related("group").filter(q).first()
+        if inv and getattr(inv, "group", None):
+            return inv.group
+
     raise Http404("Invitation ou groupe introuvable.")
 
 
@@ -489,6 +511,8 @@ def inscription_et_rejoindre(request: HttpRequest, code: str) -> HttpResponse:
     """
     try:
         group = _resolve_group_by_code(code)
+
+        
     except Http404:
         messages.error(request, "Lien d’invitation invalide ou expiré.")
         return render(
@@ -499,8 +523,18 @@ def inscription_et_rejoindre(request: HttpRequest, code: str) -> HttpResponse:
         )
 
     # Déterminer l’option (forcée) selon l’app du groupe
-    forced_option = _forced_option_for_group(group)  # "1" (tontine) ou "2" (epargnecredit)
-    is_ec_link = getattr(group._meta, "app_label", None) == "epargnecredit"
+    app_label = getattr(group._meta, "app_label", None)
+
+    if app_label == "epargnecredit":
+        forced_option = OPTION_EC
+    elif app_label == "cotisationtontine":
+        forced_option = OPTION_TONTINE
+    else:
+        forced_option = OPTION_TONTINE  # fallback sécurité
+
+    is_ec_link = app_label == "epargnecredit"
+#    forced_option = _forced_option_for_group(group)  # "1" (tontine) ou "2" (epargnecredit)
+#    is_ec_link = getattr(group._meta, "app_label", None) == "epargnecredit"
 
     if request.method == "GET":
         # Force cookie CSRF (utile si ouverture du lien dans un nouvel onglet)
