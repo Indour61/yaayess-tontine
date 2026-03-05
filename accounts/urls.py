@@ -5,7 +5,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from accounts.jwt_serializer import PhoneTokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .views import MeView
-
+from .views import RegisterAPIView
+from .views import LoginAPIView
 
 class PhoneTokenObtainPairView(TokenObtainPairView):
     serializer_class = PhoneTokenObtainPairSerializer
@@ -22,6 +23,11 @@ urlpatterns = [
     path("attente-validation/", views.attente_validation, name="attente_validation"),
     path("api/login/", LoginAPI.as_view(), name="api_login"),
     path('me/', MeView.as_view(), name='api_me'),
-]
 
+    path("api/register/", RegisterAPIView.as_view(), name="api_register"),
+
+
+    path("api/login/", LoginAPIView.as_view(), name="api_login"),
+
+]
 

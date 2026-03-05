@@ -4,7 +4,7 @@ from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from decimal import Decimal
 import uuid
-
+from django.db.models import Sum
 
 # =========================================================
 # GROUPE
@@ -44,6 +44,7 @@ class Group(models.Model):
     )
 
     is_remboursement = models.BooleanField(default=False)
+
     parent_group = models.ForeignKey(
         'self',
         null=True, blank=True,
@@ -54,21 +55,49 @@ class Group(models.Model):
     class Meta:
         ordering = ['-date_creation']
         db_table = "epargnecredit_group"
-        constraints = [
-            UniqueConstraint(
-                fields=['parent_group'],
-                condition=Q(is_remboursement=True),
-                name='unique_one_remboursement_per_parent_ec',
-            ),
-        ]
-        indexes = [
-            models.Index(fields=['is_remboursement']),
-            models.Index(fields=['admin']),
-        ]
 
     def __str__(self):
         suffix = " (remboursement)" if self.is_remboursement else ""
         return f"{self.nom}{suffix}"
+
+    # =====================================================
+    # 🔹 FINANCE CORE METHODS
+    # =====================================================
+
+    @property
+    def total_versements_valides(self):
+        from .models import Versement
+        return (
+            Versement.objects.filter(
+                member__group=self,
+                statut="VALIDE"
+            ).aggregate(total=Sum("montant"))["total"] or 0
+        )
+
+    @property
+    def total_prets_approuves(self):
+        from .models import PretDemande
+        return (
+            PretDemande.objects.filter(
+                member__group=self,
+                statut="APPROVED"
+            ).aggregate(total=Sum("montant"))["total"] or 0
+        )
+
+    @property
+    def caisse_disponible(self):
+        return self.total_versements_valides - self.total_prets_approuves
+
+    # =====================================================
+    # 🔹 LOGIQUE GROUPE REMBOURSEMENT
+    # =====================================================
+
+    def get_remboursement_group(self):
+        """
+        Retourne le groupe remboursement associé,
+        ou None s'il n'existe pas.
+        """
+        return self.remboursement_children.filter(is_remboursement=True).first()
 
 
 # =========================================================

@@ -23,42 +23,37 @@
           <input type="hidden" name="next" value="{{ next }}">
         {% endif %}
 
+        <!-- TELEPHONE -->
         <div class="mb-3">
-          <label for="login_input" class="form-label">Nom complet ou téléphone</label>
-          <input type="text" name="username" class="form-control" id="login_input"
-                 placeholder="Ex: Fatou Diop ou 77xxxxxxx" required
-                 value="{{ request.POST.username }}">
+          <label for="phone" class="form-label">Téléphone</label>
+          <input type="text" name="phone" class="form-control" id="phone"
+                 placeholder="Ex: 77xxxxxxx" required
+                 value="{{ request.POST.phone }}">
           <div class="invalid-feedback">
-            Veuillez saisir votre nom complet ou téléphone.
+            Veuillez saisir votre numéro de téléphone.
           </div>
         </div>
 
+        <!-- PASSWORD -->
         <div class="mb-3">
           <label for="password" class="form-label">Mot de passe</label>
-          <input type="password" name="password" class="form-control" id="password" placeholder="Mot de passe" required>
+          <input type="password" name="password" class="form-control"
+                 id="password" placeholder="Mot de passe" required>
           <div class="invalid-feedback">
             Veuillez saisir votre mot de passe.
           </div>
         </div>
 
-        <div class="mb-3">
-          <label for="option" class="form-label">Option</label>
-          <select name="option" id="option" class="form-select" required>
-            <option value="">-- Sélectionnez votre option --</option>
-            <option value="1" {% if request.POST.option == "1" %}selected{% endif %}>Cotisation & Tontine</option>
-            <option value="2" {% if request.POST.option == "2" %}selected{% endif %}>Épargne & Crédit</option>
-          </select>
-          <div class="invalid-feedback">
-            Veuillez sélectionner une option.
-          </div>
-        </div>
-
-        <button type="submit" class="btn btn-success w-100">Se connecter</button>
+        <button type="submit" class="btn btn-success w-100">
+          Se connecter
+        </button>
       </form>
 
       <p class="text-center mt-3">
-        Pas encore de compte ? <a href="{% url 'accounts:signup' %}">Inscrivez-vous</a>
+        Pas encore de compte ?
+        <a href="{% url 'accounts:signup' %}">Inscrivez-vous</a>
       </p>
+
     </div>
   </div>
 </div>
@@ -79,4 +74,3 @@
 })();
 </script>
 {% endblock %}
-

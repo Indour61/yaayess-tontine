@@ -1,5 +1,8 @@
+from .views import MyGroupAPIView, GroupDetailAPIView
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from .api_views import GroupDetailAPI
+from .views import GroupDetailAPIView
 from . import views
 from .views_api import (
     GroupViewSet,
@@ -69,4 +72,15 @@ urlpatterns = [
     # ============================
     path("<int:group_id>/historique-cycles/", views.historique_cycles_view, name="historique_cycles"),
     path("historique-actions/", views.historique_actions_view, name="historique_actions"),
+
+
+    path("groupe/<int:group_id>/", views.group_detail, name="group_detail"),
+    path("dashboard/", views.dashboard_tontine_simple, name="dashboard_tontine_simple"),
+
+    path("api/group/<int:group_id>/", GroupDetailAPI.as_view(), name="api_group_detail"),
+
+    path("api/group/<int:group_id>/", GroupDetailAPIView.as_view(), name="api_group_detail"),
+
+    path("api/my-group/", MyGroupAPIView.as_view())
 ]
+

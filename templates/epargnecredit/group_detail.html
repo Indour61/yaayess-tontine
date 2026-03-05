@@ -31,6 +31,43 @@
   {% endif %}
 
   <h1 class="fw-bold text-success">{{ group.nom }}</h1>
+{% if user_is_admin %}
+<div class="row mt-3 mb-4">
+
+  <div class="col-md-4">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <small>Total cotisations</small>
+        <h5>{{ total_montant|floatformat:0|intcomma }} FCFA</h5>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <small>Encours prêts</small>
+        <h5 class="text-danger">
+          {{ total_prets|floatformat:0|intcomma }} FCFA
+        </h5>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <small>Caisse disponible</small>
+        <h5 class="text-success">
+          {{ caisse_disponible|floatformat:0|intcomma }} FCFA
+        </h5>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endif %}
+
   <p class="mb-1">📅 Date de création : {{ group.date_creation|date:"d/m/Y" }}</p>
   {% if group.date_reset %}
     <p class="mb-3 text-muted">🔁 Dernier reset : {{ group.date_reset|date:"d/m/Y H:i" }}</p>
@@ -210,6 +247,68 @@
   </div>
   {% endif %}
 
+  {# 🔹 Bloc Admin : Versements en attente de validation #}
+{% if user_is_admin and versements_en_attente %}
+<h3 class="mt-4">
+  Versements en attente
+  <span class="badge bg-warning text-dark ms-2">
+    {{ versements_en_attente|length }}
+  </span>
+</h3>
+
+<div class="table-responsive shadow-sm rounded mt-2">
+  <table class="table table-sm table-bordered align-middle mb-0">
+    <thead class="table-light">
+      <tr>
+        <th>Membre</th>
+        <th>Montant</th>
+        <th>Date</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+
+    <tbody>
+    {% for v in versements_en_attente %}
+      <tr>
+        <td>
+          {{ v.member.user.nom|default:v.member.user.phone }}
+        </td>
+
+        <td>
+          {{ v.montant|floatformat:0|intcomma }} FCFA
+        </td>
+
+        <td>
+          {{ v.date_creation|date:"d/m/Y H:i" }}
+        </td>
+
+        <td class="d-flex gap-1">
+
+          <form method="post"
+                action="{% url 'epargnecredit:valider_versement' v.id %}">
+            {% csrf_token %}
+            <button class="btn btn-sm btn-success">
+              ✔ Valider
+            </button>
+          </form>
+
+          <form method="post"
+                action="{% url 'epargnecredit:refuser_versement' v.id %}">
+            {% csrf_token %}
+            <button class="btn btn-sm btn-outline-danger">
+              ✖ Refuser
+            </button>
+          </form>
+
+        </td>
+
+      </tr>
+    {% endfor %}
+    </tbody>
+
+  </table>
+</div>
+{% endif %}
   {# 🔹 Bloc Admin : Demandes de prêt en attente #}
   {% if user_is_admin and pending_prets %}
     <h3 class="mt-4">

@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
+from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,8 +21,11 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")          # ⬅️ lira bien la vale
 if not OPENAI_API_KEY:
     raise RuntimeError("OPENAI_API_KEY manquante. Vérifie .env ou les variables d'environnement.")
 
-
-CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost",
+    "http://127.0.0.1",
+    "http://localhost:3000",
+]
 
 # ----------------------------------------------------
 # 🗄 DATABASE - Version sécurisée
@@ -79,29 +83,57 @@ INSTALLED_APPS = [
     # Outils
     'whitenoise.runserver_nostatic',
     'sslserver',
+    "corsheaders",
+    'rest_framework_simplejwt.token_blacklist',
 
 ]
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
-}
-
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+
+    "UPDATE_LAST_LOGIN": True,
+
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
+
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
+
+CORS_ALLOW_ALL_ORIGINS = True
+
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+}
+
+
+# SIMPLE_JWT = {
+#    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+#    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+#    'AUTH_HEADER_TYPES': ('Bearer',),
+#}
+
+AUTH_USER_MODEL = "accounts.CustomUser"
 
 
 TERMS_VERSION = "v1.0-2025-09-07"
 
+
+AUTHENTICATION_BACKENDS = [
+    "accounts.backends.PhoneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
 
 # ----------------------------------------------------
 # ⚙️ MIDDLEWARE
@@ -111,7 +143,7 @@ TERMS_VERSION = "v1.0-2025-09-07"
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-
+    "corsheaders.middleware.CorsMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -219,3 +251,5 @@ if DEBUG:
     from django.conf import settings as _s
     urlpatterns = []
     urlpatterns += static(_s.MEDIA_URL, document_root=_s.MEDIA_ROOT)
+
+

@@ -1,3 +1,5 @@
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate
 from django.contrib import messages
@@ -6,10 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.db import IntegrityError
 from django.core.exceptions import ValidationError
-from cotisationtontine.models import GroupMember
-from epargnecredit.models import GroupMember
 from .forms import CustomUserCreationForm, CustomAuthenticationForm
-
 from django.contrib.auth import login, authenticate
 from django.contrib import messages
 from django.db import transaction, IntegrityError
@@ -28,65 +27,156 @@ from django.urls import reverse
 from .forms import CustomUserCreationForm, CustomAuthenticationForm
 from .models import CustomUser
 
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from django.contrib.auth import login
+from django.urls import reverse
+from django.db import transaction
+from django.utils import timezone
+
+from .forms import CustomUserCreationForm
+
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth import get_user_model
+from django.db import transaction
+
+User = get_user_model()
+
+
+class RegisterAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def post(self, request):
+        phone = request.data.get("phone")
+        password = request.data.get("password")
+        nom = request.data.get("nom")
+        option = request.data.get("option")
+
+        if not all([phone, password, nom, option]):
+            return Response(
+                {"error": "Tous les champs sont obligatoires"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if User.objects.filter(phone=phone).exists():
+            return Response(
+                {"error": "Téléphone déjà utilisé"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = User.objects.create_user(
+            phone=phone,
+            password=password,
+            nom=nom,
+            option=option,
+        )
+
+        # 🔥 Génération JWT automatique
+        refresh = RefreshToken.for_user(user)
+
+        return Response(
+            {
+                "message": "Compte créé avec succès",
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": {
+                    "id": user.id,
+                    "phone": user.phone,
+                    "nom": user.nom,
+                    "option": user.option,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
 # ----------------------------------------------------
 # Vue d'inscription
 # ----------------------------------------------------
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.contrib.auth import login
+from django.urls import reverse
+from django.db import transaction
+from django.utils import timezone
+
+from .forms import CustomUserCreationForm
+
+# ⚠️ IMPORTS CORRECTS
+
+
 @transaction.atomic
 def signup_view(request):
-    """
-    Création d'un compte CustomUser avec champ 'option'.
-    - Si 'group_id' dans GET ou POST : ajout automatique au groupe (invitation)
-    - Redirection vers le dashboard correspondant à l'option choisie
-    """
-    if request.user.is_authenticated:
-        messages.info(request, "Vous êtes déjà connecté.")
-        if request.user.option == '1':
-            return redirect('cotisationtontine:dashboard_tontine_simple')
-        else:
-            return redirect('epargnecredit:dashboard_epargne_credit')
 
-    group_id = request.GET.get('group_id') or request.POST.get('group_id')
-    group = get_object_or_404(Group, id=group_id) if group_id else None
+    if request.user.is_authenticated:
+        if request.user.option == "1":
+            return redirect("cotisationtontine:dashboard_tontine_simple")
+        return redirect("epargnecredit:dashboard_epargne_credit")
+
+    group_id = request.GET.get("group_id") or request.POST.get("group_id")
+
+    group = None
+    group_type = None  # 🔥 on va déterminer le type
 
     if request.method == "POST":
         form = CustomUserCreationForm(request.POST)
+
         if form.is_valid():
-            try:
-                user = form.save()
+            user = form.save()
+            login(request, user)
 
-                # Connexion automatique
-                login(request, user)
-
-                # Ajout automatique au groupe si fourni
-                if group:
-                    _, created = GroupMember.objects.get_or_create(
-                        group=group,
-                        user=user,
-                        defaults={'date_joined': timezone.now()}
-                    )
-                    if created:
-                        messages.success(request, f"Vous avez été ajouté au groupe {group.nom}.")
+            # 🔎 Si group_id fourni
+            if group_id:
+                try:
+                    if user.option == "1":
+                        group = TontineGroup.objects.get(id=group_id)
+                        TontineMember.objects.get_or_create(
+                            group=group,
+                            user=user,
+                            defaults={"date_joined": timezone.now()},
+                        )
                     else:
-                        messages.info(request, f"Vous êtes déjà membre du groupe {group.nom}.")
+                        group = ECGroup.objects.get(id=group_id)
+                        ECMember.objects.get_or_create(
+                            group=group,
+                            user=user,
+                            defaults={"date_joined": timezone.now()},
+                        )
+                except Exception:
+                    messages.warning(request, "Groupe invalide.")
 
-                messages.success(request, f"Bienvenue {user.nom} ! Votre compte a été créé.")
+            messages.success(request, f"Bienvenue {user.nom} !")
 
-                # Redirection selon l'option
-                if user.option == '1':
+            # 🔐 Redirection propre
+            if user.option == "1":
+                if group:
                     return redirect(
-                        reverse('cotisationtontine:group_detail', args=[group.id])
-                    ) if group else redirect('cotisationtontine:dashboard_tontine_simple')
-                else:
-                    return redirect('epargnecredit:dashboard_epargne_credit')
+                        reverse(
+                            "cotisationtontine:group_detail",
+                            args=[group.id],
+                        )
+                    )
+                return redirect(
+                    "cotisationtontine:dashboard_tontine_simple"
+                )
 
-            except Exception as e:
-                messages.error(request, f"Erreur lors de la création du compte : {str(e)}")
-        else:
-            messages.error(request, "Veuillez corriger les erreurs ci-dessous.")
+            return redirect(
+                "epargnecredit:dashboard_epargne_credit"
+            )
+
     else:
         form = CustomUserCreationForm()
 
-    return render(request, "accounts/signup.html", {"form": form, "group": group})
+    return render(
+        request,
+        "accounts/signup.html",
+        {"form": form},
+    )
+
 
 from django.apps import apps
 from django.urls import reverse
@@ -94,21 +184,25 @@ from django.urls import reverse
 # ----------------------------------------------------
 # Vue de connexion
 # ----------------------------------------------------
+from django.contrib.auth import authenticate, login
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.apps import apps
+
+
 def login_view(request):
     """
-    Connexion avec validation de l'option.
-    - Redirection vers le dashboard selon l'option
-    - Si utilisateur membre d'un groupe, redirection vers ce groupe
+    Connexion avec téléphone + mot de passe uniquement.
+    L'utilisateur est redirigé automatiquement selon son option.
     """
 
-    # 🔹 Si déjà connecté
-    if request.user.is_authenticated:
-        messages.info(request, "Vous êtes déjà connecté.")
+    # 🔹 Fonction interne pour redirection
+    def redirect_user(user):
 
-        if request.user.option == '1':  # Cotisation & Tontine
+        if user.option == '1':  # Cotisation & Tontine
             try:
                 TMember = apps.get_model("cotisationtontine", "GroupMember")
-                member = TMember.objects.filter(user=request.user).first()
+                member = TMember.objects.filter(user=user).first()
                 if member:
                     return redirect("cotisationtontine:group_detail", member.group.id)
             except Exception:
@@ -119,7 +213,7 @@ def login_view(request):
         else:  # Épargne & Crédit
             try:
                 EMember = apps.get_model("epargnecredit", "GroupMember")
-                member = EMember.objects.filter(user=request.user).first()
+                member = EMember.objects.filter(user=user).first()
                 if member:
                     return redirect("epargnecredit:group_detail", member.group.id)
             except Exception:
@@ -127,43 +221,41 @@ def login_view(request):
 
             return redirect("epargnecredit:dashboard_epargne_credit")
 
-    # 🔹 POST (connexion)
+    # 🔹 Si déjà connecté
+    if request.user.is_authenticated:
+        messages.info(request, "Vous êtes déjà connecté.")
+        return redirect_user(request.user)
+
+    # 🔹 Connexion
     if request.method == "POST":
-        form = CustomAuthenticationForm(request, data=request.POST)
-        if form.is_valid():
-            user = form.get_user()
+
+        phone = request.POST.get("phone", "").strip()
+        password = request.POST.get("password", "").strip()
+
+        if not phone or not password:
+            messages.error(request, "Veuillez saisir votre téléphone et votre mot de passe.")
+            return render(request, "accounts/login.html")
+
+        user = authenticate(request, username=phone, password=password)
+        if user is not None:
+
+            if not user.is_active:
+                messages.error(request, "Votre compte est désactivé.")
+                return render(request, "accounts/login.html")
+
             login(request, user)
             messages.success(request, f"Connexion réussie. Bienvenue {user.nom} !")
 
-            if user.option == '1':  # Cotisation
-                try:
-                    TMember = apps.get_model("cotisationtontine", "GroupMember")
-                    member = TMember.objects.filter(user=user).first()
-                    if member:
-                        return redirect("cotisationtontine:group_detail", member.group.id)
-                except Exception:
-                    pass
+            next_url = request.POST.get("next")
+            if next_url:
+                return redirect(next_url)
 
-                return redirect("cotisationtontine:dashboard_tontine_simple")
-
-            else:  # Épargne
-                try:
-                    EMember = apps.get_model("epargnecredit", "GroupMember")
-                    member = EMember.objects.filter(user=user).first()
-                    if member:
-                        return redirect("epargnecredit:group_detail", member.group.id)
-                except Exception:
-                    pass
-
-                return redirect("epargnecredit:dashboard_epargne_credit")
+            return redirect_user(user)
 
         else:
-            messages.error(request, "Numéro/nom ou mot de passe incorrect, ou option invalide.")
+            messages.error(request, "Téléphone ou mot de passe incorrect.")
 
-    else:
-        form = CustomAuthenticationForm()
-
-    return render(request, "accounts/login.html", {"form": form})
+    return render(request, "accounts/login.html")
 
 @login_required
 def logout_view(request):
@@ -278,18 +370,6 @@ def _unique_alias_for(name: str) -> str:
 
 
 
-from django.core.exceptions import PermissionDenied
-
-def admin_required(view_func):
-    def _wrapped_view(request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            raise PermissionDenied
-        # Vérifie si l'utilisateur est admin dans un groupe
-        is_admin = GroupMember.objects.filter(user=request.user, role='ADMIN').exists()
-        if not (request.user.is_super_admin or is_admin):
-            raise PermissionDenied
-        return view_func(request, *args, **kwargs)
-    return _wrapped_view
 
 from accounts.decorators import admin_required, membre_required
 
@@ -724,3 +804,74 @@ class MeView(APIView):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+class LoginAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+
+        phone = request.data.get("phone")
+        password = request.data.get("password")
+
+        # Vérification des champs
+        if not phone or not password:
+            return Response(
+                {"error": "Téléphone et mot de passe requis"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(phone=phone)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "Utilisateur introuvable"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Vérification mot de passe
+        if not user.check_password(password):
+            return Response(
+                {"error": "Mot de passe incorrect"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # 🔐 Génération JWT
+        refresh = RefreshToken.for_user(user)
+        access = refresh.access_token
+
+        # Debug console
+        print("LOGIN API CALLED")
+        print("ACCESS TOKEN:", access)
+        print("REFRESH TOKEN:", refresh)
+
+        return Response({
+            "status": "success",
+            "access": str(access),
+            "refresh": str(refresh),
+            "user": {
+                "id": user.id,
+                "phone": user.phone,
+                "nom": user.nom,
+                "option": user.option,
+                "is_validated": user.is_validated,
+                "is_staff": user.is_staff
+            }
+        }, status=status.HTTP_200_OK)
+
+from django.contrib.auth.decorators import login_required
+
+@login_required
+def home_redirect(request):
+    """
+    Redirection intelligente vers le bon module
+    """
+    return _redirect_by_option(request.user)

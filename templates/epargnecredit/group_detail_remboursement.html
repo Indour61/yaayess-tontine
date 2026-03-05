@@ -33,32 +33,45 @@
     🔁 Pas d’objectif fixe : les versements sont <strong>toujours possibles</strong>.
   </div>
 
-  <div class="card">
-    <div class="card-header">Membres à rembourser</div>
+  <div class="card shadow-sm">
+    <div class="card-header fw-semibold">
+      Membres à rembourser
+    </div>
+
     <div class="card-body p-0">
       <table class="table mb-0 align-middle">
-        <thead>
+        <thead class="table-light">
           <tr>
             <th>Nom</th>
             <th class="text-end">Actions</th>
             <th class="text-end">Montant versé</th>
             <th class="text-end">Montant prêté + intérêt</th>
-            <th class="text-end">Mensuel à rembourser</th>
+            <th class="text-end">Mensualité</th>
             <th class="text-end">Pénalités</th>
             <th class="text-end">Reste à rembourser</th>
           </tr>
         </thead>
+
         <tbody>
         {% for m in membres %}
           <tr>
+
+            <!-- NOM + BADGE RETARD -->
             <td>
-              {% if m.user.nom %}
-                {{ m.user.nom|title }}
-              {% else %}
-                {{ m.user.phone|default:"—" }}
+              {{ m.user.nom|default:m.user.phone|title }}
+
+              {% if m.est_en_retard %}
+                {% if m.niveau_retard == "grave" %}
+                  <span class="badge bg-dark ms-2">⚫ Défaut grave</span>
+                {% else %}
+                  <span class="badge bg-danger ms-2">
+                    🔴 En retard ({{ m.jours_retard }}j)
+                  </span>
+                {% endif %}
               {% endif %}
             </td>
 
+            <!-- ACTION -->
             <td class="text-end">
               <a href="{% url 'epargnecredit:initier_paiement_remboursement' m.id %}"
                  class="btn btn-sm btn-success">
@@ -66,33 +79,37 @@
               </a>
             </td>
 
+            <!-- TOTAL VERSE -->
             <td class="text-end">
-              {{ m.total_verse|default_if_none:0|floatformat:0|intcomma }} FCFA
+              {{ m.total_verse|default:0|floatformat:0|intcomma }} FCFA
             </td>
 
+            <!-- TOTAL DU -->
             <td class="text-end">
-              {% if m.montant_prete_plus_interet is not None %}
-                {{ m.montant_prete_plus_interet|floatformat:0|intcomma }} FCFA
-              {% else %} — {% endif %}
+              {{ m.montant_prete_plus_interet|default:0|floatformat:0|intcomma }} FCFA
             </td>
 
+            <!-- MENSUALITE -->
             <td class="text-end">
-              {% if m.mensualite is not None %}
-                {{ m.mensualite|floatformat:0|intcomma }} FCFA
-              {% else %} — {% endif %}
+              {{ m.mensualite|default:0|floatformat:0|intcomma }} FCFA
             </td>
 
-            <td class="text-end">
-              {% if m.penalites is not None %}
-                {{ m.penalites|floatformat:0|intcomma }} FCFA
-              {% else %} — {% endif %}
+            <!-- PENALITES -->
+            <td class="text-end text-warning">
+              {{ m.penalites|default:0|floatformat:0|intcomma }} FCFA
             </td>
 
-            <td class="text-end">
-              {% if m.reste_a_rembourser is not None %}
-                {{ m.reste_a_rembourser|floatformat:0|intcomma }} FCFA
-              {% else %} — {% endif %}
+            <!-- RESTE -->
+            <td class="text-end fw-bold
+              {% if m.reste_a_rembourser > 0 %}
+                text-danger
+              {% else %}
+                text-success
+              {% endif %}
+            ">
+              {{ m.reste_a_rembourser|default:0|floatformat:0|intcomma }} FCFA
             </td>
+
           </tr>
         {% empty %}
           <tr>
@@ -103,20 +120,24 @@
         {% endfor %}
 
         {% if membres %}
-        <!-- ✅ Ligne de totaux -->
+        <!-- TOTAL GLOBAL -->
         <tr class="fw-bold table-secondary">
           <td>Total</td>
           <td class="text-end">—</td>
-          <td class="text-end">{{ totals.total_verse|intcomma }} FCFA</td>
-          <td class="text-end">{{ totals.montant_prete_plus_interet|intcomma }} FCFA</td>
-          <td class="text-end">{{ totals.mensualite|intcomma }} FCFA</td>
-          <td class="text-end">{{ totals.penalites|intcomma }} FCFA</td>
-          <td class="text-end">{{ totals.reste_a_rembourser|intcomma }} FCFA</td>
+          <td class="text-end">{{ totals.total_verse|floatformat:0|intcomma }} FCFA</td>
+          <td class="text-end">{{ totals.montant_prete_plus_interet|floatformat:0|intcomma }} FCFA</td>
+          <td class="text-end">{{ totals.mensualite|floatformat:0|intcomma }} FCFA</td>
+          <td class="text-end text-warning">{{ totals.penalites|floatformat:0|intcomma }} FCFA</td>
+          <td class="text-end text-danger">
+            {{ totals.reste_a_rembourser|floatformat:0|intcomma }} FCFA
+          </td>
         </tr>
         {% endif %}
+
         </tbody>
       </table>
     </div>
   </div>
+
 </div>
 {% endblock %}
