@@ -3,61 +3,135 @@
 {% block title %}Ajouter un versement{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <h2 class="mb-3">
-    ➕ Ajouter un versement au groupe <strong>{{ group.nom }}</strong>
-  </h2>
+<div class="container py-4">
 
-  <form method="post" class="shadow p-4 rounded bg-light needs-validation" novalidate>
-    {% csrf_token %}
-    <div class="mb-3">
-      <label for="montant" class="form-label">💰 Montant</label>
-      <input
-        type="number"
-        step="0.01"
-        min="0.01"
-        class="form-control"
-        id="montant"
-        name="montant"
-        placeholder="Ex: 5000"
-        required
-      >
-      <div class="invalid-feedback">
-        Veuillez saisir un montant valide supérieur à 0.
-      </div>
-    </div>
+<div class="row justify-content-center">
+<div class="col-lg-6 col-md-8 col-12">
 
-    <div class="mb-3">
-      <label for="methode" class="form-label">💳 Méthode de paiement</label>
-      <select class="form-select" id="methode" name="methode" required>
-        <option value="">-- Choisir une méthode --</option>
-        <option value="ESPECES">Espèces</option>
-        <option value="PAYDUNYA">PayDunya</option>
-        <option value="PAYPAL">PayPal</option>
-      </select>
-      <div class="invalid-feedback">
-        Veuillez sélectionner une méthode de paiement.
-      </div>
-    </div>
+<h3 class="fw-bold text-success mb-4">
+💰 Ajouter un versement
+</h3>
 
-    <button type="submit" class="btn btn-success">💾 Enregistrer le versement</button>
-    <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-secondary ms-2">Annuler</a>
-  </form>
+<p class="text-muted mb-3">
+Groupe : <strong>{{ group.nom }}</strong>
+</p>
+
+<div class="card shadow-sm border-0">
+
+<div class="card-body">
+
+<form method="post" class="needs-validation" novalidate>
+
+{% csrf_token %}
+
+<!-- Montant -->
+<div class="mb-3">
+
+<label for="montant" class="form-label fw-semibold">
+💰 Montant
+</label>
+
+<input
+type="number"
+step="1"
+min="1"
+class="form-control form-control-lg"
+id="montant"
+name="montant"
+placeholder="Ex : 5 000"
+required>
+
+<div class="invalid-feedback">
+Veuillez saisir un montant valide supérieur à 0.
 </div>
 
+</div>
+
+
+<!-- Méthode paiement -->
+<div class="mb-3">
+
+<label for="methode" class="form-label fw-semibold">
+💳 Méthode de paiement
+</label>
+
+<select class="form-select form-select-lg"
+id="methode"
+name="methode"
+required>
+
+<option value="">
+-- Choisir une méthode --
+</option>
+
+<option value="ESPECES">
+Espèces
+</option>
+
+<option value="PAYDUNYA">
+PayDunya
+</option>
+
+<option value="PAYPAL">
+PayPal
+</option>
+
+</select>
+
+<div class="invalid-feedback">
+Veuillez sélectionner une méthode de paiement.
+</div>
+
+</div>
+
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+
+<button type="submit"
+class="btn btn-success flex-grow-1">
+
+💾 Enregistrer le versement
+
+</button>
+
+<a href="{% url 'epargnecredit:group_detail' group.id %}"
+class="btn btn-outline-secondary flex-grow-1">
+
+Annuler
+
+</a>
+
+</div>
+
+</form>
+
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+
+
 <script>
-  (() => {
-    'use strict'
-    const forms = document.querySelectorAll('.needs-validation')
-    Array.from(forms).forEach(form => {
-      form.addEventListener('submit', event => {
-        if (!form.checkValidity()) {
-          event.preventDefault()
-          event.stopPropagation()
-        }
-        form.classList.add('was-validated')
-      }, false)
-    })
-  })()
+(() => {
+'use strict'
+const forms = document.querySelectorAll('.needs-validation')
+
+Array.from(forms).forEach(form => {
+form.addEventListener('submit', event => {
+
+if (!form.checkValidity()) {
+event.preventDefault()
+event.stopPropagation()
+}
+
+form.classList.add('was-validated')
+
+}, false)
+})
+})();
 </script>
+
 {% endblock %}

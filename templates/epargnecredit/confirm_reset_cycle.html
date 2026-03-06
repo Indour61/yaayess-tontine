@@ -3,23 +3,67 @@
 {% block title %}Réinitialiser le cycle{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-  <h2 class="text-danger mb-4">⚠️ Réinitialisation du cycle</h2>
+<div class="container py-5">
 
-  <div class="alert alert-warning" role="alert">
-    <p>Vous êtes sur le point de <strong>supprimer toutes les cotisations et versements</strong> du groupe <strong>{{ group.nom }}</strong>.</p>
-    <p>Cette action est <strong>irréversible</strong>. Confirmez-vous ?</p>
-  </div>
+<div class="row justify-content-center">
+<div class="col-lg-6 col-md-8 col-12">
 
-  <form method="post" class="d-flex gap-2">
-    {% csrf_token %}
-    <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-secondary flex-grow-1">
-      Annuler
-    </a>
-    <button type="submit" class="btn btn-danger flex-grow-1">
-      ✅ Oui, réinitialiser
-    </button>
-  </form>
+<div class="card shadow-sm border-0">
+
+<div class="card-body text-center">
+
+<div style="font-size:48px;">⚠️</div>
+
+<h3 class="text-danger fw-bold mt-2">
+Réinitialisation du cycle
+</h3>
+
+<p class="text-muted mb-4">
+Vous êtes sur le point de supprimer toutes les cotisations et versements du groupe :
+<br>
+<strong class="text-primary">{{ group.nom }}</strong>
+</p>
+
+<div class="alert alert-warning text-start">
+
+<strong>Attention :</strong>
+
+<ul class="mb-0 mt-2">
+<li>Toutes les cotisations seront supprimées</li>
+<li>Tous les versements seront supprimés</li>
+<li>Cette action est <strong>irréversible</strong></li>
+</ul>
+
+</div>
+
+<form method="post" class="mt-4">
+{% csrf_token %}
+
+<div class="d-flex flex-wrap gap-2">
+
+<a href="{% url 'epargnecredit:group_detail' group.id %}"
+class="btn btn-outline-secondary flex-grow-1">
+
+⬅ Annuler
+
+</a>
+
+<button type="submit"
+class="btn btn-danger flex-grow-1">
+
+🗑 Oui, réinitialiser
+
+</button>
+
+</div>
+
+</form>
+
+</div>
+</div>
+
+</div>
+</div>
+
 </div>
 {% endblock %}
-

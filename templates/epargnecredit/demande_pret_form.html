@@ -1,52 +1,162 @@
 {% extends "base.html" %}
 {% load humanize %}
+{% load widget_tweaks %}
 
 {% block title %}Demande de prêt{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <h2>Demande de prêt — {{ member.user.nom|default:member.user.phone }}</h2>
-  <p class="text-muted mb-3">{{ group.nom }}</p>
+<div class="container py-4">
 
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert alert-{{ message.tags|default:'info' }}">{{ message|safe }}</div>
-    {% endfor %}
-  {% endif %}
+<div class="row justify-content-center">
+<div class="col-lg-6 col-md-8 col-12">
 
-  <form method="post" novalidate>
-    {% csrf_token %}
+<h3 class="fw-bold text-primary mb-3">
+💳 Demande de prêt
+</h3>
 
-    <div class="mb-3">
-      <label class="form-label" for="{{ form.montant.id_for_label }}">Montant (FCFA)</label>
-      {{ form.montant }}
-      {% if form.montant.errors %}<div class="text-danger small">{{ form.montant.errors }}</div>{% endif %}
-    </div>
+<p class="text-muted mb-4">
+Membre : <strong>{{ member.user.nom|default:member.user.phone }}</strong><br>
+Groupe : <strong>{{ group.nom }}</strong>
+</p>
 
-    <div class="mb-3">
-      <label class="form-label" for="{{ form.interet.id_for_label }}">Intérêt (%)</label>
-      {{ form.interet }}
-      {% if form.interet.errors %}<div class="text-danger small">{{ form.interet.errors }}</div>{% endif %}
-    </div>
 
-    <div class="mb-3">
-      <label class="form-label" for="{{ form.nb_mois.id_for_label }}">Nombre de mois</label>
-      {{ form.nb_mois }}
-      {% if form.nb_mois.errors %}<div class="text-danger small">{{ form.nb_mois.errors }}</div>{% endif %}
-    </div>
+<!-- Messages -->
+{% if messages %}
+<div class="mb-3">
+{% for message in messages %}
+<div class="alert alert-{{ message.tags|default:'info' }} shadow-sm">
+{{ message|safe }}
+</div>
+{% endfor %}
+</div>
+{% endif %}
 
-    <div class="mb-3">
-      <label class="form-label" for="{{ form.debut_remboursement.id_for_label }}">Début de remboursement</label>
-      {{ form.debut_remboursement }}
-      {% if form.debut_remboursement.errors %}<div class="text-danger small">{{ form.debut_remboursement.errors }}</div>{% endif %}
-    </div>
 
-    {% if form.non_field_errors %}
-      <div class="alert alert-danger">{{ form.non_field_errors }}</div>
-    {% endif %}
+<div class="card shadow-sm border-0">
 
-    <button type="submit" class="btn btn-primary">📨 Envoyer la demande</button>
-    <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-secondary ms-2">Annuler</a>
-  </form>
+<div class="card-body">
+
+<form method="post" novalidate>
+
+{% csrf_token %}
+
+
+<!-- Montant -->
+<div class="mb-3">
+
+<label class="form-label fw-semibold"
+for="{{ form.montant.id_for_label }}">
+
+Montant (FCFA)
+
+</label>
+
+{{ form.montant|add_class:"form-control form-control-lg" }}
+
+{% if form.montant.errors %}
+<div class="invalid-feedback d-block">
+{{ form.montant.errors }}
+</div>
+{% endif %}
+
+</div>
+
+
+<!-- Intérêt -->
+<div class="mb-3">
+
+<label class="form-label fw-semibold"
+for="{{ form.interet.id_for_label }}">
+
+Intérêt (%)
+
+</label>
+
+{{ form.interet|add_class:"form-control form-control-lg" }}
+
+{% if form.interet.errors %}
+<div class="invalid-feedback d-block">
+{{ form.interet.errors }}
+</div>
+{% endif %}
+
+</div>
+
+
+<!-- Nombre de mois -->
+<div class="mb-3">
+
+<label class="form-label fw-semibold"
+for="{{ form.nb_mois.id_for_label }}">
+
+Nombre de mois
+
+</label>
+
+{{ form.nb_mois|add_class:"form-control form-control-lg" }}
+
+{% if form.nb_mois.errors %}
+<div class="invalid-feedback d-block">
+{{ form.nb_mois.errors }}
+</div>
+{% endif %}
+
+</div>
+
+
+<!-- Début remboursement -->
+<div class="mb-3">
+
+<label class="form-label fw-semibold"
+for="{{ form.debut_remboursement.id_for_label }}">
+
+Début de remboursement
+
+</label>
+
+{{ form.debut_remboursement|add_class:"form-control form-control-lg" }}
+
+{% if form.debut_remboursement.errors %}
+<div class="invalid-feedback d-block">
+{{ form.debut_remboursement.errors }}
+</div>
+{% endif %}
+
+</div>
+
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger">
+{{ form.non_field_errors }}
+</div>
+{% endif %}
+
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+
+<button type="submit"
+class="btn btn-primary flex-grow-1">
+
+📨 Envoyer la demande
+
+</button>
+
+<a href="{% url 'epargnecredit:group_detail' group.id %}"
+class="btn btn-outline-secondary flex-grow-1">
+
+Annuler
+
+</a>
+
+</div>
+
+</form>
+
+</div>
+</div>
+
+</div>
+</div>
+
 </div>
 {% endblock %}

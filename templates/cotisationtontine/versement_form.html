@@ -1,15 +1,50 @@
 {% extends 'cotisationtontine/base.html' %}
 
 {% block content %}
-<div class="container mt-4" style="max-width: 600px;">
-  <h2 class="mb-4">Ajouter un versement</h2>
-  <form method="post" novalidate>
-    {% csrf_token %}
-    {{ form.as_p }}
-    <div class="d-flex gap-2">
-      <button type="submit" class="btn btn-primary flex-grow-1">Valider</button>
-      <a href="{{ cancel_url }}" class="btn btn-secondary flex-grow-1">Annuler</a>
+
+<div class="container py-5">
+
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-10 col-lg-6">
+
+            <div class="card shadow border-0">
+
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">💰 Ajouter un versement</h4>
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            {{ form.as_p }}
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-between">
+
+                            <button type="submit"
+                                    class="btn btn-primary w-100 w-md-auto">
+                                ✅ Valider
+                            </button>
+
+                            <a href="{{ cancel_url }}"
+                               class="btn btn-outline-secondary w-100 w-md-auto">
+                                ❌ Annuler
+                            </a>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
     </div>
-  </form>
+
 </div>
+
 {% endblock %}

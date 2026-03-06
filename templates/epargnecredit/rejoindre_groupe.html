@@ -3,40 +3,102 @@
 {% block title %}Rejoindre le groupe {{ group.nom }}{% endblock %}
 
 {% block content %}
-<div class="container mt-5 py-3">
-  <div class="text-center mb-4">
-    <h2 class="text-success">🤝 Rejoindre le groupe "{{ group.nom }}"</h2>
-    <p class="text-muted">Entrez vos informations pour devenir membre.</p>
-  </div>
+<div class="container py-5">
 
-  {% if message %}
-    <div class="alert alert-info text-center">
-      {{ message }}
-    </div>
-  {% endif %}
+<div class="row justify-content-center">
+<div class="col-lg-5 col-md-7 col-12">
 
-  <div class="card mx-auto" style="max-width: 500px;">
-    <div class="card-body">
-      <form method="POST" novalidate>
-        {% csrf_token %}
+<!-- Header -->
+<div class="text-center mb-4">
+<h3 class="fw-bold text-success">
+🤝 Rejoindre le groupe
+</h3>
 
-        <div class="mb-3">
-          <label for="nom" class="form-label">Nom complet</label>
-          <input type="text" class="form-control" id="nom" name="nom" placeholder="Ex : Fatou Diop" required>
-        </div>
+<p class="text-muted mb-0">
+<strong>{{ group.nom }}</strong>
+</p>
 
-        <div class="mb-3">
-          <label for="phone" class="form-label">Numéro de téléphone</label>
-          <input type="tel" class="form-control" id="phone" name="phone" placeholder="+221 77 123 45 67" required pattern="\+?\d{8,15}">
-          <div class="form-text">Saisissez un numéro valide avec indicatif (ex: +221771234567)</div>
-        </div>
+<p class="small text-muted">
+Entrez vos informations pour devenir membre.
+</p>
+</div>
 
-        <div class="d-grid">
-          <button type="submit" class="btn btn-primary">✅ Rejoindre le groupe</button>
-        </div>
-      </form>
-    </div>
-  </div>
+
+{% if message %}
+<div class="alert alert-info text-center shadow-sm">
+{{ message }}
+</div>
+{% endif %}
+
+
+<div class="card shadow-sm border-0">
+
+<div class="card-body">
+
+<form method="POST" novalidate>
+{% csrf_token %}
+
+<!-- Nom -->
+<div class="mb-3">
+
+<label for="nom" class="form-label fw-semibold">
+Nom complet
+</label>
+
+<input
+type="text"
+class="form-control form-control-lg"
+id="nom"
+name="nom"
+placeholder="Ex : Fatou Diop"
+required>
+
+</div>
+
+
+<!-- Téléphone -->
+<div class="mb-3">
+
+<label for="phone" class="form-label fw-semibold">
+Numéro de téléphone
+</label>
+
+<input
+type="tel"
+class="form-control form-control-lg"
+id="phone"
+name="phone"
+placeholder="+221771234567"
+required
+pattern="\+?\d{8,15}"
+inputmode="tel">
+
+<div class="form-text">
+Exemple : +221771234567
+</div>
+
+</div>
+
+
+<!-- Bouton -->
+<div class="d-grid mt-4">
+
+<button type="submit"
+class="btn btn-success btn-lg">
+
+✅ Rejoindre le groupe
+
+</button>
+
+</div>
+
+</form>
+
+</div>
+</div>
+
+</div>
+</div>
+
 </div>
 {% endblock %}
-

@@ -1,7 +1,41 @@
-<h1>Données Firestore</h1>
-{% if user %}
-  <p><strong>Nom:</strong> {{ user.name }}</p>
-  <p><strong>Téléphone:</strong> {{ user.phone }}</p>
-{% else %}
-  <p>Aucune donnée trouvée</p>
-{% endif %}
+<div class="container py-5">
+
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-5">
+
+      <div class="card shadow border-0">
+
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">🔥 Données Firestore</h5>
+        </div>
+
+        <div class="card-body">
+
+          {% if user %}
+
+            <div class="mb-3">
+              <strong>👤 Nom :</strong>
+              <span class="text-muted">{{ user.name }}</span>
+            </div>
+
+            <div class="mb-3">
+              <strong>📱 Téléphone :</strong>
+              <span class="text-muted">{{ user.phone }}</span>
+            </div>
+
+          {% else %}
+
+            <div class="alert alert-warning text-center">
+              ⚠️ Aucune donnée trouvée dans Firestore.
+            </div>
+
+          {% endif %}
+
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+</div>

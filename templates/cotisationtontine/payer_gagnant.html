@@ -1,49 +1,110 @@
 {% extends 'base.html' %}
 {% load humanize %}
 
-{% block title %}💸 Paiement du gagnant{% endblock %}
+{% block title %}Paiement du gagnant{% endblock %}
 
 {% block content %}
-<div class="container mt-5" style="max-width: 600px;">
-    <h1 class="mb-4 text-warning fw-bold text-center">💸 Paiement du gagnant</h1>
 
-    <div class="card shadow-sm p-4">
-        <p class="fs-5">
+<div class="container py-5">
+
+  <div class="row justify-content-center">
+
+    <div class="col-lg-6 col-md-8 col-sm-12">
+
+      <div class="card shadow-lg border-0">
+
+        <div class="card-body p-4 text-center">
+
+          <!-- Icône -->
+          <div style="font-size:60px;">💸</div>
+
+          <h2 class="fw-bold text-warning mt-2 mb-4">
+            Paiement du gagnant
+          </h2>
+
+          <p class="fs-5 text-muted mb-3">
             Vous êtes sur le point de transférer
-            <strong class="text-danger">{{ montant_total|floatformat:0|intcomma }} FCFA</strong> à :
-        </p>
+          </p>
 
-        <ul class="list-group list-group-flush mb-4">
-            <li class="list-group-item d-flex justify-content-between">
-                <span>👤 Nom :</span>
-                <strong>{{ gagnant.user.nom }}</strong>
-            </li>
-            <li class="list-group-item d-flex justify-content-between">
-                <span>📱 Téléphone :</span>
-                <strong>{{ gagnant.user.phone }}</strong>
-            </li>
-            <li class="list-group-item d-flex justify-content-between">
-                <span>👥 Groupe :</span>
-                <strong>{{ group.nom }}</strong>
-            </li>
-        </ul>
+          <div class="display-6 fw-bold text-danger mb-4">
+            {{ montant_total|floatformat:0|intcomma }} FCFA
+          </div>
 
-        <div class="alert alert-warning">
-            ⚠️ Cette action est irréversible. Une fois le paiement envoyé, il sera enregistré et ne pourra plus être annulé.
+
+          <!-- Infos gagnant -->
+          <ul class="list-group list-group-flush mb-4 text-start">
+
+            <li class="list-group-item d-flex justify-content-between">
+
+              <span>👤 Nom</span>
+
+              <strong>{{ gagnant.user.nom }}</strong>
+
+            </li>
+
+            <li class="list-group-item d-flex justify-content-between">
+
+              <span>📱 Téléphone</span>
+
+              <strong>{{ gagnant.user.phone }}</strong>
+
+            </li>
+
+            <li class="list-group-item d-flex justify-content-between">
+
+              <span>👥 Groupe</span>
+
+              <strong>{{ group.nom }}</strong>
+
+            </li>
+
+          </ul>
+
+
+          <!-- Alerte -->
+          <div class="alert alert-warning text-start">
+
+            ⚠️ Cette action est <strong>irréversible</strong>.
+
+            Une fois le paiement envoyé, il sera enregistré
+            et ne pourra plus être annulé.
+
+          </div>
+
+
+          <!-- Boutons -->
+          <form method="post" class="d-flex flex-wrap gap-2 mt-4">
+
+            {% csrf_token %}
+
+            <a href="{% url 'cotisationtontine:group_detail' group.id %}"
+               class="btn btn-outline-secondary flex-grow-1">
+
+              ⬅ Annuler
+
+            </a>
+
+            <button type="submit"
+                    class="btn btn-success flex-grow-1">
+
+              ✅ Confirmer et payer
+
+            </button>
+
+          </form>
+
         </div>
 
-        <form method="post" class="d-flex justify-content-between mt-4">
-            {% csrf_token %}
-            <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-outline-secondary">
-                ⬅ Annuler
-            </a>
-            <button type="submit" class="btn btn-success">
-                ✅ Confirmer et payer {{ montant_total|floatformat:0|intcomma }} FCFA
-            </button>
-        </form>
+      </div>
+
+      <p class="text-center text-muted mt-4 small">
+        © 2025 YaayESS
+      </p>
+
     </div>
 
-    <p class="text-center text-muted mt-4 small">© 2025 YaayESS. Tous droits réservés.</p>
-</div>
-{% endblock %}
+  </div>
 
+</div>
+
+{% endblock %}

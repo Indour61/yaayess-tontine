@@ -3,32 +3,108 @@
 {% load humanize %}
 
 {% block content %}
-<div class="container mt-5 text-center" style="max-width: 600px;">
-    <h1 class="mb-4 text-primary fw-bold">🎲 Tirage au sort</h1>
 
-    <h4 class="mb-3">
-        Groupe : <span class="text-success fw-semibold">{{ group.nom }}</span>
-    </h4>
+<div class="container py-5">
 
-    {% if gagnant %}
-        <div class="mt-5">
-            <h2 class="text-success">👏 Félicitations à 🎉</h2>
-            <h1 class="display-4 fw-bold text-dark">
-                {{ gagnant.user.nom|default:gagnant.user.username }}
-            </h1>
-            <p class="fs-4 mt-3">
-                Il/Elle a gagné :
-                <strong class="text-danger">{{ montant_total|floatformat:0|intcomma }} FCFA</strong>
-            </p>
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-10 col-lg-6">
+
+            <div class="card shadow border-0 text-center">
+
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">🎲 Tirage au sort</h4>
+                </div>
+
+                <div class="card-body">
+
+                    <h5 class="mb-4">
+                        Groupe :
+                        <span class="text-success fw-semibold">
+                            {{ group.nom }}
+                        </span>
+                    </h5>
+
+                    {% if gagnant %}
+
+                        <div class="winner-box py-3">
+
+                            <h4 class="text-success mb-3">
+                                👏 Félicitations !
+                            </h4>
+
+                            <h1 class="display-5 fw-bold text-dark">
+                                🎉 {{ gagnant.user.nom|default:gagnant.user.username }}
+                            </h1>
+
+                            <p class="fs-4 mt-3">
+                                Gain du cycle :
+                            </p>
+
+                            <h2 class="text-danger fw-bold">
+                                {{ montant_total|floatformat:0|intcomma }} FCFA
+                            </h2>
+
+                        </div>
+
+                    {% else %}
+
+                        <div class="alert alert-warning mt-4">
+                            ⚠️ Aucun membre éligible au tirage pour le moment.
+                        </div>
+
+                    {% endif %}
+
+                    <div class="d-grid gap-2 mt-4">
+                        <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}"
+                           class="btn btn-outline-primary">
+                            ⬅ Retour au tableau de bord
+                        </a>
+                    </div>
+
+                </div>
+
+            </div>
+
         </div>
-    {% else %}
-        <div class="alert alert-warning mt-5">
-            Aucun membre éligible au tirage pour le moment.
-        </div>
-    {% endif %}
+    </div>
 
-    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-outline-primary mt-4 px-4">
-        ⬅ Retour au tableau de bord
-    </a>
 </div>
+
+<style>
+
+.winner-box{
+    background:#f8f9fa;
+    border-radius:12px;
+    padding:20px;
+    animation: winnerReveal 1.5s ease-out;
+}
+
+@keyframes winnerReveal{
+
+    0%{
+        transform:scale(0.7);
+        opacity:0;
+    }
+
+    60%{
+        transform:scale(1.1);
+    }
+
+    100%{
+        transform:scale(1);
+        opacity:1;
+    }
+
+}
+
+@media (max-width:768px){
+
+    .display-5{
+        font-size:2rem;
+    }
+
+}
+
+</style>
+
 {% endblock %}

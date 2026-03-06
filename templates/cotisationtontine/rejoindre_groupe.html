@@ -3,40 +3,152 @@
 {% block title %}Rejoindre le groupe {{ group.nom }}{% endblock %}
 
 {% block content %}
-<div class="container mt-5 py-3">
-  <div class="text-center mb-4">
-    <h2 class="text-success">🤝 Rejoindre le groupe "{{ group.nom }}"</h2>
-    <p class="text-muted">Entrez vos informations pour devenir membre.</p>
+
+<div class="container py-5">
+
+  <div class="row justify-content-center">
+
+    <div class="col-lg-5 col-md-7 col-sm-12">
+
+      <!-- Header -->
+      <div class="text-center mb-4">
+
+        <h3 class="fw-bold text-success">
+          🤝 Rejoindre le groupe
+        </h3>
+
+        <p class="text-muted mb-0">
+          <strong>{{ group.nom }}</strong>
+        </p>
+
+        <small class="text-muted">
+          Entrez vos informations pour devenir membre.
+        </small>
+
+      </div>
+
+
+      {% if message %}
+        <div class="alert alert-info text-center">
+          {{ message }}
+        </div>
+      {% endif %}
+
+
+      <!-- Formulaire -->
+      <div class="card shadow-lg border-0">
+
+        <div class="card-body p-4">
+
+          <form method="POST" class="needs-validation" novalidate>
+
+            {% csrf_token %}
+
+            <!-- Nom -->
+            <div class="mb-3">
+
+              <label for="nom" class="form-label fw-semibold">
+                Nom complet
+              </label>
+
+              <input
+                type="text"
+                class="form-control form-control-lg"
+                id="nom"
+                name="nom"
+                placeholder="Ex : Fatou Diop"
+                autocomplete="name"
+                required
+              >
+
+              <div class="invalid-feedback">
+                Veuillez saisir votre nom.
+              </div>
+
+            </div>
+
+
+            <!-- Téléphone -->
+            <div class="mb-3">
+
+              <label for="phone" class="form-label fw-semibold">
+                Numéro de téléphone
+              </label>
+
+              <input
+                type="tel"
+                class="form-control form-control-lg"
+                id="phone"
+                name="phone"
+                placeholder="+221771234567"
+                autocomplete="tel"
+                inputmode="tel"
+                pattern="^\+?[0-9]{8,15}$"
+                required
+              >
+
+              <div class="form-text">
+                Format international recommandé : +221771234567
+              </div>
+
+              <div class="invalid-feedback">
+                Numéro de téléphone invalide.
+              </div>
+
+            </div>
+
+
+            <!-- Bouton -->
+            <div class="d-grid mt-4">
+
+              <button type="submit" class="btn btn-success btn-lg">
+
+                ✅ Rejoindre le groupe
+
+              </button>
+
+            </div>
+
+          </form>
+
+        </div>
+
+      </div>
+
+    </div>
+
   </div>
 
-  {% if message %}
-    <div class="alert alert-info text-center">
-      {{ message }}
-    </div>
-  {% endif %}
-
-  <div class="card mx-auto" style="max-width: 500px;">
-    <div class="card-body">
-      <form method="POST" novalidate>
-        {% csrf_token %}
-
-        <div class="mb-3">
-          <label for="nom" class="form-label">Nom complet</label>
-          <input type="text" class="form-control" id="nom" name="nom" placeholder="Ex : Fatou Diop" required>
-        </div>
-
-        <div class="mb-3">
-          <label for="phone" class="form-label">Numéro de téléphone</label>
-          <input type="tel" class="form-control" id="phone" name="phone" placeholder="+221 77 123 45 67" required pattern="\+?\d{8,15}">
-          <div class="form-text">Saisissez un numéro valide avec indicatif (ex: +221771234567)</div>
-        </div>
-
-        <div class="d-grid">
-          <button type="submit" class="btn btn-primary">✅ Rejoindre le groupe</button>
-        </div>
-      </form>
-    </div>
-  </div>
 </div>
-{% endblock %}
 
+
+<script>
+
+(() => {
+
+  'use strict'
+
+  const forms = document.querySelectorAll('.needs-validation')
+
+  Array.from(forms).forEach(form => {
+
+    form.addEventListener('submit', event => {
+
+      if (!form.checkValidity()) {
+
+        event.preventDefault()
+        event.stopPropagation()
+
+      }
+
+      form.classList.add('was-validated')
+
+    })
+
+  })
+
+})()
+
+</script>
+
+{% endblock %}

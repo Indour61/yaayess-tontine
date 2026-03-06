@@ -2,63 +2,166 @@
 {% block title %}Étapes du cycle{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <h2>Cycle de {{ group.nom }} ({{ cycle.periodicite }})</h2>
 
-  <div class="table-responsive mt-3">
-    <table class="table table-striped table-hover align-middle">
-      <thead class="table-success">
-        <tr>
-          <th>Étape</th>
-          <th>Date</th>
-          <th>Statut</th>
-          <th>Bénéficiaire</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for etape in etapes %}
-          <tr>
-            <td>Étape {{ etape.numero_etape }}</td>
-            <td>{{ etape.date_etape|date:"d/m/Y" }}</td>
-            <td>
-              {% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.complet %}
-                ✅ Complète
-              {% else %}
-                ❌ Incomplète
-              {% endif %}
-            </td>
-            <td>
-              {% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.beneficiaire %}
-                {{ versements_par_etape|get_item:etape.id.beneficiaire.nom }}
-              {% else %}
-                -
-              {% endif %}
-            </td>
-            <td>
-              {% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.complet and not versements_par_etape|get_item:etape.id.beneficiaire %}
-                <a href="{% url 'tirer_au_sort' etape.id %}" class="btn btn-success btn-sm">🎰 Tirer</a>
-              {% else %}
-                -
-              {% endif %}
+<div class="container py-4">
 
-              {% if user == group.admin %}
-                <a href="{% url 'reinitialiser_cycle' group.id %}" class="btn btn-danger btn-sm mt-2">
-                  🔁 Réinitialiser le cycle
-                </a>
-                <a href="{% url 'historique_cycles' group.id %}" class="btn btn-outline-secondary btn-sm mt-2">
-                  🕰️ Historique des cycles
-                </a>
-              {% endif %}
-            </td>
-          </tr>
-        {% empty %}
-          <tr>
-            <td colspan="5" class="text-center text-muted">Aucune étape trouvée.</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <!-- HEADER -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+
+    <div>
+      <h3 class="fw-bold text-success mb-1">
+        🔄 Cycle du groupe
+      </h3>
+
+      <p class="text-muted mb-0">
+        {{ group.nom }} • {{ cycle.periodicite }}
+      </p>
+    </div>
+
   </div>
+
+
+  <!-- TABLE -->
+  <div class="card shadow-sm border-0">
+
+    <div class="card-body p-0">
+
+      <div class="table-responsive">
+
+        <table class="table table-hover align-middle mb-0">
+
+          <thead class="table-success">
+
+            <tr>
+              <th>Étape</th>
+              <th>Date</th>
+              <th>Statut</th>
+              <th>Bénéficiaire</th>
+              <th>Actions</th>
+            </tr>
+
+          </thead>
+
+          <tbody>
+
+            {% for etape in etapes %}
+
+            <tr>
+
+              <td class="fw-semibold">
+                Étape {{ etape.numero_etape }}
+              </td>
+
+              <td>
+                {{ etape.date_etape|date:"d/m/Y" }}
+              </td>
+
+              <!-- STATUT -->
+              <td>
+
+                {% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.complet %}
+
+                  <span class="badge bg-success">
+                    Complète
+                  </span>
+
+                {% else %}
+
+                  <span class="badge bg-danger">
+                    Incomplète
+                  </span>
+
+                {% endif %}
+
+              </td>
+
+              <!-- BENEFICIAIRE -->
+              <td>
+
+                {% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.beneficiaire %}
+
+                  <span class="fw-semibold text-primary">
+                    {{ versements_par_etape|get_item:etape.id.beneficiaire.nom }}
+                  </span>
+
+                {% else %}
+
+                  <span class="text-muted">
+                    -
+                  </span>
+
+                {% endif %}
+
+              </td>
+
+              <!-- ACTIONS -->
+              <td>
+
+                <div class="d-flex flex-wrap gap-2">
+
+                {% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.complet and not versements_par_etape|get_item:etape.id.beneficiaire %}
+
+                  <a href="{% url 'tirer_au_sort' etape.id %}"
+                     class="btn btn-success btn-sm">
+
+                     🎰 Tirer
+
+                  </a>
+
+                {% endif %}
+
+                {% if user == group.admin %}
+
+                  <a href="{% url 'reinitialiser_cycle' group.id %}"
+                     class="btn btn-outline-danger btn-sm">
+
+                     🔁 Reset
+
+                  </a>
+
+                  <a href="{% url 'historique_cycles' group.id %}"
+                     class="btn btn-outline-secondary btn-sm">
+
+                     🕰️ Historique
+
+                  </a>
+
+                {% endif %}
+
+                </div>
+
+              </td>
+
+            </tr>
+
+            {% empty %}
+
+            <tr>
+
+              <td colspan="5" class="text-center text-muted py-4">
+
+                <div style="font-size:35px">📭</div>
+
+                <p class="mt-2 mb-0">
+                  Aucune étape trouvée
+                </p>
+
+              </td>
+
+            </tr>
+
+            {% endfor %}
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </div>
+
+  </div>
+
 </div>
+
 {% endblock %}

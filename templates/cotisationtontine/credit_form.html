@@ -1,47 +1,130 @@
 {% extends 'base.html' %}
+{% load widget_tweaks %}
+
 {% block title %}Demander un crédit{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <h2 class="mb-4">Demander un crédit</h2>
 
-  <form method="post" class="shadow p-4 rounded bg-light needs-validation" novalidate>
-    {% csrf_token %}
+<div class="container py-4">
 
-    <!-- Affiche le formulaire Django avec classes Bootstrap -->
-    {% for field in form %}
-      <div class="mb-3">
-        <label for="{{ field.id_for_label }}" class="form-label">
-          {{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}
-        </label>
-        {{ field|add_class:"form-control" }}
-        {% if field.help_text %}
-          <div class="form-text">{{ field.help_text }}</div>
-        {% endif %}
-        {% for error in field.errors %}
-          <div class="invalid-feedback d-block">{{ error }}</div>
-        {% endfor %}
+  <div class="row justify-content-center">
+
+    <div class="col-lg-6 col-md-8 col-sm-12">
+
+      <div class="card shadow-lg border-0">
+
+        <div class="card-body p-4">
+
+          <!-- Titre -->
+          <h3 class="fw-bold text-success text-center mb-4">
+            💳 Demander un crédit
+          </h3>
+
+          <p class="text-center text-muted mb-4">
+            Remplissez le formulaire pour soumettre votre demande.
+          </p>
+
+          <form method="post" class="needs-validation" novalidate>
+
+            {% csrf_token %}
+
+            <!-- Champs du formulaire -->
+            {% for field in form %}
+
+            <div class="mb-3">
+
+              <label for="{{ field.id_for_label }}" class="form-label fw-semibold">
+
+                {{ field.label }}
+
+                {% if field.field.required %}
+                  <span class="text-danger">*</span>
+                {% endif %}
+
+              </label>
+
+              {{ field|add_class:"form-control form-control-lg" }}
+
+              {% if field.help_text %}
+
+                <div class="form-text">
+                  {{ field.help_text }}
+                </div>
+
+              {% endif %}
+
+              {% for error in field.errors %}
+
+                <div class="invalid-feedback d-block">
+
+                  {{ error }}
+
+                </div>
+
+              {% endfor %}
+
+            </div>
+
+            {% endfor %}
+
+            <!-- Boutons -->
+            <div class="d-flex flex-wrap gap-2 mt-4">
+
+              <button type="submit" class="btn btn-success flex-grow-1">
+
+                📤 Envoyer la demande
+
+              </button>
+
+              <a href="{{ cancel_url }}"
+                 class="btn btn-outline-secondary flex-grow-1">
+
+                 Annuler
+
+              </a>
+
+            </div>
+
+          </form>
+
+        </div>
+
       </div>
-    {% endfor %}
 
-    <button type="submit" class="btn btn-info">Envoyer la demande</button>
-    <a href="{{ cancel_url }}" class="btn btn-secondary ms-2">Annuler</a>
-  </form>
+    </div>
+
+  </div>
+
 </div>
 
+
 <script>
-  (() => {
-    'use strict'
-    const forms = document.querySelectorAll('.needs-validation')
-    Array.from(forms).forEach(form => {
-      form.addEventListener('submit', event => {
-        if (!form.checkValidity()) {
-          event.preventDefault()
-          event.stopPropagation()
-        }
-        form.classList.add('was-validated')
-      }, false)
+
+(() => {
+
+  'use strict'
+
+  const forms = document.querySelectorAll('.needs-validation')
+
+  Array.from(forms).forEach(form => {
+
+    form.addEventListener('submit', event => {
+
+      if (!form.checkValidity()) {
+
+        event.preventDefault()
+        event.stopPropagation()
+
+      }
+
+      form.classList.add('was-validated')
+
     })
-  })()
+
+  })
+
+})()
+
 </script>
+
 {% endblock %}

@@ -5,69 +5,128 @@
 {% block title %}Ajouter un membre{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2 class="mb-3">
-        Ajouter un membre au groupe <strong>{{ group.nom }}</strong>
-    </h2>
+<div class="container py-4">
 
-    <!-- Messages flash -->
-    {% if messages %}
-        <div class="mb-3">
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
-                </div>
-            {% endfor %}
-        </div>
-    {% endif %}
+<div class="row justify-content-center">
+<div class="col-lg-6 col-md-8 col-12">
 
-    <form method="post" class="shadow p-4 rounded bg-light needs-validation" novalidate>
-        {% csrf_token %}
-        {{ form.non_field_errors }}
+<h3 class="fw-bold text-success mb-4">
+👤 Ajouter un membre
+</h3>
 
-        <!-- Champ pour le nom -->
-        <div class="mb-3">
-            <label for="{{ form.nom.id_for_label }}" class="form-label">Nom du membre</label>
-            {{ form.nom|add_class:"form-control"|attr:"placeholder:Ex: Fatou Diop,required,autofocus,aria-label:Nom du membre" }}
-            {% for error in form.nom.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-            {% endfor %}
-        </div>
+<p class="text-muted mb-3">
+Groupe : <strong>{{ group.nom }}</strong>
+</p>
 
-        <!-- Champ pour le téléphone -->
-        <div class="mb-3">
-            <label for="{{ form.phone.id_for_label }}" class="form-label">Numéro de téléphone</label>
-            {{ form.phone|add_class:"form-control"|attr:"placeholder:+221770000000,pattern:^\\+?\\d{7,15}$,required,aria-label:Numéro de téléphone" }}
-            <div class="form-text">
-                Saisir le numéro complet avec indicatif international.
-            </div>
-            {% for error in form.phone.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-            {% endfor %}
-        </div>
+<!-- Messages flash -->
+{% if messages %}
+<div class="mb-3">
+{% for message in messages %}
+<div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm">
+{{ message }}
+<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endfor %}
+</div>
+{% endif %}
 
-        <div class="mt-4">
-            <button type="submit" class="btn btn-success">Envoyer l'invitation</button>
-            <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-secondary ms-2">Annuler</a>
-        </div>
-    </form>
+<div class="card shadow-sm border-0">
+
+<div class="card-body">
+
+<form method="post" class="needs-validation" novalidate>
+
+{% csrf_token %}
+{{ form.non_field_errors }}
+
+<!-- Nom -->
+<div class="mb-3">
+
+<label for="{{ form.nom.id_for_label }}" class="form-label fw-semibold">
+Nom du membre
+</label>
+
+{{ form.nom|add_class:"form-control form-control-lg"|attr:"placeholder:Ex : Fatou Diop,required,autofocus" }}
+
+{% for error in form.nom.errors %}
+<div class="invalid-feedback d-block">
+{{ error }}
+</div>
+{% endfor %}
+
 </div>
 
-<!-- Validation JS Bootstrap 5 -->
+
+<!-- Téléphone -->
+<div class="mb-3">
+
+<label for="{{ form.phone.id_for_label }}" class="form-label fw-semibold">
+Numéro de téléphone
+</label>
+
+{{ form.phone|add_class:"form-control form-control-lg"|attr:"placeholder:+221771234567,pattern:^\\+?\\d{7,15}$,required,inputmode:tel" }}
+
+<div class="form-text">
+Saisissez le numéro avec l'indicatif international (ex : +221771234567).
+</div>
+
+{% for error in form.phone.errors %}
+<div class="invalid-feedback d-block">
+{{ error }}
+</div>
+{% endfor %}
+
+</div>
+
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+
+<button type="submit"
+class="btn btn-success flex-grow-1">
+
+📩 Envoyer l'invitation
+
+</button>
+
+<a href="{% url 'epargnecredit:group_detail' group.id %}"
+class="btn btn-outline-secondary flex-grow-1">
+
+Annuler
+
+</a>
+
+</div>
+
+</form>
+
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+
+
+<!-- Validation Bootstrap -->
 <script>
 (() => {
-    'use strict'
-    const forms = document.querySelectorAll('.needs-validation')
-    Array.from(forms).forEach(form => {
-        form.addEventListener('submit', event => {
-            if (!form.checkValidity()) {
-                event.preventDefault()
-                event.stopPropagation()
-            }
-            form.classList.add('was-validated')
-        }, false)
-    })
+'use strict'
+const forms = document.querySelectorAll('.needs-validation')
+
+Array.from(forms).forEach(form => {
+form.addEventListener('submit', event => {
+
+if (!form.checkValidity()) {
+event.preventDefault()
+event.stopPropagation()
+}
+
+form.classList.add('was-validated')
+
+}, false)
+})
 })();
 </script>
+
 {% endblock %}

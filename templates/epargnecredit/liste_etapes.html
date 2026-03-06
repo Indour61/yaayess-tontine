@@ -1,52 +1,146 @@
 {% extends 'base.html' %}
+{% load humanize %}
+
 {% block title %}Historique des étapes{% endblock %}
 
 {% block content %}
-<div class="container mt-4" style="max-width: 720px;">
-  <h2>Historique des cycles - {{ group.nom }}</h2>
+<div class="container py-4" style="max-width: 800px;">
 
-  {% for bloc in data %}
-    <div class="card mt-4 shadow-sm">
-      <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-        <div>
-          Cycle du {{ bloc.cycle.date_debut|date:"d/m/Y" }}
-          {% if bloc.cycle.date_fin %} au {{ bloc.cycle.date_fin|date:"d/m/Y" }}{% endif %}
-        </div>
-        <button
-          class="btn btn-sm btn-light"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#cycle{{ bloc.cycle.id }}"
-          aria-expanded="false"
-          aria-controls="cycle{{ bloc.cycle.id }}"
-        >
-          ⬇️ Détails
-        </button>
-      </div>
+<!-- Titre -->
+<div class="mb-4">
+  <h2 class="fw-bold text-success">
+    📜 Historique des cycles
+  </h2>
+  <p class="text-muted mb-0">
+    Groupe : <strong>{{ group.nom }}</strong>
+  </p>
+</div>
 
-      <div id="cycle{{ bloc.cycle.id }}" class="collapse card-body">
-        <ul class="list-group">
-          {% for item in bloc.etapes %}
-            <li class="list-group-item">
-              <strong>Étape {{ item.etape.numero }} - {{ item.etape.date|date:"d/m/Y" }}</strong>
-              {% if item.tirages %}
-                <ul class="list-group list-group-flush mt-2 ps-3">
-                  {% for tirage in item.tirages %}
-                    <li class="list-group-item py-1">
-                      {{ tirage.membre.nom }} tiré le {{ tirage.date_tirage|date:"d/m/Y H:i" }}
-                    </li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                <em class="text-muted d-block mt-2">Aucun tirage effectué</em>
-              {% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
-  {% empty %}
-    <p class="text-muted">Aucun cycle trouvé pour ce groupe.</p>
-  {% endfor %}
+
+{% for bloc in data %}
+
+<div class="card shadow-sm mb-4 border-0">
+
+<!-- Header cycle -->
+<div class="card-header bg-success text-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+
+<div class="fw-semibold">
+📅 Cycle du {{ bloc.cycle.date_debut|date:"d/m/Y" }}
+
+{% if bloc.cycle.date_fin %}
+&nbsp; → &nbsp; {{ bloc.cycle.date_fin|date:"d/m/Y" }}
+{% else %}
+&nbsp; → &nbsp; En cours
+{% endif %}
+</div>
+
+<button
+class="btn btn-sm btn-light"
+type="button"
+data-bs-toggle="collapse"
+data-bs-target="#cycle{{ bloc.cycle.id }}"
+aria-expanded="false"
+aria-controls="cycle{{ bloc.cycle.id }}">
+
+Voir détails
+
+</button>
+
+</div>
+
+
+<!-- Body cycle -->
+<div id="cycle{{ bloc.cycle.id }}" class="collapse">
+
+<div class="card-body p-0">
+
+{% if bloc.etapes %}
+
+<ul class="list-group list-group-flush">
+
+{% for item in bloc.etapes %}
+
+<li class="list-group-item">
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+
+<div>
+
+<strong class="text-primary">
+Étape {{ item.etape.numero }}
+</strong>
+
+<span class="text-muted ms-md-2">
+{{ item.etape.date|date:"d/m/Y" }}
+</span>
+
+</div>
+
+</div>
+
+
+{% if item.tirages %}
+
+<ul class="list-group list-group-flush mt-2 ms-3">
+
+{% for tirage in item.tirages %}
+
+<li class="list-group-item py-1 d-flex justify-content-between flex-wrap">
+
+<span>
+
+🎯
+<strong>
+{{ tirage.membre.nom|default:tirage.membre.phone }}
+</strong>
+
+</span>
+
+<small class="text-muted">
+{{ tirage.date_tirage|date:"d/m/Y H:i" }}
+</small>
+
+</li>
+
+{% endfor %}
+
+</ul>
+
+{% else %}
+
+<small class="text-muted d-block mt-2">
+Aucun tirage effectué
+</small>
+
+{% endif %}
+
+</li>
+
+{% endfor %}
+
+</ul>
+
+{% else %}
+
+<div class="p-3 text-muted">
+Aucune étape enregistrée pour ce cycle.
+</div>
+
+{% endif %}
+
+</div>
+
+</div>
+
+</div>
+
+{% empty %}
+
+<div class="alert alert-info shadow-sm">
+Aucun cycle trouvé pour ce groupe.
+</div>
+
+{% endfor %}
+
 </div>
 {% endblock %}

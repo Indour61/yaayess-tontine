@@ -4,19 +4,74 @@
 {% block title %}Merci pour votre paiement{% endblock %}
 
 {% block content %}
-<div class="container mt-5 text-center">
-    <h1 class="text-success mb-4">✅ Merci pour votre paiement !</h1>
 
-    {% if group and gagnant and montant %}
-        <p class="fs-5">Le paiement de <strong>{{ montant|intcomma }} FCFA</strong> a bien été effectué.</p>
-        <p class="fs-5">Gagnant : <strong>{{ gagnant.user.nom }}</strong></p>
-        <p class="fs-5">Groupe : <strong>{{ group.nom }}</strong></p>
-    {% else %}
-        <p class="fs-5">Votre paiement a bien été pris en compte.</p>
-    {% endif %}
+<div class="container py-5">
 
-    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}" class="btn btn-primary mt-4 px-4">
-        Retour au tableau de bord
-    </a>
+  <div class="row justify-content-center">
+
+    <div class="col-lg-6 col-md-8 col-sm-12">
+
+      <div class="card shadow-lg border-0 text-center">
+
+        <div class="card-body p-5">
+
+          <!-- Icône -->
+          <div style="font-size:70px;">✅</div>
+
+          <h2 class="text-success fw-bold mt-3 mb-3">
+            Paiement confirmé
+          </h2>
+
+          {% if group and gagnant and montant %}
+
+            <p class="fs-5 text-muted mb-4">
+              Le paiement a été effectué avec succès.
+            </p>
+
+            <div class="bg-light rounded p-3 mb-4">
+
+              <div class="mb-2">
+                💰 <strong>Montant :</strong>
+                <span class="text-primary fw-bold">
+                  {{ montant|intcomma }} FCFA
+                </span>
+              </div>
+
+              <div class="mb-2">
+                🎯 <strong>Gagnant :</strong>
+                {{ gagnant.user.nom }}
+              </div>
+
+              <div>
+                👥 <strong>Groupe :</strong>
+                {{ group.nom }}
+              </div>
+
+            </div>
+
+          {% else %}
+
+            <p class="fs-5 text-muted">
+              Votre paiement a bien été pris en compte.
+            </p>
+
+          {% endif %}
+
+          <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}"
+             class="btn btn-success btn-lg mt-3 px-4">
+
+            📊 Retour au tableau de bord
+
+          </a>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
 </div>
+
 {% endblock %}

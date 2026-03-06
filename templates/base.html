@@ -1,178 +1,355 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-  <meta name="description" content="YaayESS - Plateforme de gestion de tontines et d'épargne collective" />
-  <meta name="keywords" content="tontine, épargne, gestion, groupe, finance, yaayess" />
-  <title>{% block title %}YaayESS{% endblock %}</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <link rel="icon" href="{% static 'images/favicon.ico' %}" type="image/x-icon">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<meta name="description" content="YaayESS - Plateforme de gestion de tontines et d'épargne collective">
+<meta name="keywords" content="tontine, épargne, gestion groupe, finance, yaayess">
 
-  <style>
-    :root {
-      --yaayess-primary: #198754;
-      --yaayess-secondary: #6c757d;
-      --yaayess-light: #f8f9fa;
-      --yaayess-dark: #212529;
-    }
-    body {
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-      padding-top: 76px;
-      background-color: var(--yaayess-light);
-    }
-    main { flex: 1 0 auto; }
-    footer { flex-shrink: 0; }
-    .accordion-button:not(.collapsed) { color: #155724; background-color: #d4edda; }
-    .navbar-brand { font-weight: 700; font-size: 1.5rem; }
-    .nav-link { font-weight: 500; transition: all 0.3s ease; }
-    .nav-link:hover { transform: translateY(-2px); }
-    .alert { border-radius: 0.5rem; }
-    @media (max-width: 768px) { body { padding-top: 66px; } .navbar-brand { font-size: 1.3rem; } }
-    @media (max-width: 576px) { body { padding-top: 56px; } .navbar-brand { font-size: 1.2rem; } }
-  </style>
+<title>{% block title %}YaayESS{% endblock %}</title>
 
-  {% block extra_css %}{% endblock %}
+<link rel="icon" href="{% static 'images/favicon.ico' %}">
+
+<!-- Bootstrap -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<!-- FontAwesome -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+
+:root{
+--yaayess-primary:#198754;
+--yaayess-dark:#212529;
+--yaayess-light:#f8f9fa;
+}
+
+body{
+display:flex;
+flex-direction:column;
+min-height:100vh;
+background:var(--yaayess-light);
+padding-top:72px;
+}
+
+main{
+flex:1;
+}
+
+.navbar-brand{
+font-weight:700;
+font-size:1.4rem;
+}
+
+.nav-link{
+font-weight:500;
+transition:all .25s ease;
+}
+
+.nav-link:hover{
+transform:translateY(-1px);
+}
+
+.alert{
+border-radius:8px;
+}
+
+footer{
+background:#212529;
+color:white;
+}
+
+footer a{
+color:#f8f9fa;
+text-decoration:none;
+}
+
+footer a:hover{
+text-decoration:underline;
+}
+
+@media(max-width:768px){
+
+body{
+padding-top:64px;
+}
+
+.navbar-brand{
+font-size:1.25rem;
+}
+
+}
+
+</style>
+
+{% block extra_css %}{% endblock %}
+
 </head>
+
 <body>
-  <!-- Navbar -->
-  <nav class="navbar navbar-expand-lg navbar-dark bg-success fixed-top shadow">
-    <div class="container">
-      <a class="navbar-brand d-flex align-items-center" href="{% url 'landing' %}">
-        <i class="fas fa-hand-holding-usd me-2"></i>YaayESS
-      </a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-        <span class="navbar-toggler-icon"></span>
-      </button>
 
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto">
-          <!-- Assistant IA visible partout -->
+<!-- NAVBAR -->
 
-          {% if user.is_authenticated %}
-            {% if user.type_adhesion == 1 %}
-              <li class="nav-item">
-                <a class="nav-link" href="{% url 'epargnecredit:dashboard_epargne_credit' %}">
-                  <i class="fas fa-tachometer-alt me-1"></i>Dashboard Épargne
-                </a>
-              </li>
-            {% elif user.type_adhesion == 2 %}
-              <li class="nav-item">
-                <a class="nav-link" href="{% url 'cotisationtontine:dashboard_tontine_simple' %}">
-                  <i class="fas fa-tachometer-alt me-1"></i>Dashboard Tontine
-                </a>
-              </li>
-            {% endif %}
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                <i class="fas fa-user-circle me-1"></i>{{ user.nom|default:user.phone }}
-              </a>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i>Profil</a></li>
-                <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i>Paramètres</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><a class="dropdown-item" href="{% url 'accounts:logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
-              </ul>
-            </li>
-          {% else %}
-            <li class="nav-item"><a class="nav-link" href="{% url 'accounts:login' %}"><i class="fas fa-sign-in-alt me-1"></i>Connexion</a></li>
-            <li class="nav-item"><a class="nav-link" href="{% url 'accounts:signup' %}"><i class="fas fa-user-plus me-1"></i>Inscription</a></li>
-          {% endif %}
-        </ul>
-      </div>
-    </div>
-  </nav>
+<nav class="navbar navbar-expand-lg navbar-dark bg-success fixed-top shadow-sm">
 
-  <main class="container mt-4 mb-5">
-    <!-- Messages Django -->
-    {% if messages %}
-      {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
-          <div class="d-flex align-items-center">
-            {% if message.tags == 'success' %}<i class="fas fa-check-circle me-2"></i>
-            {% elif message.tags in 'error danger' %}<i class="fas fa-exclamation-circle me-2"></i>
-            {% elif message.tags == 'warning' %}<i class="fas fa-exclamation-triangle me-2"></i>
-            {% elif message.tags == 'info' %}<i class="fas fa-info-circle me-2"></i>{% endif %}
-            <div>{{ message|safe }}</div>
-          </div>
-          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-      {% endfor %}
-    {% endif %}
+<div class="container">
 
-    {% block content %}{% endblock %}
-  </main>
+<a class="navbar-brand d-flex align-items-center" href="{% url 'landing' %}">
+<i class="fas fa-hand-holding-dollar me-2"></i>
+YaayESS
+</a>
 
-  <footer class="bg-dark text-white py-4 mt-auto">
-    <div class="container">
-        <div class="row">
-        <div class="col-md-6 mb-3 mb-md-0">
-          <h5 class="fw-bold">YaayESS</h5>
-          <p class="mb-0">Plateforme de gestion de tontines et d'épargne collective</p>
-        </div>
-        <div class="col-md-3 mb-3 mb-md-0">
-          <h6 class="fw-bold">Liens rapides</h6>
-          <ul class="list-unstyled">
-            <li><a href="{% url 'landing' %}" class="text-white text-decoration-none">Accueil</a></li>
-            <li><a href="#" class="text-white text-decoration-none">Conditions d’utilisation</a></li>
-            <li><a href="#" class="text-white text-decoration-none">Politique de confidentialité</a></li>
-            <li><a href="#" class="text-white text-decoration-none">Cookies</a></li>
+<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+<span class="navbar-toggler-icon"></span>
+</button>
 
-           </ul>
-        </div>
-        <div class="col-md-3">
-          <h6 class="fw-bold">Contact</h6>
-          <ul class="list-unstyled">
-            <li><a href="mailto:contact@yaayess.com" class="text-white text-decoration-none">contact@yaayess.com</a></li>
-            <li><a href="tel:+221773456789" class="text-white text-decoration-none">+221 77 557 32 37 ou +221 77 727 30 79</a></li>
-          </ul>
-        </div>
-      </div>
-      <hr class="my-3 bg-light">
-      <div class="row">
-        <div class="col text-center">&copy; 2025 YaayESS. Tous droits réservés.</div>
-      </div>
-    </div>
-  </footer>
+<div class="collapse navbar-collapse" id="navbarNav">
 
-  <!-- Toast global réutilisable -->
-  <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
-    <div id="yaayessToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
-      <div class="d-flex">
-        <div id="yaayessToastBody" class="toast-body">✅ Action réussie</div>
-        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fermer"></button>
-      </div>
-    </div>
-  </div>
+<ul class="navbar-nav ms-auto align-items-lg-center">
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    // Tooltips
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new bootstrap.Tooltip(tooltipTriggerEl)
-    })
+{% if user.is_authenticated %}
 
-    // Helper Toast global
-    window.showToast = function(message, type="info", delay=3000) {
-      const toastEl = document.getElementById('yaayessToast');
-      const toastBody = document.getElementById('yaayessToastBody');
-      toastEl.classList.remove("text-bg-primary", "text-bg-success", "text-bg-danger", "text-bg-warning");
-      if (type === "success") toastEl.classList.add("text-bg-success");
-      else if (type === "error") toastEl.classList.add("text-bg-danger");
-      else if (type === "warning") toastEl.classList.add("text-bg-warning");
-      else toastEl.classList.add("text-bg-primary");
-      toastBody.textContent = message;
-      const toast = new bootstrap.Toast(toastEl, { delay });
-      toast.show();
-    }
-  </script>
+{% if user.type_adhesion == 1 %}
 
-  {% block extra_js %}{% endblock %}
+<li class="nav-item">
+<a class="nav-link" href="{% url 'epargnecredit:dashboard_epargne_credit' %}">
+<i class="fas fa-chart-line me-1"></i>
+Dashboard Épargne
+</a>
+</li>
+
+{% elif user.type_adhesion == 2 %}
+
+<li class="nav-item">
+<a class="nav-link" href="{% url 'cotisationtontine:dashboard_tontine_simple' %}">
+<i class="fas fa-users me-1"></i>
+Dashboard Tontine
+</a>
+</li>
+
+{% endif %}
+
+<li class="nav-item dropdown">
+
+<a class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
+<i class="fas fa-user-circle me-1"></i>
+{{ user.nom|default:user.phone }}
+</a>
+
+<ul class="dropdown-menu dropdown-menu-end shadow">
+
+<li>
+<a class="dropdown-item" href="#">
+<i class="fas fa-user me-2"></i>Profil
+</a>
+</li>
+
+<li>
+<a class="dropdown-item" href="#">
+<i class="fas fa-cog me-2"></i>Paramètres
+</a>
+</li>
+
+<li><hr class="dropdown-divider"></li>
+
+<li>
+<a class="dropdown-item text-danger" href="{% url 'accounts:logout' %}">
+<i class="fas fa-sign-out-alt me-2"></i>Déconnexion
+</a>
+</li>
+
+</ul>
+
+</li>
+
+{% else %}
+
+<li class="nav-item">
+<a class="nav-link" href="{% url 'accounts:login' %}">
+<i class="fas fa-sign-in-alt me-1"></i>
+Connexion
+</a>
+</li>
+
+<li class="nav-item">
+<a class="nav-link" href="{% url 'accounts:signup' %}">
+<i class="fas fa-user-plus me-1"></i>
+Inscription
+</a>
+</li>
+
+{% endif %}
+
+</ul>
+
+</div>
+
+</div>
+
+</nav>
+
+<!-- MAIN -->
+
+<main class="container my-4">
+
+<!-- Messages Django -->
+
+{% if messages %}
+{% for message in messages %}
+
+<div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm">
+
+<div class="d-flex align-items-center">
+
+{% if message.tags == 'success' %}
+<i class="fas fa-check-circle me-2"></i>
+
+{% elif message.tags == 'error' or message.tags == 'danger' %}
+<i class="fas fa-exclamation-circle me-2"></i>
+
+{% elif message.tags == 'warning' %}
+<i class="fas fa-exclamation-triangle me-2"></i>
+
+{% else %}
+<i class="fas fa-info-circle me-2"></i>
+{% endif %}
+
+<div>{{ message|safe }}</div>
+
+</div>
+
+<button class="btn-close" data-bs-dismiss="alert"></button>
+
+</div>
+
+{% endfor %}
+{% endif %}
+
+{% block content %}{% endblock %}
+
+</main>
+
+<!-- FOOTER -->
+
+<footer class="mt-auto py-4">
+
+<div class="container">
+
+<div class="row">
+
+<div class="col-md-6 mb-3">
+
+<h5 class="fw-bold">YaayESS</h5>
+<p class="mb-0">Plateforme de gestion de tontines et d’épargne collective.</p>
+
+</div>
+
+<div class="col-md-3 mb-3">
+
+<h6 class="fw-bold">Liens rapides</h6>
+
+<ul class="list-unstyled">
+
+<li><a href="{% url 'landing' %}">Accueil</a></li>
+<li><a href="#">Conditions d’utilisation</a></li>
+<li><a href="#">Confidentialité</a></li>
+
+</ul>
+
+</div>
+
+<div class="col-md-3">
+
+<h6 class="fw-bold">Contact</h6>
+
+<ul class="list-unstyled">
+
+<li>
+<a href="mailto:contact@yaayess.com">
+contact@yaayess.com
+</a>
+</li>
+
+<li>
+<a href="tel:+221775573237">
++221 77 557 32 37
+</a>
+</li>
+
+</ul>
+
+</div>
+
+</div>
+
+<hr>
+
+<div class="text-center small">
+
+© 2026 YaayESS — Tous droits réservés
+
+</div>
+
+</div>
+
+</footer>
+
+<!-- Toast global -->
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+
+<div id="yaayessToast" class="toast align-items-center text-bg-primary border-0">
+
+<div class="d-flex">
+
+<div id="yaayessToastBody" class="toast-body">
+Action réussie
+</div>
+
+<button class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- Bootstrap JS -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+
+window.showToast = function(message,type="info",delay=3000){
+
+const toastEl = document.getElementById('yaayessToast')
+const toastBody = document.getElementById('yaayessToastBody')
+
+toastEl.classList.remove(
+"text-bg-primary",
+"text-bg-success",
+"text-bg-danger",
+"text-bg-warning"
+)
+
+if(type==="success") toastEl.classList.add("text-bg-success")
+else if(type==="error") toastEl.classList.add("text-bg-danger")
+else if(type==="warning") toastEl.classList.add("text-bg-warning")
+else toastEl.classList.add("text-bg-primary")
+
+toastBody.textContent=message
+
+const toast = new bootstrap.Toast(toastEl,{delay})
+toast.show()
+
+}
+
+</script>
+
+{% block extra_js %}{% endblock %}
+
 </body>
 </html>

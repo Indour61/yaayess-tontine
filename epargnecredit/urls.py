@@ -117,6 +117,21 @@ urlpatterns = [
         name="historique_actions",
     ),
 
+# ================= REMBOURSEMENT =================
+    path(
+        "remboursement/<int:group_id>/",
+        views.group_detail_remboursement,
+        name="group_detail_remboursement",
+    ),
+
+    path(
+        "remboursement/payer/<int:member_id>/",
+        views.initier_paiement_remboursement,
+        name="initier_paiement_remboursement",
+    ),
+
+
+
     # ================= API MOBILE =================
     path("api/epargne/dashboard/", DashboardEpargneAPI.as_view()),
     path("api/epargne/groupes/", UserGroupsAPI.as_view()),

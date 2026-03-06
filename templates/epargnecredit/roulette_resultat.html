@@ -1,18 +1,86 @@
 {% extends "base.html" %}
+
 {% block content %}
-<div class="text-center mt-5">
-    <h2 class="text-success">Tirage au sort - Étape {{ etape.numero }}</h2>
-    <div id="roulette" class="my-5" style="font-size: 2rem; animation: spin 3s ease-out;">
-        🎉 {{ gagnant.nom }}
-    </div>
-    <a href="{% url 'epargnecredit:dashboard_epargne_credit' %}" class="btn btn-primary mt-3">Retour au tableau de bord</a>
+<div class="container py-5">
+
+<div class="row justify-content-center">
+<div class="col-lg-6 col-md-8 col-12 text-center">
+
+<div class="card shadow-sm border-0">
+
+<div class="card-body py-5">
+
+<h3 class="fw-bold text-success mb-3">
+🎯 Tirage au sort
+</h3>
+
+<p class="text-muted mb-4">
+Étape <strong>{{ etape.numero }}</strong>
+</p>
+
+
+<!-- Roulette -->
+<div id="roulette" class="roulette-display mb-4">
+
+🎉 {{ gagnant.nom }}
+
 </div>
 
+
+<p class="text-muted">
+Félicitations au bénéficiaire de cette étape !
+</p>
+
+
+<a href="{% url 'epargnecredit:dashboard_epargne_credit' %}"
+class="btn btn-primary mt-3">
+
+⬅ Retour au tableau de bord
+
+</a>
+
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+
+
 <style>
-@keyframes spin {
-  0% { transform: rotateX(0deg); opacity: 0; }
-  50% { transform: rotateX(360deg); opacity: 0.7; }
-  100% { transform: rotateX(720deg); opacity: 1; }
+
+.roulette-display{
+font-size:2rem;
+font-weight:bold;
+color:#198754;
+animation:rouletteSpin 2.5s ease-out;
+padding:20px;
+border-radius:12px;
+background:#f8f9fa;
 }
+
+
+@keyframes rouletteSpin{
+
+0%{
+transform:rotateY(0deg) scale(0.5);
+opacity:0;
+}
+
+50%{
+transform:rotateY(720deg) scale(1.2);
+opacity:0.7;
+}
+
+100%{
+transform:rotateY(1080deg) scale(1);
+opacity:1;
+}
+
+}
+
 </style>
+
 {% endblock %}

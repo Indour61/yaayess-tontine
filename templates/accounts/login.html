@@ -4,73 +4,187 @@
 {% block title %}Connexion - YaayESS{% endblock %}
 
 {% block content %}
-<div class="container mt-5" style="max-width: 480px;">
-  <div class="card shadow-sm">
-    <div class="card-body">
-      <h2 class="card-title text-center mb-4">🔐 Connexion</h2>
 
+<div class="container py-5 d-flex justify-content-center align-items-center">
+
+  <div class="card shadow-lg border-0 login-card">
+
+    <div class="card-body p-4">
+
+      <!-- Logo -->
+      <div class="text-center mb-4">
+        <img src="{% static 'img/logo.png' %}" alt="YaayESS" width="60">
+        <h3 class="mt-2 fw-bold text-success">YaayESS</h3>
+        <p class="text-muted small">Connexion à votre compte</p>
+      </div>
+
+      <!-- Messages -->
       {% if messages %}
         {% for message in messages %}
-          <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">
+          <div class="alert alert-{{ message.tags|default:'info' }} text-center">
             {{ message }}
           </div>
         {% endfor %}
       {% endif %}
 
       <form method="post" class="needs-validation" novalidate>
+
         {% csrf_token %}
+
         {% if next %}
           <input type="hidden" name="next" value="{{ next }}">
         {% endif %}
 
         <!-- TELEPHONE -->
         <div class="mb-3">
-          <label for="phone" class="form-label">Téléphone</label>
-          <input type="text" name="phone" class="form-control" id="phone"
-                 placeholder="Ex: 77xxxxxxx" required
-                 value="{{ request.POST.phone }}">
-          <div class="invalid-feedback">
-            Veuillez saisir votre numéro de téléphone.
+          <label class="form-label fw-semibold">Numéro de téléphone</label>
+
+          <div class="input-group">
+            <span class="input-group-text">+221</span>
+
+            <input
+              type="text"
+              name="phone"
+              class="form-control"
+              placeholder="77 123 45 67"
+              required
+              value="{{ request.POST.phone }}"
+            >
+
+            <div class="invalid-feedback">
+              Veuillez entrer votre numéro.
+            </div>
+
           </div>
         </div>
 
         <!-- PASSWORD -->
         <div class="mb-3">
-          <label for="password" class="form-label">Mot de passe</label>
-          <input type="password" name="password" class="form-control"
-                 id="password" placeholder="Mot de passe" required>
-          <div class="invalid-feedback">
-            Veuillez saisir votre mot de passe.
+
+          <label class="form-label fw-semibold">Mot de passe</label>
+
+          <div class="input-group">
+
+            <input
+              type="password"
+              name="password"
+              id="password"
+              class="form-control"
+              placeholder="Mot de passe"
+              required
+            >
+
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              onclick="togglePassword()"
+            >
+              👁
+            </button>
+
+            <div class="invalid-feedback">
+              Veuillez entrer votre mot de passe.
+            </div>
+
           </div>
+
         </div>
 
-        <button type="submit" class="btn btn-success w-100">
-          Se connecter
-        </button>
+        <!-- BUTTON -->
+        <div class="d-grid mt-4">
+
+          <button type="submit" class="btn btn-success btn-lg">
+
+            🔐 Se connecter
+
+          </button>
+
+        </div>
+
       </form>
 
-      <p class="text-center mt-3">
+      <!-- REGISTER -->
+      <div class="text-center mt-4 small">
+
         Pas encore de compte ?
-        <a href="{% url 'accounts:signup' %}">Inscrivez-vous</a>
-      </p>
+
+        <a href="{% url 'accounts:signup' %}" class="fw-semibold text-success">
+          Créer un compte
+        </a>
+
+      </div>
 
     </div>
+
   </div>
+
 </div>
+
 {% endblock %}
 
 {% block extra_script %}
+
 <script>
+
 (() => {
+
   'use strict'
-  const form = document.querySelector('form.needs-validation')
+
+  const form = document.querySelector('.needs-validation')
+
   form.addEventListener('submit', event => {
+
     if (!form.checkValidity()) {
+
       event.preventDefault()
       event.stopPropagation()
+
     }
+
     form.classList.add('was-validated')
+
   }, false)
+
 })();
+
+function togglePassword(){
+
+  const input = document.getElementById("password")
+
+  if(input.type === "password"){
+
+    input.type = "text"
+
+  } else {
+
+    input.type = "password"
+
+  }
+
+}
+
 </script>
+
 {% endblock %}
+
+<style>
+
+.login-card{
+
+  max-width:420px;
+  width:100%;
+  border-radius:12px;
+
+}
+
+@media (max-width:576px){
+
+  .container{
+
+    padding:20px;
+
+  }
+
+}
+
+</style>

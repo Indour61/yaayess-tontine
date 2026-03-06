@@ -1568,3 +1568,28 @@ class IsAdminOrSuper(BasePermission):
             request.user.is_staff or request.user.is_super_admin
         )
 
+
+@login_required
+def initier_paiement_remboursement(request, member_id: int):
+    """
+    Initie le paiement de remboursement pour un membre
+    (paiement PayDunya ou versement interne).
+    """
+
+    member = get_object_or_404(
+        GroupMember.objects.select_related("group", "user"),
+        id=member_id
+    )
+
+    group = member.group
+
+    context = {
+        "member": member,
+        "group": group,
+    }
+
+    return render(
+        request,
+        "epargnecredit/initier_paiement_remboursement.html",
+        context
+    )

@@ -1,64 +1,141 @@
 {% extends 'base.html' %}
+
 {% block title %}Étapes du cycle{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <h2>Cycle de {{ group.nom }} ({{ cycle.periodicite }})</h2>
+<div class="container py-4">
 
-  <div class="table-responsive mt-3">
-    <table class="table table-striped table-hover align-middle">
-      <thead class="table-success">
-        <tr>
-          <th>Étape</th>
-          <th>Date</th>
-          <th>Statut</th>
-          <th>Bénéficiaire</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for etape in etapes %}
-          <tr>
-            <td>Étape {{ etape.numero_etape }}</td>
-            <td>{{ etape.date_etape|date:"d/m/Y" }}</td>
-            <td>
-              {% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.complet %}
-                ✅ Complète
-              {% else %}
-                ❌ Incomplète
-              {% endif %}
-            </td>
-            <td>
-              {% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.beneficiaire %}
-                {{ versements_par_etape|get_item:etape.id.beneficiaire.nom }}
-              {% else %}
-                -
-              {% endif %}
-            </td>
-            <td>
-              {% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.complet and not versements_par_etape|get_item:etape.id.beneficiaire %}
-                <a href="{% url 'tirer_au_sort' etape.id %}" class="btn btn-success btn-sm">🎰 Tirer</a>
-              {% else %}
-                -
-              {% endif %}
+<div class="mb-4">
+<h3 class="fw-bold text-success">
+🔄 Cycle – {{ group.nom }}
+</h3>
+<p class="text-muted mb-0">
+Périodicité : <strong>{{ cycle.periodicite }}</strong>
+</p>
+</div>
 
-              {% if user == group.admin %}
-                <a href="{% url 'reinitialiser_cycle' group.id %}" class="btn btn-danger btn-sm mt-2">
-                  🔁 Réinitialiser le cycle
-                </a>
-                <a href="{% url 'historique_cycles' group.id %}" class="btn btn-outline-secondary btn-sm mt-2">
-                  🕰️ Historique des cycles
-                </a>
-              {% endif %}
-            </td>
-          </tr>
-        {% empty %}
-          <tr>
-            <td colspan="5" class="text-center text-muted">Aucune étape trouvée.</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+
+<div class="table-responsive shadow-sm rounded">
+
+<table class="table table-hover align-middle mb-0">
+
+<thead class="table-light">
+<tr>
+<th>Étape</th>
+<th>Date</th>
+<th>Statut</th>
+<th>Bénéficiaire</th>
+<th class="text-center">Actions</th>
+</tr>
+</thead>
+
+<tbody>
+
+{% for etape in etapes %}
+
+<tr>
+
+<td>
+<strong>
+Étape {{ etape.numero_etape }}
+</strong>
+</td>
+
+<td>
+{{ etape.date_etape|date:"d/m/Y" }}
+</td>
+
+<td>
+
+{% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.complet %}
+
+<span class="badge bg-success">
+✅ Complète
+</span>
+
+{% else %}
+
+<span class="badge bg-danger">
+❌ Incomplète
+</span>
+
+{% endif %}
+
+</td>
+
+
+<td>
+
+{% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.beneficiaire %}
+
+<strong>
+{{ versements_par_etape|get_item:etape.id.beneficiaire.nom }}
+</strong>
+
+{% else %}
+
+<span class="text-muted">—</span>
+
+{% endif %}
+
+</td>
+
+
+<td class="text-center">
+
+<div class="d-flex flex-wrap gap-1 justify-content-center">
+
+{% if versements_par_etape|get_item:etape.id and versements_par_etape|get_item:etape.id.complet and not versements_par_etape|get_item:etape.id.beneficiaire %}
+
+<a href="{% url 'tirer_au_sort' etape.id %}"
+class="btn btn-success btn-sm">
+
+🎰 Tirer
+
+</a>
+
+{% endif %}
+
+
+{% if user == group.admin %}
+
+<a href="{% url 'reinitialiser_cycle' group.id %}"
+class="btn btn-outline-danger btn-sm">
+
+🔁 Réinitialiser
+
+</a>
+
+<a href="{% url 'historique_cycles' group.id %}"
+class="btn btn-outline-secondary btn-sm">
+
+🕰 Historique
+
+</a>
+
+{% endif %}
+
+</div>
+
+</td>
+
+</tr>
+
+{% empty %}
+
+<tr>
+<td colspan="5" class="text-center text-muted py-4">
+Aucune étape trouvée
+</td>
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
 </div>
 {% endblock %}

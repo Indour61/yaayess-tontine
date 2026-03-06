@@ -2,51 +2,177 @@
 {% block title %}Historique des étapes{% endblock %}
 
 {% block content %}
-<div class="container mt-4" style="max-width: 720px;">
-  <h2>Historique des cycles - {{ group.nom }}</h2>
+
+<div class="container py-4">
+
+  <!-- Header -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+
+    <h3 class="fw-bold text-success">
+      📜 Historique des cycles
+    </h3>
+
+    <span class="text-muted">
+      {{ group.nom }}
+    </span>
+
+  </div>
+
 
   {% for bloc in data %}
-    <div class="card mt-4 shadow-sm">
-      <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-        <div>
-          Cycle du {{ bloc.cycle.date_debut|date:"d/m/Y" }}
-          {% if bloc.cycle.date_fin %} au {{ bloc.cycle.date_fin|date:"d/m/Y" }}{% endif %}
-        </div>
-        <button
-          class="btn btn-sm btn-light"
-          type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#cycle{{ bloc.cycle.id }}"
-          aria-expanded="false"
-          aria-controls="cycle{{ bloc.cycle.id }}"
-        >
-          ⬇️ Détails
-        </button>
+
+  <div class="card shadow-sm border-0 mb-4">
+
+    <!-- Header cycle -->
+    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+      <div>
+
+        🔄 Cycle du
+
+        <strong>
+          {{ bloc.cycle.date_debut|date:"d/m/Y" }}
+        </strong>
+
+        {% if bloc.cycle.date_fin %}
+
+          → {{ bloc.cycle.date_fin|date:"d/m/Y" }}
+
+        {% else %}
+
+          <span class="badge bg-light text-success ms-2">
+            En cours
+          </span>
+
+        {% endif %}
+
       </div>
 
-      <div id="cycle{{ bloc.cycle.id }}" class="collapse card-body">
-        <ul class="list-group">
-          {% for item in bloc.etapes %}
-            <li class="list-group-item">
-              <strong>Étape {{ item.etape.numero }} - {{ item.etape.date|date:"d/m/Y" }}</strong>
-              {% if item.tirages %}
-                <ul class="list-group list-group-flush mt-2 ps-3">
-                  {% for tirage in item.tirages %}
-                    <li class="list-group-item py-1">
-                      {{ tirage.membre.nom }} tiré le {{ tirage.date_tirage|date:"d/m/Y H:i" }}
-                    </li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                <em class="text-muted d-block mt-2">Aucun tirage effectué</em>
-              {% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-      </div>
+      <button
+        class="btn btn-sm btn-light"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#cycle{{ bloc.cycle.id }}"
+      >
+        📂 Voir détails
+      </button>
+
     </div>
+
+
+    <!-- Contenu -->
+    <div id="cycle{{ bloc.cycle.id }}" class="collapse">
+
+      <div class="card-body p-3">
+
+        {% if bloc.etapes %}
+
+        <div class="list-group">
+
+          {% for item in bloc.etapes %}
+
+          <div class="list-group-item">
+
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+
+              <div>
+
+                <strong>
+                  Étape {{ item.etape.numero }}
+                </strong>
+
+                <br>
+
+                <small class="text-muted">
+
+                  📅 {{ item.etape.date|date:"d/m/Y" }}
+
+                </small>
+
+              </div>
+
+            </div>
+
+
+            <!-- Tirages -->
+            {% if item.tirages %}
+
+            <ul class="list-group list-group-flush mt-2">
+
+              {% for tirage in item.tirages %}
+
+              <li class="list-group-item py-2">
+
+                🎯
+
+                <strong>
+                  {{ tirage.membre.nom }}
+                </strong>
+
+                <small class="text-muted">
+
+                  tiré le {{ tirage.date_tirage|date:"d/m/Y H:i" }}
+
+                </small>
+
+              </li>
+
+              {% endfor %}
+
+            </ul>
+
+            {% else %}
+
+            <div class="text-muted mt-2">
+
+              ⏳ Aucun tirage effectué
+
+            </div>
+
+            {% endif %}
+
+          </div>
+
+          {% endfor %}
+
+        </div>
+
+        {% else %}
+
+        <div class="text-muted text-center py-3">
+
+          Aucune étape enregistrée.
+
+        </div>
+
+        {% endif %}
+
+      </div>
+
+    </div>
+
+  </div>
+
   {% empty %}
-    <p class="text-muted">Aucun cycle trouvé pour ce groupe.</p>
+
+  <div class="card shadow-sm border-0 text-center">
+
+    <div class="card-body py-5">
+
+      <div style="font-size:40px;">📭</div>
+
+      <p class="mt-3 text-muted">
+
+        Aucun cycle trouvé pour ce groupe.
+
+      </p>
+
+    </div>
+
+  </div>
+
   {% endfor %}
+
 </div>
+
 {% endblock %}

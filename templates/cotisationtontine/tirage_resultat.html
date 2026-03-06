@@ -4,78 +4,142 @@
 {% block title %}🎲 Tirage au sort{% endblock %}
 
 {% block content %}
-<div class="container mt-5 text-center" style="max-width: 600px;">
 
-    <h1 class="mb-4 text-primary fw-bold">🎲 Tirage au sort</h1>
+<div class="container py-5">
 
-    <h4 class="mb-3">
-        Groupe :
-        <span class="text-success fw-semibold">
-            {{ group.nom }}
-        </span>
-    </h4>
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-10 col-lg-6">
 
-    {% if erreur %}
-        <div class="alert alert-danger" role="alert">
-            ⚠️ {{ erreur }}
-        </div>
-    {% endif %}
+            <div class="card shadow border-0 text-center">
 
-    {% if tirage_possible %}
-        <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}"
-           class="btn btn-primary btn-lg mb-3">
-           🎲 Lancer le tirage au sort
-        </a>
-    {% else %}
-        <a href="#"
-           class="btn btn-secondary btn-lg disabled mb-3"
-           tabindex="-1"
-           aria-disabled="true">
-           🎲 Tirage déjà effectué
-        </a>
-    {% endif %}
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">🎲 Tirage au sort</h4>
+                </div>
 
-    {% if gagnant %}
-        <div class="mt-5 p-4 border rounded shadow-sm bg-light">
+                <div class="card-body">
 
-            <h2 class="text-success">👏 Félicitations 🎉</h2>
+                    <h5 class="mb-4">
+                        Groupe :
+                        <span class="text-success fw-semibold">
+                            {{ group.nom }}
+                        </span>
+                    </h5>
 
-            <h1 class="display-5 fw-bold text-dark mt-3">
-                🏆
-                {{ gagnant.alias|default:gagnant.user.nom|default:gagnant.user.phone }}
-            </h1>
+                    {% if erreur %}
+                        <div class="alert alert-danger">
+                            ⚠️ {{ erreur }}
+                        </div>
+                    {% endif %}
 
-            {% if cycle_actuel %}
-                <p class="text-muted">
-                    Cycle : {{ cycle_actuel }}
-                </p>
-            {% endif %}
+                    {% if tirage_possible %}
+                        <div class="d-grid mb-4">
+                            <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}"
+                               class="btn btn-primary btn-lg">
+                               🎲 Lancer le tirage au sort
+                            </a>
+                        </div>
+                    {% else %}
+                        <div class="d-grid mb-4">
+                            <button class="btn btn-secondary btn-lg" disabled>
+                                🎲 Tirage déjà effectué
+                            </button>
+                        </div>
+                    {% endif %}
 
-            <p class="fs-4 mt-3">
-                Montant remporté :
-                <strong class="text-danger">
-                    {{ montant_total|floatformat:0|intcomma }} FCFA
-                </strong>
-            </p>
+                    {% if gagnant %}
 
-            <div class="mt-4">
-                <a href="{% url 'cotisationtontine:group_detail' group.id %}"
-                   class="btn btn-success btn-lg px-4">
-                   📊 Voir le détail du groupe
-                </a>
+                        <div class="winner-box mt-4">
+
+                            <h4 class="text-success mb-3">
+                                👏 Félicitations !
+                            </h4>
+
+                            <h1 class="display-5 fw-bold text-dark">
+                                🏆 {{ gagnant.alias|default:gagnant.user.nom|default:gagnant.user.phone }}
+                            </h1>
+
+                            {% if cycle_actuel %}
+                                <p class="text-muted">
+                                    Cycle : {{ cycle_actuel }}
+                                </p>
+                            {% endif %}
+
+                            <p class="fs-4 mt-3">
+                                Montant remporté :
+                            </p>
+
+                            <h2 class="text-danger fw-bold">
+                                {{ montant_total|floatformat:0|intcomma }} FCFA
+                            </h2>
+
+                            <div class="d-grid mt-4">
+                                <a href="{% url 'cotisationtontine:group_detail' group.id %}"
+                                   class="btn btn-success btn-lg">
+                                   📊 Voir le détail du groupe
+                                </a>
+                            </div>
+
+                        </div>
+
+                    {% else %}
+
+                        <div class="alert alert-warning mt-4">
+                            ⚠️ Aucun membre éligible au tirage pour le moment.
+                        </div>
+
+                    {% endif %}
+
+                    <div class="d-grid mt-4">
+                        <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}"
+                           class="btn btn-outline-primary">
+                            ⬅ Retour au tableau de bord
+                        </a>
+                    </div>
+
+                </div>
+
             </div>
 
         </div>
-    {% else %}
-        <div class="alert alert-warning mt-5" role="alert">
-            Aucun membre éligible au tirage pour le moment.
-        </div>
-    {% endif %}
-
-    <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}"
-       class="btn btn-outline-primary mt-4 px-4">
-        ⬅ Retour au tableau de bord
-    </a>
+    </div>
 
 </div>
+
+<style>
+
+.winner-box{
+    background:#f8f9fa;
+    border-radius:12px;
+    padding:25px;
+    animation:winnerReveal 1.5s ease-out;
+}
+
+@keyframes winnerReveal{
+
+    0%{
+        transform:scale(0.7);
+        opacity:0;
+    }
+
+    60%{
+        transform:scale(1.1);
+    }
+
+    100%{
+        transform:scale(1);
+        opacity:1;
+    }
+
+}
+
+@media (max-width:768px){
+
+    .display-5{
+        font-size:2rem;
+    }
+
+}
+
+</style>
+
 {% endblock %}

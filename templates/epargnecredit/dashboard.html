@@ -1,71 +1,135 @@
 {% extends 'base.html' %}
 
-{% block title %}Dashboard – Epargne & Crédit{% endblock %}
+{% block title %}Dashboard – Épargne & Crédit{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3 flex-wrap">
-    <h1 class="fw-bold text-success mb-0">
-        📊 Tableau de bord Epargne & Crédit
-    </h1>
+<div class="container py-4">
+
+<!-- Header -->
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+
+<h2 class="fw-bold text-success mb-0">
+📊 Tableau de bord Épargne & Crédit
+</h2>
+
 </div>
+
 
 <!-- Messages flash -->
 {% if messages %}
-    <div class="mb-4">
-        {% for message in messages %}
-            <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
-            </div>
-        {% endfor %}
-    </div>
+<div class="mb-4">
+{% for message in messages %}
+<div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm">
+{{ message }}
+<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endfor %}
+</div>
 {% endif %}
 
+
 <!-- Actions principales -->
-<div class="mb-4 d-flex flex-wrap gap-2">
-    <a href="{% url 'epargnecredit:group_list' %}" class="btn btn-outline-success flex-grow-1 flex-md-grow-0">
-        📋 Voir mes groupes
-    </a>
-    <a href="{% url 'epargnecredit:ajouter_groupe' %}" class="btn btn-success flex-grow-1 flex-md-grow-0">
-        ➕ Créer un groupe
-    </a>
+<div class="row g-2 mb-4">
+
+<div class="col-md-6 col-12">
+<a href="{% url 'epargnecredit:group_list' %}"
+class="btn btn-outline-success w-100">
+
+📋 Voir mes groupes
+
+</a>
 </div>
+
+<div class="col-md-6 col-12">
+<a href="{% url 'epargnecredit:ajouter_groupe' %}"
+class="btn btn-success w-100">
+
+➕ Créer un groupe
+
+</a>
+</div>
+
+</div>
+
 
 <hr class="my-4">
 
-<!-- Section dernières actions -->
-<h2 class="h4 mb-3">🕘 Dernières actions</h2>
+
+<!-- Dernières actions -->
+<h4 class="mb-3">
+🕘 Dernières actions
+</h4>
 
 {% if action_logs %}
-    <div class="list-group rounded-3 overflow-hidden shadow-sm">
-        {% for log in action_logs %}
-            <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap">
-                <div class="me-3 flex-grow-1 min-width-0">
-                    <span class="fw-semibold text-truncate d-block" title="{{ log.action }}">
-                        {{ log.action }}
-                    </span>
-                    <small class="text-muted">{{ log.date|date:"d/m/Y H:i" }}</small>
-                </div>
-                {% if log.status == 'success' %}
-                    <span class="badge rounded-pill bg-success-subtle text-success border border-success">
-                        ✅
-                    </span>
-                {% elif log.status == 'warning' %}
-                    <span class="badge rounded-pill bg-warning-subtle text-warning border border-warning">
-                        ⚠️
-                    </span>
-                {% else %}
-                    <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary">
-                        ℹ️
-                    </span>
-                {% endif %}
-            </div>
-        {% endfor %}
-    </div>
+
+<div class="card shadow-sm border-0">
+
+<div class="list-group list-group-flush">
+
+{% for log in action_logs %}
+
+<div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+<div class="flex-grow-1">
+
+<span class="fw-semibold d-block text-truncate"
+title="{{ log.action }}">
+
+{{ log.action }}
+
+</span>
+
+<small class="text-muted">
+{{ log.date|date:"d/m/Y H:i" }}
+</small>
+
+</div>
+
+<div>
+
+{% if log.status == 'success' %}
+
+<span class="badge rounded-pill bg-success-subtle text-success border border-success">
+✅ Succès
+</span>
+
+{% elif log.status == 'warning' %}
+
+<span class="badge rounded-pill bg-warning-subtle text-warning border border-warning">
+⚠️ Attention
+</span>
+
 {% else %}
-    <div class="alert alert-info mt-3">
-        🔎 Aucune action récente pour le moment. Commencez par créer un groupe ou effectuer un versement pour voir votre historique ici.
-    </div>
+
+<span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary">
+ℹ️ Info
+</span>
+
 {% endif %}
 
+</div>
+
+</div>
+
+{% endfor %}
+
+</div>
+
+</div>
+
+{% else %}
+
+<div class="alert alert-info mt-3 shadow-sm">
+
+🔎 Aucune action récente pour le moment.
+
+<div class="mt-2 small">
+Commencez par créer un groupe ou effectuer un versement pour voir votre historique ici.
+</div>
+
+</div>
+
+{% endif %}
+
+</div>
 {% endblock %}

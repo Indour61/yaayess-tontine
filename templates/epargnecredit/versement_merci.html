@@ -1,55 +1,133 @@
 {% extends 'base.html' %}
+
 {% block title %}Merci pour votre paiement{% endblock %}
 
 {% block content %}
-<div class="container mt-5" style="max-width: 560px;">
+<div class="container py-5">
 
-  {% if status == "paid" %}
-    <div class="text-center mb-4">
-      <h1 class="display-6 text-success">✅ Merci !</h1>
-      <p class="lead mb-1">Votre paiement a été confirmé.</p>
-      {% if created_fallback %}
-        <p class="small text-muted">L’écriture a été créée localement (fallback dev).</p>
-      {% endif %}
-      {% if token %}
-        <p class="small text-muted mb-0">Référence : <code>{{ token }}</code></p>
-      {% endif %}
-    </div>
-  {% elif status == "pending" %}
-    <div class="text-center mb-4">
-      <h1 class="display-6 text-warning">⏳ Paiement en attente</h1>
-      <p class="mb-2">La facture a été créée mais le paiement n’est pas encore confirmé.</p>
-      {% if invoice_url %}
-        <a href="{{ invoice_url }}" class="btn btn-primary w-100 mb-2">💳 Ouvrir la facture</a>
-      {% endif %}
-      {% if token %}
-        <a href="?token={{ token }}{% if request.GET.group_id %}&group_id={{ request.GET.group_id }}{% endif %}"
-           class="btn btn-outline-secondary w-100">🔄 Rafraîchir le statut</a>
-      {% endif %}
-    </div>
-  {% elif status == "failed" %}
-    <div class="text-center mb-4">
-      <h1 class="display-6 text-danger">❌ Paiement annulé / échoué</h1>
-      <p class="mb-2">Le paiement n’a pas été confirmé.</p>
-      {% if invoice_url %}
-        <a href="{{ invoice_url }}" class="btn btn-primary w-100">Réessayer le paiement</a>
-      {% endif %}
-    </div>
-  {% elif status == "error" %}
-    <div class="text-center mb-4">
-      <h1 class="display-6 text-danger">⚠️ Erreur</h1>
-      <p>Impossible de vérifier le statut pour le moment.</p>
-    </div>
-  {% else %}
-    <div class="text-center mb-4">
-      <h1 class="display-6">ℹ️ Retour de paiement</h1>
-      <p>Statut indéterminé pour cette facture.</p>
-      {% if invoice_url %}
-        <a href="{{ invoice_url }}" class="btn btn-primary w-100">Ouvrir la facture</a>
-      {% endif %}
-    </div>
-  {% endif %}
+<div class="row justify-content-center">
+<div class="col-lg-5 col-md-7 col-12">
 
-  <a href="{{ back_url|default:'/' }}" class="btn btn-success w-100">↩️ Revenir</a>
+<div class="card shadow-sm border-0 text-center">
+
+<div class="card-body py-5">
+
+{% if status == "paid" %}
+
+<div style="font-size:48px;">✅</div>
+
+<h3 class="text-success fw-bold mt-2">
+Paiement confirmé
+</h3>
+
+<p class="text-muted mb-3">
+Merci ! Votre paiement a été enregistré avec succès.
+</p>
+
+{% if created_fallback %}
+<p class="small text-muted">
+Écriture créée localement (mode développement).
+</p>
+{% endif %}
+
+{% if token %}
+<p class="small text-muted">
+Référence : <code>{{ token }}</code>
+</p>
+{% endif %}
+
+{% elif status == "pending" %}
+
+<div style="font-size:48px;">⏳</div>
+
+<h3 class="text-warning fw-bold mt-2">
+Paiement en attente
+</h3>
+
+<p class="text-muted mb-3">
+La facture a été créée mais le paiement n'est pas encore confirmé.
+</p>
+
+{% if invoice_url %}
+<a href="{{ invoice_url }}" class="btn btn-primary w-100 mb-2">
+💳 Ouvrir la facture
+</a>
+{% endif %}
+
+{% if token %}
+<a href="?token={{ token }}{% if request.GET.group_id %}&group_id={{ request.GET.group_id }}{% endif %}"
+class="btn btn-outline-secondary w-100">
+
+🔄 Vérifier à nouveau
+
+</a>
+{% endif %}
+
+{% elif status == "failed" %}
+
+<div style="font-size:48px;">❌</div>
+
+<h3 class="text-danger fw-bold mt-2">
+Paiement échoué
+</h3>
+
+<p class="text-muted mb-3">
+Le paiement n'a pas été confirmé.
+</p>
+
+{% if invoice_url %}
+<a href="{{ invoice_url }}" class="btn btn-primary w-100">
+🔁 Réessayer le paiement
+</a>
+{% endif %}
+
+{% elif status == "error" %}
+
+<div style="font-size:48px;">⚠️</div>
+
+<h3 class="text-danger fw-bold mt-2">
+Erreur de vérification
+</h3>
+
+<p class="text-muted">
+Impossible de vérifier le statut pour le moment.
+</p>
+
+{% else %}
+
+<div style="font-size:48px;">ℹ️</div>
+
+<h3 class="fw-bold mt-2">
+Retour de paiement
+</h3>
+
+<p class="text-muted mb-3">
+Statut indéterminé pour cette facture.
+</p>
+
+{% if invoice_url %}
+<a href="{{ invoice_url }}" class="btn btn-primary w-100">
+💳 Ouvrir la facture
+</a>
+{% endif %}
+
+{% endif %}
+
+<hr class="my-4">
+
+<a href="{{ back_url|default:'/' }}"
+class="btn btn-success w-100">
+
+↩️ Revenir
+
+</a>
+
+</div>
+
+</div>
+
+</div>
+</div>
+
 </div>
 {% endblock %}

@@ -1,8 +1,59 @@
 {% extends "base.html" %}
+
 {% block content %}
-<div class="container mt-5">
-  <div class="alert alert-warning">
-    ⏳ Votre compte a bien été créé mais il doit être validé par l’administrateur avant l’accès à Épargne & Crédit.
+
+<div class="container py-5">
+
+  <div class="row justify-content-center">
+
+    <div class="col-lg-6 col-md-8 col-sm-12">
+
+      <div class="card shadow-lg border-0 text-center">
+
+        <div class="card-body p-5">
+
+          <div class="mb-4">
+
+            <div style="font-size:60px;">⏳</div>
+
+          </div>
+
+          <h3 class="text-warning mb-3">
+            Compte en attente de validation
+          </h3>
+
+          <p class="text-muted mb-4">
+
+            Votre compte a été créé avec succès.
+
+            <br><br>
+
+            Toutefois, l'accès au module
+            <strong>Épargne & Crédit</strong>
+            doit être validé par l'administrateur du groupe.
+
+          </p>
+
+          <div class="alert alert-warning">
+
+            Vous serez informé dès que votre compte sera activé.
+
+          </div>
+
+          <a href="/" class="btn btn-success mt-3">
+
+            Retour à l'accueil
+
+          </a>
+
+        </div>
+
+      </div>
+
+    </div>
+
   </div>
+
 </div>
+
 {% endblock %}

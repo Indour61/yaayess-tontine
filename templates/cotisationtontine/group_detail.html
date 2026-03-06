@@ -4,12 +4,10 @@
 {% block title %}Détails du groupe{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
 
-    <!-- =============================== -->
-    <!-- 🔔 Messages système -->
-    <!-- =============================== -->
+<div class="container py-4">
 
+    <!-- 🔔 Messages -->
     {% if messages %}
       {% for message in messages %}
         <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show">
@@ -19,46 +17,83 @@
       {% endfor %}
     {% endif %}
 
-    <!-- =============================== -->
-    <!-- 🔗 Lien invitation (Admin) -->
-    <!-- =============================== -->
+    <!-- 📌 Carte groupe -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
 
-    {% if user_is_admin %}
-    <div class="alert alert-success mb-4">
-        🔗 Lien d'invitation à partager :
-        <input type="text" readonly value="{{ invite_url }}" class="form-control mb-2">
+            <div class="d-flex flex-wrap justify-content-between align-items-center">
 
-        <a href="https://wa.me/?text=Rejoins notre groupe YaayESS ici 👉 {{ invite_url }}"
-           target="_blank"
-           class="btn btn-outline-success btn-sm">
-            📤 Partager sur WhatsApp
-        </a>
+                <div>
+                    <h2 class="fw-bold text-success mb-1">{{ group.nom }}</h2>
+                    <p class="mb-1 text-muted">
+                        📅 Créé le {{ group.date_creation|date:"d/m/Y" }}
+                    </p>
+
+                    {% if group.date_reset %}
+                    <p class="text-muted small">
+                        🔁 Dernier reset : {{ group.date_reset|date:"d/m/Y H:i" }}
+                    </p>
+                    {% endif %}
+                </div>
+
+                <div class="text-end mt-2 mt-md-0">
+                    <div class="fs-4 fw-bold text-primary">
+                        {{ group.montant_base|default:"0"|floatformat:0|intcomma }} FCFA
+                    </div>
+                    <small class="text-muted">Montant de base</small>
+                </div>
+
+            </div>
+
+        </div>
     </div>
+
+    <!-- 🔗 Invitation admin -->
+    {% if user_is_admin %}
+
+    <div class="card border-success shadow-sm mb-4">
+
+        <div class="card-body">
+
+            <h6 class="fw-bold text-success mb-2">
+                🔗 Lien d'invitation
+            </h6>
+
+            <div class="input-group mb-2">
+
+                <input
+                    id="inviteLink"
+                    type="text"
+                    readonly
+                    value="{{ invite_url }}"
+                    class="form-control">
+
+                <button
+                    class="btn btn-outline-secondary"
+                    onclick="copyInvite()">
+
+                    📋
+
+                </button>
+
+            </div>
+
+            <a
+              href="https://wa.me/?text=Rejoins notre groupe YaayESS ici 👉 {{ invite_url }}"
+              target="_blank"
+              class="btn btn-outline-success btn-sm">
+
+                📤 WhatsApp
+
+            </a>
+
+        </div>
+
+    </div>
+
     {% endif %}
 
-    <!-- =============================== -->
-    <!-- 📌 Infos Groupe -->
-    <!-- =============================== -->
-
-    <h1 class="fw-bold text-success">{{ group.nom }}</h1>
-
-    <p>📅 Créé le : {{ group.date_creation|date:"d/m/Y" }}</p>
-
-    {% if group.date_reset %}
-      <p class="text-muted">🔁 Dernier reset : {{ group.date_reset|date:"d/m/Y H:i" }}</p>
-    {% endif %}
-
-    <p class="mb-4">
-      💰 Montant de base :
-      <strong class="text-primary">
-        {{ group.montant_base|default:"0"|floatformat:0|intcomma }} FCFA
-      </strong>
-    </p>
-
-    <!-- =============================== -->
-    <!-- 🚨 Alertes cycle / validation -->
-    <!-- =============================== -->
-
+    <!-- 🚨 Alertes -->
     {% if versements_en_attente_liste %}
       <div class="alert alert-danger">
         Tous les versements doivent être validés avant le tirage.
@@ -71,160 +106,256 @@
       </div>
     {% endif %}
 
-    <!-- =============================== -->
     <!-- 🎲 Actions Admin -->
-    <!-- =============================== -->
-
     {% if user_is_admin %}
-      <div class="d-flex flex-wrap gap-2 mb-4">
+
+    <div class="d-flex flex-wrap gap-2 mb-4">
 
         {% if not versements_en_attente_liste and not cycle_termine %}
-          <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}"
-             class="btn btn-outline-primary">
-            🎲 Lancer le tirage
-          </a>
+        <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}"
+           class="btn btn-outline-primary">
+
+           🎲 Tirage
+
+        </a>
         {% else %}
-          <button class="btn btn-outline-secondary" disabled>
-            🎲 Tirage bloqué
-          </button>
+        <button class="btn btn-outline-secondary" disabled>
+           🎲 Tirage bloqué
+        </button>
         {% endif %}
 
         <a href="{% url 'cotisationtontine:tirage_resultat' group.id %}"
            class="btn btn-outline-success">
-          📊 Résultats
+
+           📊 Résultats
+
         </a>
 
         <form action="{% url 'cotisationtontine:reset_cycle' group.id %}"
               method="post"
               onsubmit="return confirm('Confirmer la réinitialisation ?');">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-outline-danger">
-            ♻️ Reset cycle
-          </button>
+
+            {% csrf_token %}
+
+            <button class="btn btn-outline-danger">
+                ♻️ Reset cycle
+            </button>
+
         </form>
 
-        <a href="{{ invite_url }}" class="btn btn-primary">
-          ➕ Ajouter membre
+        <a href="{{ invite_url }}" class="btn btn-success">
+            ➕ Ajouter membre
         </a>
 
-      </div>
-    {% endif %}
-
-    <!-- =============================== -->
-    <!-- 💳 Versements EN ATTENTE -->
-    <!-- =============================== -->
-
-    {% if user_is_admin and versements_en_attente_liste %}
-    <div class="card border-warning mb-4">
-      <div class="card-header bg-warning fw-bold">
-        💳 Versements en attente
-      </div>
-      <div class="table-responsive">
-        <table class="table mb-0">
-          <thead>
-            <tr>
-              <th>Membre</th>
-              <th>Montant</th>
-              <th>Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for v in versements_en_attente_liste %}
-            <tr>
-              <td>{{ v.member.user.nom|default:v.member.user.phone }}</td>
-              <td>{{ v.montant|floatformat:0|intcomma }} FCFA</td>
-              <td>{{ v.date_creation|date:"d/m/Y H:i" }}</td>
-              <td class="d-flex gap-2">
-                <a href="{% url 'cotisationtontine:valider_versement' v.id %}"
-                   class="btn btn-sm btn-success">✅</a>
-                <a href="{% url 'cotisationtontine:refuser_versement' v.id %}"
-                   class="btn btn-sm btn-danger">❌</a>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
     </div>
+
     {% endif %}
 
-    <!-- =============================== -->
-    <!-- 👥 Tableau Membres -->
-    <!-- =============================== -->
+    <!-- 💳 Versements en attente -->
+    {% if user_is_admin and versements_en_attente_liste %}
 
-    <h3>{{ membres|length }} membre{{ membres|length|pluralize }}</h3>
+    <div class="card border-warning shadow-sm mb-4">
 
-    <div class="table-responsive shadow-sm rounded mt-3">
-      <table class="table table-bordered align-middle">
+        <div class="card-header bg-warning fw-bold">
+            💳 Versements en attente
+        </div>
 
-        <thead class="table-light">
-          <tr>
-            <th>Nom</th>
-            <th>Action</th>
-            <th>Montant versé</th>
-            <th>Dernier versement</th>
-            <th>Téléphone</th>
-          </tr>
-        </thead>
+        <div class="table-responsive">
 
-        <tbody>
-          {% for m in membres %}
-          <tr>
+            <table class="table mb-0 align-middle">
 
-            <td>
-              {{ m.user.nom|default:m.user.phone }}
-              {% if m.user == group.admin %}
-                <span class="badge bg-success">Admin</span>
-              {% endif %}
-            </td>
+                <thead>
+                    <tr>
+                        <th>Membre</th>
+                        <th>Montant</th>
+                        <th>Date</th>
+                        <th></th>
+                    </tr>
+                </thead>
 
-            <td>
-              {% if m.total_montant < group.montant_base %}
-                <a href="{% url 'cotisationtontine:initier_versement' m.id %}"
-                   class="btn btn-sm btn-success">
-                  💳 Verser
-                </a>
-              {% else %}
-                <span class="badge bg-secondary">Atteint</span>
-              {% endif %}
-            </td>
+                <tbody>
 
-            <td>
-              {{ m.total_montant|floatformat:0|intcomma }} FCFA
-            </td>
+                {% for v in versements_en_attente_liste %}
 
-            <td>
-              {% if m.last_date %}
-                {{ m.last_date|date:"d/m/Y H:i" }}
-              {% else %}
-                -
-              {% endif %}
-            </td>
+                <tr>
 
-            <td>{{ m.user.phone }}</td>
+                    <td>{{ v.member.user.nom|default:v.member.user.phone }}</td>
 
-          </tr>
-          {% empty %}
-          <tr>
-            <td colspan="5" class="text-center text-muted">
-              Aucun membre
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
+                    <td>
+                        {{ v.montant|floatformat:0|intcomma }} FCFA
+                    </td>
 
-        <tfoot>
-          <tr class="fw-bold table-light">
-            <td colspan="2" class="text-end">Total</td>
-            <td>{{ total_montant|floatformat:0|intcomma }} FCFA</td>
-            <td colspan="2"></td>
-          </tr>
-        </tfoot>
+                    <td>
+                        {{ v.date_creation|date:"d/m/Y H:i" }}
+                    </td>
 
-      </table>
+                    <td>
+
+                        <div class="d-flex gap-2">
+
+                            <a href="{% url 'cotisationtontine:valider_versement' v.id %}"
+                               class="btn btn-sm btn-success">
+
+                               ✅
+
+                            </a>
+
+                            <a href="{% url 'cotisationtontine:refuser_versement' v.id %}"
+                               class="btn btn-sm btn-danger">
+
+                               ❌
+
+                            </a>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+    {% endif %}
+
+    <!-- 👥 Membres -->
+
+    <h4 class="fw-bold mb-3">
+        👥 {{ membres|length }} membre{{ membres|length|pluralize }}
+    </h4>
+
+    <div class="table-responsive shadow-sm">
+
+        <table class="table table-bordered align-middle">
+
+            <thead class="table-light">
+
+                <tr>
+                    <th>Nom</th>
+                    <th>Action</th>
+                    <th>Montant</th>
+                    <th>Dernier versement</th>
+                    <th>Téléphone</th>
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+            {% for m in membres %}
+
+            <tr>
+
+                <td>
+
+                    {{ m.user.nom|default:m.user.phone }}
+
+                    {% if m.user == group.admin %}
+                        <span class="badge bg-success">Admin</span>
+                    {% endif %}
+
+                </td>
+
+                <td>
+
+                    {% if m.total_montant < group.montant_base %}
+
+                    <a href="{% url 'cotisationtontine:initier_versement' m.id %}"
+                       class="btn btn-sm btn-success">
+
+                        💳 Verser
+
+                    </a>
+
+                    {% else %}
+
+                    <span class="badge bg-secondary">
+                        Atteint
+                    </span>
+
+                    {% endif %}
+
+                </td>
+
+                <td>
+                    {{ m.total_montant|floatformat:0|intcomma }} FCFA
+                </td>
+
+                <td>
+
+                    {% if m.last_date %}
+                        {{ m.last_date|date:"d/m/Y H:i" }}
+                    {% else %}
+                        -
+                    {% endif %}
+
+                </td>
+
+                <td>
+                    {{ m.user.phone }}
+                </td>
+
+            </tr>
+
+            {% empty %}
+
+            <tr>
+                <td colspan="5" class="text-center text-muted">
+                    Aucun membre
+                </td>
+            </tr>
+
+            {% endfor %}
+
+            </tbody>
+
+            <tfoot>
+
+            <tr class="fw-bold table-light">
+
+                <td colspan="2" class="text-end">
+                    Total
+                </td>
+
+                <td>
+                    {{ total_montant|floatformat:0|intcomma }} FCFA
+                </td>
+
+                <td colspan="2"></td>
+
+            </tr>
+
+            </tfoot>
+
+        </table>
+
     </div>
 
 </div>
-{% endblock %}
 
+
+<script>
+
+function copyInvite(){
+
+    const copyText = document.getElementById("inviteLink");
+
+    copyText.select();
+    copyText.setSelectionRange(0, 99999);
+
+    document.execCommand("copy");
+
+    alert("Lien copié !");
+
+}
+
+</script>
+
+{% endblock %}

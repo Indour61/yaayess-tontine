@@ -3,60 +3,175 @@
 {% block title %}Dashboard – Cotisation & Tontine{% endblock %}
 
 {% block content %}
-<div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3 flex-wrap">
-  <h1 class="fw-bold text-success mb-0">
-    📊 Tableau de bord Cotisation & Tontine
-  </h1>
-</div>
 
-<!-- Messages flash -->
-{% if messages %}
+<div class="container py-4">
+
+  <!-- HEADER -->
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+
+    <h2 class="fw-bold text-success mb-2">
+      📊 Tableau de bord
+    </h2>
+
+    <span class="text-muted">
+      Cotisation & Tontine
+    </span>
+
+  </div>
+
+
+  <!-- Messages -->
+  {% if messages %}
   <div class="mb-4">
     {% for message in messages %}
-      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm" role="alert">
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm">
         {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
       </div>
     {% endfor %}
   </div>
-{% endif %}
+  {% endif %}
 
-<!-- Actions principales -->
-<div class="mb-4 d-flex flex-wrap gap-2">
-  <a href="{% url 'cotisationtontine:group_list' %}" class="btn btn-outline-success flex-grow-1 flex-md-grow-0">
-    📋 Voir mes groupes
-  </a>
-  <a href="{% url 'cotisationtontine:ajouter_groupe' %}" class="btn btn-success flex-grow-1 flex-md-grow-0">
-    ➕ Créer un groupe
-  </a>
+
+  <!-- ACTIONS PRINCIPALES -->
+  <div class="row g-3 mb-4">
+
+    <div class="col-md-6 col-sm-12">
+
+      <a href="{% url 'cotisationtontine:group_list' %}"
+         class="text-decoration-none">
+
+        <div class="card shadow-sm border-0 dashboard-card">
+
+          <div class="card-body text-center">
+
+            <div style="font-size:32px">📋</div>
+
+            <h5 class="mt-2 mb-1">
+              Mes groupes
+            </h5>
+
+            <small class="text-muted">
+              Voir et gérer vos groupes
+            </small>
+
+          </div>
+
+        </div>
+
+      </a>
+
+    </div>
+
+
+    <div class="col-md-6 col-sm-12">
+
+      <a href="{% url 'cotisationtontine:ajouter_groupe' %}"
+         class="text-decoration-none">
+
+        <div class="card shadow-sm border-0 dashboard-card">
+
+          <div class="card-body text-center">
+
+            <div style="font-size:32px">➕</div>
+
+            <h5 class="mt-2 mb-1">
+              Créer un groupe
+            </h5>
+
+            <small class="text-muted">
+              Lancer une nouvelle tontine
+            </small>
+
+          </div>
+
+        </div>
+
+      </a>
+
+    </div>
+
+  </div>
+
+
+  <!-- HISTORIQUE -->
+  <div class="card shadow-sm border-0">
+
+    <div class="card-header bg-white fw-bold">
+
+      🕘 Dernières actions
+
+    </div>
+
+    <div class="card-body p-0">
+
+      {% if action_logs %}
+
+      <div class="list-group list-group-flush">
+
+        {% for log in action_logs %}
+
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+
+          <div>
+
+            <div class="fw-semibold">
+              {{ log.action }}
+            </div>
+
+            <small class="text-muted">
+              {{ log.date|date:"d/m/Y H:i" }}
+            </small>
+
+          </div>
+
+          <span class="badge bg-success">
+            ✓
+          </span>
+
+        </div>
+
+        {% endfor %}
+
+      </div>
+
+      {% else %}
+
+      <div class="p-4 text-center text-muted">
+
+        <div style="font-size:40px">🔎</div>
+
+        <p class="mt-2 mb-1">
+          Aucune action récente
+        </p>
+
+        <small>
+          Créez un groupe ou effectuez un versement pour voir l'historique.
+        </small>
+
+      </div>
+
+      {% endif %}
+
+    </div>
+
+  </div>
+
 </div>
 
-<hr class="my-4">
 
-<!-- Section dernières actions -->
-<h2 class="h4 mb-3">🕘 Dernières actions</h2>
+<style>
 
-{% if action_logs %}
-  <div class="list-group rounded-3 overflow-hidden shadow-sm">
-    {% for log in action_logs %}
-      <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap">
-        <div class="me-3 flex-grow-1 min-width-0">
-          <span class="fw-semibold text-truncate d-block" title="{{ log.action }}">{{ log.action }}</span>
-          <small class="text-muted">{{ log.date|date:"d/m/Y H:i" }}</small>
-        </div>
-        <span class="badge rounded-pill bg-success-subtle text-success border border-success">
-          ✅
-        </span>
-      </div>
-    {% endfor %}
-  </div>
-{% else %}
-  <div class="alert alert-info mt-3">
-    🔎 Aucune action récente pour le moment. Commencez par créer un groupe ou effectuer un versement pour voir votre historique ici.
-  </div>
-{% endif %}
+.dashboard-card{
+  border-radius:12px;
+  transition:all 0.2s ease;
+}
+
+.dashboard-card:hover{
+  transform:translateY(-3px);
+  box-shadow:0 10px 25px rgba(0,0,0,0.1);
+}
+
+</style>
 
 {% endblock %}
-
-
-

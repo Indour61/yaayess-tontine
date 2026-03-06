@@ -3,17 +3,46 @@
 {% block title %}Rembourser un crédit{% endblock %}
 
 {% block content %}
-<div class="container mt-4" style="max-width: 600px;">
-  <h2 class="mb-4">💸 Rembourser un crédit</h2>
+<div class="container py-4">
 
-  <form method="post" class="shadow p-4 rounded bg-light">
-    {% csrf_token %}
-    {{ form.as_p }}
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6">
 
-    <div class="d-flex gap-2">
-      <button type="submit" class="btn btn-warning flex-fill">Rembourser</button>
-      <a href="{{ cancel_url }}" class="btn btn-secondary flex-fill">Annuler</a>
+            <div class="card shadow border-0">
+
+                <div class="card-header bg-warning text-dark text-center">
+                    <h4 class="mb-0">💸 Remboursement de crédit</h4>
+                </div>
+
+                <div class="card-body">
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            {{ form.as_p }}
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-between">
+
+                            <button type="submit" class="btn btn-warning w-100 w-md-auto">
+                                💳 Confirmer le remboursement
+                            </button>
+
+                            <a href="{{ cancel_url }}" class="btn btn-outline-secondary w-100 w-md-auto">
+                                ❌ Annuler
+                            </a>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
     </div>
-  </form>
+
 </div>
 {% endblock %}

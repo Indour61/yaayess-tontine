@@ -1,17 +1,45 @@
 {% extends 'base.html' %}
 
-{% block title %}🔁 Cycle Réinitialisé{% endblock %}
+{% block title %}Cycle réinitialisé{% endblock %}
 
 {% block content %}
-<div class="container mt-5 text-center" style="max-width: 600px;">
-    <h1 class="text-success fw-bold mb-4">✅ Cycle réinitialisé avec succès</h1>
-    <p class="fs-5">
-        Toutes les cotisations et les anciens tirages du groupe
-        <strong class="text-primary">{{ group.nom }}</strong> ont été supprimés.
-    </p>
+<div class="container py-5">
 
-    <a href="{% url 'epargnecredit:group_detail' group.id %}" class="btn btn-outline-primary mt-4 px-4">
-        ⬅ Retour au groupe
-    </a>
+<div class="row justify-content-center">
+<div class="col-lg-6 col-md-8 col-12">
+
+<div class="card shadow-sm border-0 text-center">
+
+<div class="card-body py-5">
+
+<div class="mb-3" style="font-size: 48px;">
+✅
+</div>
+
+<h3 class="fw-bold text-success mb-3">
+Cycle réinitialisé avec succès
+</h3>
+
+<p class="text-muted fs-5 mb-4">
+Toutes les cotisations et les anciens tirages du groupe
+<br>
+<strong class="text-primary">{{ group.nom }}</strong>
+ont été supprimés.
+</p>
+
+<a href="{% url 'epargnecredit:group_detail' group.id %}"
+class="btn btn-primary px-4">
+
+⬅ Retour au groupe
+
+</a>
+
+</div>
+
+</div>
+
+</div>
+</div>
+
 </div>
 {% endblock %}

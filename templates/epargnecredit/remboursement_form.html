@@ -3,17 +3,76 @@
 {% block title %}Rembourser un crédit{% endblock %}
 
 {% block content %}
-<div class="container mt-4" style="max-width: 600px;">
-  <h2 class="mb-4">💸 Rembourser un crédit</h2>
+<div class="container py-4">
 
-  <form method="post" class="shadow p-4 rounded bg-light">
-    {% csrf_token %}
-    {{ form.as_p }}
+<div class="row justify-content-center">
+<div class="col-lg-6 col-md-8 col-12">
 
-    <div class="d-flex gap-2">
-      <button type="submit" class="btn btn-warning flex-fill">Rembourser</button>
-      <a href="{{ cancel_url }}" class="btn btn-secondary flex-fill">Annuler</a>
-    </div>
-  </form>
+<div class="card shadow-sm border-0">
+
+<div class="card-body">
+
+<!-- Titre -->
+<h4 class="fw-bold text-warning mb-4">
+💸 Rembourser un crédit
+</h4>
+
+<form method="post" novalidate>
+{% csrf_token %}
+
+{% for field in form %}
+
+<div class="mb-3">
+
+<label for="{{ field.id_for_label }}" class="form-label fw-semibold">
+{{ field.label }}
+</label>
+
+{{ field }}
+
+{% if field.help_text %}
+<div class="form-text">
+{{ field.help_text }}
+</div>
+{% endif %}
+
+{% if field.errors %}
+<div class="invalid-feedback d-block">
+{% for error in field.errors %}
+{{ error }}
+{% endfor %}
+</div>
+{% endif %}
+
+</div>
+
+{% endfor %}
+
+<div class="d-flex flex-wrap gap-2 mt-4">
+
+<button type="submit"
+class="btn btn-warning flex-grow-1">
+
+💳 Rembourser
+
+</button>
+
+<a href="{{ cancel_url }}"
+class="btn btn-outline-secondary">
+
+Annuler
+
+</a>
+
+</div>
+
+</form>
+
+</div>
+</div>
+
+</div>
+</div>
+
 </div>
 {% endblock %}

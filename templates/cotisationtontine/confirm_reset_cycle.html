@@ -3,23 +3,78 @@
 {% block title %}Réinitialiser le cycle{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-  <h2 class="text-danger mb-4">⚠️ Réinitialisation du cycle</h2>
 
-  <div class="alert alert-warning" role="alert">
-    <p>Vous êtes sur le point de <strong>supprimer toutes les cotisations et versements</strong> du groupe <strong>{{ group.nom }}</strong>.</p>
-    <p>Cette action est <strong>irréversible</strong>. Confirmez-vous ?</p>
+<div class="container py-5">
+
+  <div class="row justify-content-center">
+
+    <div class="col-lg-6 col-md-8 col-sm-12">
+
+      <div class="card shadow-lg border-0">
+
+        <div class="card-body text-center p-4">
+
+          <!-- Icône -->
+          <div style="font-size:60px;">⚠️</div>
+
+          <h3 class="text-danger fw-bold mt-3 mb-3">
+            Réinitialisation du cycle
+          </h3>
+
+          <p class="text-muted mb-4">
+
+            Vous êtes sur le point de supprimer
+            <strong>toutes les cotisations et versements</strong>
+            du groupe :
+
+          </p>
+
+          <h5 class="fw-bold text-success mb-4">
+            {{ group.nom }}
+          </h5>
+
+          <div class="alert alert-warning">
+
+            Cette action est <strong>irréversible</strong>.
+
+            <br>
+
+            Êtes-vous sûr de vouloir continuer ?
+
+          </div>
+
+          <form method="post">
+
+            {% csrf_token %}
+
+            <div class="d-flex flex-wrap gap-2 mt-4">
+
+              <a href="{% url 'cotisationtontine:group_detail' group.id %}"
+                 class="btn btn-outline-secondary flex-grow-1">
+
+                Annuler
+
+              </a>
+
+              <button type="submit"
+                      class="btn btn-danger flex-grow-1">
+
+                🗑 Réinitialiser le cycle
+
+              </button>
+
+            </div>
+
+          </form>
+
+        </div>
+
+      </div>
+
+    </div>
+
   </div>
 
-  <form method="post" class="d-flex gap-2">
-    {% csrf_token %}
-    <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-secondary flex-grow-1">
-      Annuler
-    </a>
-    <button type="submit" class="btn btn-danger flex-grow-1">
-      ✅ Oui, réinitialiser
-    </button>
-  </form>
 </div>
-{% endblock %}
 
+{% endblock %}
