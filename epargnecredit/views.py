@@ -601,228 +601,121 @@ def group_detail_remboursement(request, group_id):
     group = get_object_or_404(Group, pk=group_id, is_remboursement=True)
     parent = group.parent_group
 
-    # =============================
     # 🔐 Vérification accès
-    # =============================
-    has_access = (
+    if not (
         request.user == group.admin
         or GroupMember.objects.filter(group=group, user=request.user).exists()
         or getattr(request.user, "is_super_admin", False)
-    )
-
-    if not has_access:
+    ):
         messages.error(request, "Accès non autorisé.")
         return redirect("epargnecredit:group_list")
 
-    # =============================
-    # 👥 Membres remboursement
-    # =============================
+    # 👥 Membres
     membres = list(
         GroupMember.objects
         .select_related("user")
         .filter(group=group, actif=True)
-        .order_by("user__nom", "id")
+        .order_by("user__nom")
     )
 
     if not membres:
         return render(request, "epargnecredit/group_detail_remboursement.html", {
             "group": group,
             "membres": [],
-            "title": f"Détails Remboursement — {group.nom}",
-            "totals": {
-                "total_verse": Decimal("0"),
-                "montant_prete_plus_interet": Decimal("0"),
-                "mensualite": Decimal("0"),
-                "penalites": Decimal("0"),
-                "reste_a_rembourser": Decimal("0"),
-            }
+            "totals": {}
         })
 
-    member_ids = [m.id for m in membres]
     user_ids = [m.user_id for m in membres]
 
     # =============================
-    # 💰 Total remboursé par membre
+    # 📌 Tous les prêts
     # =============================
-    totals_map = {}
 
-    for m in membres:
-
-        pret = PretDemande.objects.filter(
-            member__user=m.user,
-            member__group=parent,
-            statut__in=["APPROVED", "CLOSED"]
-        ).order_by("-decided_at", "-id").first()
-
-
-        if not pret:
-            totals_map[m.id] = Decimal("0")
-            continue
-
-        total = (
-                PretRemboursement.objects
-                .filter(pret=pret)
-                .aggregate(total=Sum("montant"))["total"]
-                or Decimal("0")
-        )
-
-        # 🔐 fermeture automatique du prêt
-        if pret.statut != "CLOSED" and total >= pret.total_a_rembourser:
-            pret.statut = "CLOSED"
-            pret.save(update_fields=["statut"])
-
-        totals_map[m.id] = total
-
-    # =============================
-    # 📌 Derniers prêts approuvés
-    # =============================
-    loans_qs = (
+    prets = (
         PretDemande.objects
         .filter(
             member__group=parent,
             member__user_id__in=user_ids,
-            statut="APPROVED"
+            statut__in=["APPROVED", "CLOSED"]
         )
         .select_related("member", "member__user")
-        .order_by("member__user_id", "-decided_at", "-id")
     )
 
-    loans_by_user = {}
-    for d in loans_qs:
-        if d.member.user_id not in loans_by_user:
-            loans_by_user[d.member.user_id] = d
+    # index par utilisateur
+    prets_map = {}
 
-    today = timezone.now().date()
-
-    from calendar import monthrange
-    from datetime import date
-
-    def month_add(d, n):
-        year = d.year + (d.month - 1 + n) // 12
-        month = (d.month - 1 + n) % 12 + 1
-        day = min(d.day, monthrange(year, month)[1])
-        return date(year, month, day)
+    for p in prets:
+        uid = p.member.user_id
+        if uid not in prets_map:
+            prets_map[uid] = p
 
     # =============================
-    # 🧮 Calculs par membre
+    # 💰 Tous les remboursements
     # =============================
+
+    remboursements = (
+        PretRemboursement.objects
+        .filter(pret__in=prets)
+        .values("pret")
+        .annotate(total=Sum("montant"))
+    )
+
+    remboursements_map = {
+        r["pret"]: r["total"] for r in remboursements
+    }
+
+    # =============================
+    # 🧮 Calculs
+    # =============================
+
+    totals = {
+        "total_verse": Decimal("0"),
+        "montant_prete_plus_interet": Decimal("0"),
+        "mensualite": Decimal("0"),
+        "penalites": Decimal("0"),
+        "reste_a_rembourser": Decimal("0"),
+    }
+
     for m in membres:
 
-        m.total_verse = (
-            totals_map.get(m.id, Decimal("0"))
-        ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        pret = prets_map.get(m.user_id)
 
-        d = loans_by_user.get(m.user_id)
-
-        if not d:
+        if not pret:
+            m.total_verse = Decimal("0")
             m.montant_prete_plus_interet = Decimal("0")
             m.mensualite = Decimal("0")
             m.penalites = Decimal("0")
             m.reste_a_rembourser = Decimal("0")
             continue
 
-        principal = Decimal(d.montant or 0)
-        taux = Decimal(d.interet or 0)
-        nb_mois = max(int(d.nb_mois or 1), 1)
-        start_date = d.debut_remboursement or today
+        total_rembourse = remboursements_map.get(pret.id, Decimal("0"))
 
-        # 💰 Intérêt simple
-        interet_total = (
-            principal * (taux / Decimal("100")) * Decimal(nb_mois)
-        ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        total_du = pret.total_a_rembourser
+        mensualite = pret.mensualite
 
-        total_du = (principal + interet_total).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP
-        )
+        reste = max(total_du - total_rembourse, Decimal("0"))
 
-        mensualite = (total_du / Decimal(nb_mois)).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP
-        )
+        # 🔐 fermeture automatique
+        if pret.statut != "CLOSED" and reste == 0:
+            pret.statut = "CLOSED"
+            pret.save(update_fields=["statut"])
 
-        # 📆 Échéances échues
-        echeances_echues = 0
-        last_due_date = None
-
-        for i in range(nb_mois):
-            due_date = month_add(start_date, i)
-            if due_date <= today:
-                echeances_echues += 1
-                last_due_date = due_date
-            else:
-                break
-
-        attendu = (mensualite * Decimal(echeances_echues)).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP
-        )
-
-        attendu = min(attendu, total_du)
-        paye = m.total_verse
-
-        retard = max(attendu - paye, Decimal("0"))
-
-        # =============================
-        # 🔴 Détection retard
-        # =============================
-        m.est_en_retard = False
-        m.jours_retard = 0
-        m.niveau_retard = None  # "leger" | "grave"
-
-        if retard > 0 and last_due_date:
-            m.est_en_retard = True
-            m.jours_retard = (today - last_due_date).days
-
-            if m.jours_retard > 30:
-                m.niveau_retard = "grave"
-            else:
-                m.niveau_retard = "leger"
-
-        # =============================
-        # ⚠️ Pénalité 10% après 10 jours
-        # =============================
-        penalites = Decimal("0")
-
-        if (
-            retard > 0
-            and last_due_date
-            and today > (last_due_date + timedelta(days=10))
-        ):
-            penalites = (retard * Decimal("0.10")).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
-
-        reste_brut = max(total_du - paye, Decimal("0"))
-        reste_final = (reste_brut + penalites).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP)
-
+        m.total_verse = total_rembourse
         m.montant_prete_plus_interet = total_du
         m.mensualite = mensualite
-        m.penalites = penalites
-        m.reste_a_rembourser = reste_final
+        m.penalites = Decimal("0")
+        m.reste_a_rembourser = reste
 
-
-
-    # =============================
-    # 📊 Totaux globaux
-    # =============================
-    totals = {
-        "total_verse": sum(m.total_verse for m in membres),
-        "montant_prete_plus_interet": sum(m.montant_prete_plus_interet for m in membres),
-        "mensualite": sum(m.mensualite for m in membres),
-        "penalites": sum(m.penalites for m in membres),
-        "reste_a_rembourser": sum(m.reste_a_rembourser for m in membres),
-    }
-
-    for k in totals:
-        totals[k] = totals[k].quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        totals["total_verse"] += total_rembourse
+        totals["montant_prete_plus_interet"] += total_du
+        totals["mensualite"] += mensualite
+        totals["reste_a_rembourser"] += reste
 
     return render(request, "epargnecredit/group_detail_remboursement.html", {
         "group": group,
         "membres": membres,
-        "title": f"Détails Remboursement — {group.nom}",
-        "totals": totals,
+        "totals": totals
     })
-
-
 
 # epargnecredit/views.py
 import os
