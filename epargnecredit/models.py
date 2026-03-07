@@ -348,3 +348,50 @@ class PretDemande(models.Model):
         return (self.total_a_rembourser / self.nb_mois) if self.nb_mois else self.total_a_rembourser
 
 
+# =========================================================
+# REMBOURSEMENT DE PRET
+# =========================================================
+
+class PretRemboursement(models.Model):
+
+    STATUTS = (
+        ("EN_ATTENTE", "En attente"),
+        ("VALIDE", "Validé"),
+        ("REFUSE", "Refusé"),
+    )
+
+    pret = models.ForeignKey(
+        PretDemande,
+        on_delete=models.CASCADE,
+        related_name="remboursements"
+    )
+
+    montant = models.DecimalField(max_digits=12, decimal_places=0)
+
+    methode = models.CharField(
+        max_length=20,
+        default="CAISSE"
+    )
+
+    statut = models.CharField(
+        max_length=20,
+        choices=STATUTS,
+        default="VALIDE"
+    )
+
+    transaction_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
+    )
+
+    date_creation = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "epargnecredit_pret_remboursement"
+        ordering = ["-date_creation"]
+
+    def __str__(self):
+        return f"Remboursement {self.pret.member.user} - {self.montant} FCFA"
+
+

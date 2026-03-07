@@ -4,105 +4,170 @@
 {% block title %}Rembourser un crédit{% endblock %}
 
 {% block content %}
+
 <div class="container py-4">
 
-<div class="row justify-content-center">
-<div class="col-lg-6 col-md-8 col-12">
+    <div class="row justify-content-center">
+        <div class="col-xl-5 col-lg-6 col-md-8 col-12">
 
-<div class="card shadow-sm border-0">
+            <!-- Messages Django -->
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show mb-3">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
 
-<div class="card-body">
+            <div class="card shadow border-0">
 
-<h4 class="fw-bold text-success mb-3">
-💰 Remboursement de crédit
-</h4>
+                <div class="card-body p-4">
 
-<p class="text-muted mb-4">
-Membre : <strong>{{ member.user.nom|default:member.user.phone }}</strong><br>
-Groupe : <strong>{{ group.nom }}</strong>
-</p>
+                    <h4 class="fw-bold text-success text-center mb-3">
+                        💰 Remboursement de crédit
+                    </h4>
 
-<form method="post" class="needs-validation" novalidate id="remboursement-form">
+                    <div class="text-center text-muted mb-3">
 
-{% csrf_token %}
+                        <div class="small mb-1">
+                            👤 <strong>{{ member.user.nom|default:member.user.phone }}</strong>
+                        </div>
 
-<div class="mb-3">
+                        <div class="small">
+                            👥 Groupe : <strong>{{ group.nom }}</strong>
+                        </div>
 
-<label class="form-label fw-semibold">
-Montant du remboursement (FCFA)
-</label>
+                    </div>
 
-<input
-type="number"
-name="montant"
-class="form-control form-control-lg"
-min="1"
-step="1"
-inputmode="numeric"
-required
-placeholder="Ex : 10 000">
+                    <!-- Reste à payer -->
+                    {% if reste %}
+                    <div class="alert alert-info text-center py-2 mb-4">
+                        Reste à payer : <strong>{{ reste|intcomma }} FCFA</strong>
+                    </div>
+                    {% endif %}
 
-<div class="invalid-feedback">
-Veuillez saisir un montant valide supérieur à 0.
-</div>
+                    <form method="post" class="needs-validation" novalidate id="remboursement-form">
+                        {% csrf_token %}
 
-</div>
+                        <div class="mb-3">
 
-<div class="d-flex flex-wrap gap-2 mt-4">
+                            <label class="form-label fw-semibold">
+                                Montant du remboursement (FCFA)
+                            </label>
 
-<button type="submit"
-class="btn btn-success flex-grow-1"
-id="submit-btn">
+                            <input
+                                type="number"
+                                name="montant"
+                                class="form-control form-control-lg text-center"
+                                min="1"
+                                step="1"
+                                required
+                                placeholder="Ex : 10000"
+                            >
 
-💳 Payer
+                            <div class="invalid-feedback text-center">
+                                Veuillez saisir un montant valide supérieur à 0.
+                            </div>
 
-</button>
+                        </div>
 
-<a href="{% url 'epargnecredit:group_detail_remboursement' group.id %}"
-class="btn btn-outline-secondary flex-grow-1">
+                        <!-- Montants rapides -->
 
-Annuler
+                        <div class="mb-4">
 
-</a>
+                            <label class="form-label small text-muted">
+                                Montants rapides
+                            </label>
 
-</div>
+                            <div class="d-flex flex-wrap gap-2 justify-content-center">
 
-</form>
+                                <button type="button" class="btn btn-outline-success btn-sm montant-btn" data-value="5000">5 000</button>
+                                <button type="button" class="btn btn-outline-success btn-sm montant-btn" data-value="10000">10 000</button>
+                                <button type="button" class="btn btn-outline-success btn-sm montant-btn" data-value="25000">25 000</button>
+                                <button type="button" class="btn btn-outline-success btn-sm montant-btn" data-value="50000">50 000</button>
 
-</div>
-</div>
+                            </div>
 
-</div>
-</div>
+                        </div>
+
+                        <div class="d-grid gap-2 mt-3">
+
+                            <button
+                                type="submit"
+                                class="btn btn-success btn-lg"
+                                id="submit-btn"
+                            >
+                                💳 Payer le remboursement
+                            </button>
+
+                            <a
+                                href="{% url 'epargnecredit:group_detail_remboursement' group.id %}"
+                                class="btn btn-outline-secondary"
+                            >
+                                Annuler
+                            </a>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+    </div>
 
 </div>
 
 
 <script>
 
-// validation Bootstrap + blocage double paiement
-(() => {
+document.addEventListener("DOMContentLoaded", function () {
 
-'use strict'
+    const form = document.getElementById("remboursement-form");
+    const submitBtn = document.getElementById("submit-btn");
+    const montantInput = document.querySelector('input[name="montant"]');
+    const buttons = document.querySelectorAll(".montant-btn");
 
-const form = document.getElementById('remboursement-form')
-const submitBtn = document.getElementById('submit-btn')
+    if (!form || !montantInput) return;
 
-form.addEventListener('submit', function(event){
+    /* validation bootstrap */
 
-if(!form.checkValidity()){
-event.preventDefault()
-event.stopPropagation()
-}else{
-submitBtn.disabled = true
-submitBtn.innerText = "Traitement..."
-}
+    form.addEventListener("submit", function (event) {
 
-form.classList.add('was-validated')
+        if (!form.checkValidity()) {
 
-}, false)
+            event.preventDefault();
+            event.stopPropagation();
 
-})()
+        } else {
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = "⏳ Traitement du paiement...";
+
+        }
+
+        form.classList.add("was-validated");
+
+    });
+
+
+    /* boutons montants rapides */
+
+    buttons.forEach(btn => {
+
+        btn.addEventListener("click", () => {
+
+            montantInput.value = btn.dataset.value;
+            montantInput.focus();
+
+        });
+
+    });
+
+});
 
 </script>
 

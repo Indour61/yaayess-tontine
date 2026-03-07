@@ -593,6 +593,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import timedelta
 from django.db.models import Sum
 from django.utils import timezone
+from .models import PretRemboursement
 
 @login_required
 def group_detail_remboursement(request, group_id):
@@ -641,17 +642,36 @@ def group_detail_remboursement(request, group_id):
     user_ids = [m.user_id for m in membres]
 
     # =============================
-    # 💰 Total versé par membre
+    # 💰 Total remboursé par membre
     # =============================
-    totals_map = {
-        row["member"]: (row["total"] or Decimal("0"))
-        for row in (
-            Versement.objects
-            .filter(member_id__in=member_ids, statut="VALIDE")
-            .values("member")
-            .annotate(total=Sum("montant"))
+    totals_map = {}
+
+    for m in membres:
+
+        pret = PretDemande.objects.filter(
+            member__user=m.user,
+            member__group=parent,
+            statut__in=["APPROVED", "CLOSED"]
+        ).order_by("-decided_at", "-id").first()
+
+
+        if not pret:
+            totals_map[m.id] = Decimal("0")
+            continue
+
+        total = (
+                PretRemboursement.objects
+                .filter(pret=pret)
+                .aggregate(total=Sum("montant"))["total"]
+                or Decimal("0")
         )
-    }
+
+        # 🔐 fermeture automatique du prêt
+        if pret.statut != "CLOSED" and total >= pret.total_a_rembourser:
+            pret.statut = "CLOSED"
+            pret.save(update_fields=["statut"])
+
+        totals_map[m.id] = total
 
     # =============================
     # 📌 Derniers prêts approuvés
@@ -801,6 +821,7 @@ def group_detail_remboursement(request, group_id):
         "title": f"Détails Remboursement — {group.nom}",
         "totals": totals,
     })
+
 
 
 # epargnecredit/views.py
@@ -1149,59 +1170,111 @@ from django.utils import timezone
 from .models import GroupMember, PretDemande
 from .forms import PretDemandeForm
 
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect, get_object_or_404
+from django.db import transaction, IntegrityError
+from django.contrib import messages
+
+from .models import GroupMember, PretDemande
+from .forms import PretDemandeForm
+
+
 @login_required
 @transaction.atomic
 def demande_pret(request, member_id: int):
+
     member = get_object_or_404(
         GroupMember.objects.select_related("user", "group"),
         id=member_id
     )
+
     group = member.group
 
-    # Permissions
-    is_self = (request.user == member.user)
-    is_group_admin = (request.user == getattr(group, "admin", None))
-    is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+    # ---------------------------------------------------
+    # 🔐 Vérification permissions
+    # ---------------------------------------------------
+
+    is_self = request.user == member.user
+    is_group_admin = request.user == getattr(group, "admin", None)
+    is_super_admin = getattr(request.user, "is_super_admin", False)
 
     if not (is_self or is_group_admin or is_super_admin):
         messages.error(request, "Vous n’avez pas les droits pour créer une demande de prêt.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
+    # ---------------------------------------------------
+    # 🔄 Traitement formulaire
+    # ---------------------------------------------------
+
     if request.method == "POST":
+
         form = PretDemandeForm(request.POST)
 
         if form.is_valid():
 
-            # 🔒 1) Bloquer si prêt en attente
-            if PretDemande.objects.filter(member=member, statut="PENDING").exists():
-                messages.warning(request, "Une demande est déjà en attente.")
+            # ❗ Vérifier demande en attente
+            if PretDemande.objects.filter(
+                member=member,
+                statut="PENDING"
+            ).exists():
+
+                messages.warning(request, "⚠️ Une demande de prêt est déjà en attente.")
                 return redirect("epargnecredit:group_detail", group_id=group.id)
 
-            # 🔒 2) Bloquer si prêt déjà approuvé (actif)
-            if PretDemande.objects.filter(member=member, statut="APPROVED").exists():
-                messages.error(request, "Ce membre a déjà un prêt actif non soldé.")
+            # ❗ Vérifier prêt actif
+            if PretDemande.objects.filter(
+                member=member,
+                statut="APPROVED"
+            ).exists():
+
+                messages.error(request, "❌ Ce membre possède déjà un prêt actif.")
                 return redirect("epargnecredit:group_detail", group_id=group.id)
 
             try:
+
                 demande = form.save(commit=False)
                 demande.member = member
                 demande.statut = "PENDING"
                 demande.save()
-            except IntegrityError:
-                messages.warning(request, "Une demande de prêt est déjà en attente.")
+
+                messages.success(request, "✅ Demande de prêt enregistrée avec succès.")
+
                 return redirect("epargnecredit:group_detail", group_id=group.id)
 
-            messages.success(request, "Demande de prêt enregistrée.")
-            return redirect("epargnecredit:group_detail", group_id=group.id)
+            except IntegrityError:
 
-        return render(request, "epargnecredit/demande_pret_form.html", {
-            "form": form, "member": member, "group": group
-        }, status=400)
+                messages.warning(request, "⚠️ Une demande de prêt est déjà en attente.")
+                return redirect("epargnecredit:group_detail", group_id=group.id)
+
+        # ❗ Formulaire invalide
+        messages.error(request, "Veuillez corriger les erreurs du formulaire.")
+
+        return render(
+            request,
+            "epargnecredit/demande_pret_form.html",
+            {
+                "form": form,
+                "member": member,
+                "group": group
+            },
+            status=400
+        )
+
+    # ---------------------------------------------------
+    # 🔹 GET : afficher formulaire
+    # ---------------------------------------------------
 
     form = PretDemandeForm()
-    return render(request, "epargnecredit/demande_pret_form.html", {
-        "form": form, "member": member, "group": group
-    })
+
+    return render(
+        request,
+        "epargnecredit/demande_pret_form.html",
+        {
+            "form": form,
+            "member": member,
+            "group": group
+        }
+    )
 
 # ------------------------------------------------
 # Valider / Refuser une demande (ADMIN SEULEMENT)
@@ -1324,22 +1397,23 @@ from django.db import transaction, IntegrityError
 
 from .models import Group, GroupMember, Versement, ActionLog, PretDemande
 
+from decimal import Decimal, ROUND_HALF_UP
+from django.db.models import Sum
+
 @login_required
 def pret_remboursement_detail(request, pk: int):
-    """
-    Affiche la répartition du remboursement d'un prêt APPROUVÉ
-    entre les membres actifs du groupe (parts égales).
-    Accessible à l’admin du groupe (ou super_admin).
-    """
+
     demande = get_object_or_404(
         PretDemande.objects.select_related("member", "member__group", "member__user"),
         pk=pk,
     )
+
     group = demande.member.group
 
     # Permissions
-    is_group_admin = (request.user == getattr(group, "admin", None))
-    is_super_admin = bool(getattr(request.user, "is_super_admin", False))
+    is_group_admin = request.user == getattr(group, "admin", None)
+    is_super_admin = getattr(request.user, "is_super_admin", False)
+
     if not (is_group_admin or is_super_admin):
         messages.error(request, "Seul l’admin du groupe peut consulter cette page.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
@@ -1348,37 +1422,54 @@ def pret_remboursement_detail(request, pk: int):
         messages.info(request, "Cette demande n'est pas approuvée.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
-    # Membres actifs du groupe (si le champ 'actif' existe)
+    # Membres actifs
     membres_qs = GroupMember.objects.filter(group=group).select_related("user")
-    if "actif" in {f.name for f in GroupMember._meta.get_fields()}:
+
+    if hasattr(GroupMember, "actif"):
         membres_qs = membres_qs.filter(actif=True)
 
-    nb_membres = membres_qs.count() or 1  # garde-fou
+    nb_membres = membres_qs.count() or 1
 
-    # Totaux (entiers FCFA)
-    total = demande.total_a_rembourser
-    try:
-        total = Decimal(total).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-    except Exception:
-        total = Decimal("0")
+    # Totaux
+    total = Decimal(demande.total_a_rembourser).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
 
-    mensualite = demande.mensualite
-    try:
-        mensualite = Decimal(mensualite).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-    except Exception:
-        mensualite = Decimal("0")
+    mensualite = Decimal(demande.mensualite).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
 
-    # Part par membre (totale & mensuelle)
+    # Part par membre
     part_totale = (total / nb_membres).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-    part_mensuelle = (mensualite / nb_membres).quantize(Decimal("1"), rounding=ROUND_HALF_UP) if demande.nb_mois else part_totale
 
-    # Préparer la liste pour le template
+    part_mensuelle = (
+        (mensualite / nb_membres).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        if demande.nb_mois
+        else part_totale
+    )
+
     repartition = []
+
     for m in membres_qs.order_by("id"):
+
+        # total remboursé par ce membre
+        rembourse = PretRemboursement.objects.filter(
+            pret=demande,
+            pret__member__user=m.user
+        ).aggregate(total=Sum("montant"))["total"] or Decimal("0")
+
+        rembourse = Decimal(rembourse).quantize(Decimal("1"))
+
+        reste = part_totale - rembourse
+        if reste < 0:
+            reste = Decimal("0")
+
         repartition.append({
             "member": m,
             "part_totale": part_totale,
             "part_mensuelle": part_mensuelle,
+            "verse": rembourse,
+            "reste": reste,
         })
 
     context = {
@@ -1389,7 +1480,12 @@ def pret_remboursement_detail(request, pk: int):
         "mensualite": mensualite,
         "nb_membres": nb_membres,
     }
-    return render(request, "epargnecredit/pret_remboursement_detail.html", context)
+
+    return render(
+        request,
+        "epargnecredit/pret_remboursement_detail.html",
+        context
+    )
 
 # epargnecredit/views.py
 from decimal import Decimal
@@ -1586,6 +1682,108 @@ def initier_paiement_remboursement(request, member_id: int):
     context = {
         "member": member,
         "group": group,
+    }
+
+    return render(
+        request,
+        "epargnecredit/initier_paiement_remboursement.html",
+        context
+    )
+
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
+from decimal import Decimal
+from .models import GroupMember, PretDemande, PretRemboursement
+
+@login_required
+def initier_paiement_remboursement(request, member_id):
+
+    member = get_object_or_404(
+        GroupMember.objects.select_related("group", "user"),
+        id=member_id
+    )
+
+    group = member.group
+
+    # récupérer groupe parent (groupe épargne)
+    parent_group = group.parent_group if group.parent_group else group
+
+    # récupérer le prêt approuvé
+    pret = PretDemande.objects.filter(
+        member__user=member.user,
+        member__group=parent_group,
+        statut="APPROVED"
+    ).order_by("-created_at").first()
+
+    if not pret:
+        messages.error(request, "Aucun crédit actif pour ce membre.")
+        return redirect("epargnecredit:group_detail_remboursement", group.id)
+
+    # calcul remboursement actuel
+    total_rembourse = pret.remboursements.aggregate(
+        total=Sum("montant")
+    )["total"] or Decimal("0")
+
+    reste = pret.total_a_rembourser - total_rembourse
+
+    if request.method == "POST":
+
+        montant_str = request.POST.get("montant", "").strip()
+
+        if not montant_str:
+            messages.error(request, "Veuillez saisir un montant.")
+            return redirect(
+                "epargnecredit:initier_paiement_remboursement",
+                member_id=member.id
+            )
+
+        try:
+
+            # 🔧 conversion robuste
+            montant_str = montant_str.replace(" ", "").replace(",", "")
+            montant = Decimal(montant_str)
+
+            if montant <= 0:
+                raise ValueError("Montant invalide")
+
+            if montant > reste:
+                messages.error(
+                    request,
+                    f"Le montant dépasse le reste à payer ({reste:,.0f} FCFA)."
+                )
+                return redirect(
+                    "epargnecredit:initier_paiement_remboursement",
+                    member_id=member.id
+                )
+
+            # enregistrer remboursement
+            PretRemboursement.objects.create(
+                pret=pret,
+                montant=montant,
+                methode="MANUEL",
+                statut="VALIDE"
+            )
+
+            messages.success(
+                request,
+                f"Remboursement de {montant:,.0f} FCFA enregistré."
+            )
+
+            return redirect(
+                "epargnecredit:group_detail_remboursement",
+                group.id
+            )
+
+        except Exception as e:
+            print("Erreur conversion montant :", e)
+            messages.error(request, "Montant invalide.")
+
+    context = {
+        "member": member,
+        "group": group,
+        "pret": pret,
+        "reste": reste,
     }
 
     return render(
