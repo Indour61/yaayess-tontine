@@ -3,12 +3,12 @@
 
 {% block content %}
 <div class="container mt-4">
-  <!-- Messages Django -->
+
   {% if messages %}
     {% for message in messages %}
-      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show">
         {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fermer"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
       </div>
     {% endfor %}
   {% endif %}
@@ -18,27 +18,32 @@
       Effectuer un versement pour
       <strong>{{ member.user.nom|default:member.user.phone }}</strong>
     </h2>
-    <a href="{% url 'cotisationtontine:group_detail' member.group.id %}" class="btn btn-outline-secondary">
+
+    <a href="{% url 'cotisationtontine:group_detail' member.group.id %}"
+       class="btn btn-outline-secondary">
       ← Retour au groupe
     </a>
   </div>
 
   <p class="text-muted mb-4">
-    Groupe : <strong>{{ member.group.nom }}</strong> • Montant de base : <strong>{{ member.group.montant_base|floatformat:0 }} FCFA</strong>
+    Groupe : <strong>{{ member.group.nom }}</strong>
+    • Montant de base :
+    <strong>{{ member.group.montant_base|floatformat:0 }} FCFA</strong>
   </p>
 
   <form method="post" id="versement-form" class="needs-validation" novalidate>
     {% csrf_token %}
 
-    <!-- Méthode forcée à PayDunya -->
     <input type="hidden" name="methode" value="paydunya" />
 
     <div class="row g-3">
-      <!-- Montant -->
+
       <div class="col-12 col-md-6">
-        <label for="montant" class="form-label">Montant à verser (FCFA)</label>
+        <label class="form-label">Montant à verser (FCFA)</label>
+
         <div class="input-group">
           <span class="input-group-text">FCFA</span>
+
           <input
             type="number"
             class="form-control"
@@ -48,108 +53,112 @@
             step="1"
             required
             placeholder="Ex: 5000"
-            inputmode="numeric"
-            autocomplete="off"
           >
         </div>
-        <div class="form-text">Saisissez un montant positif. Les décimales seront arrondies automatiquement.</div>
-        <div class="invalid-feedback">Veuillez saisir un montant valide supérieur à 0.</div>
-      </div>
-    </div>
 
-    <!-- Récap frais -->
-    <div class="card mt-3" id="frais-card" style="display:none;">
-      <div class="card-body">
-        <div class="d-flex flex-wrap align-items-center justify-content-between">
-          <div class="me-3">
-            <div class="mb-1">🧾 <strong>Frais estimés</strong> (2,5% + 75 FCFA) : <span id="frais" class="fw-semibold">0</span> FCFA</div>
-            <div>💳 <strong>Total à payer</strong> : <span id="total" class="fw-semibold">0</span> FCFA</div>
-          </div>
-          <div class="text-muted small">
-            * Le total affiché est calculé à titre indicatif avant redirection.
-          </div>
+        <div class="form-text">
+          Saisissez un montant positif.
         </div>
+
+        <div class="invalid-feedback">
+          Veuillez saisir un montant valide.
+        </div>
+
       </div>
     </div>
 
-    <!-- Boutons -->
+
+    <!-- Récapitulatif -->
+    <div class="card mt-3" id="resume-card" style="display:none;">
+      <div class="card-body">
+
+        <div class="d-flex justify-content-between">
+
+          <div>
+            💳 <strong>Total à payer :</strong>
+            <span id="total" class="fw-bold">0</span> FCFA
+          </div>
+
+          <div class="text-muted small">
+            Aucun frais appliqué
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+
     <div class="mt-3 d-flex align-items-center">
-      <button type="submit" class="btn btn-success" id="submit-btn">
+
+      <button type="submit"
+              class="btn btn-success"
+              id="submit-btn">
         💳 Caisse
       </button>
-      <button type="button" class="btn btn-link d-none" id="loading-btn" disabled>
-        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+
+      <button type="button"
+              class="btn btn-link d-none"
+              id="loading-btn"
+              disabled>
+
+        <span class="spinner-border spinner-border-sm"></span>
         Traitement en cours…
+
       </button>
-      <a href="{% url 'cotisationtontine:group_detail' member.group.id %}" class="btn btn-secondary ms-2">Annuler</a>
+
+      <a href="{% url 'cotisationtontine:group_detail' member.group.id %}"
+         class="btn btn-secondary ms-2">
+         Annuler
+      </a>
+
     </div>
+
   </form>
+
 </div>
 
+
 <script>
-(function () {
-  'use strict';
 
-  const form = document.getElementById('versement-form');
-  const montantInput = document.getElementById('montant');
-  const fraisCard = document.getElementById('frais-card');
-  const fraisEl = document.getElementById('frais');
-  const totalEl = document.getElementById('total');
-  const submitBtn = document.getElementById('submit-btn');
-  const loadingBtn = document.getElementById('loading-btn');
+const montantInput = document.getElementById("montant")
+const totalEl = document.getElementById("total")
+const resumeCard = document.getElementById("resume-card")
 
-  // Formatage simple des nombres (séparateurs de milliers)
-  const fmt = new Intl.NumberFormat('fr-FR');
+const submitBtn = document.getElementById("submit-btn")
+const loadingBtn = document.getElementById("loading-btn")
 
-  function arrondiFCFA(val) {
-    if (isNaN(val)) return 0;
-    return Math.round(Number(val));
-  }
+const fmt = new Intl.NumberFormat('fr-FR')
 
-  function updateFrais() {
-    let montant = parseFloat(montantInput.value);
-    if (isNaN(montant) || montant <= 0) {
-      fraisCard.style.display = 'none';
-      return;
+function updateTotal(){
+
+    let montant = parseFloat(montantInput.value)
+
+    if(isNaN(montant) || montant <= 0){
+
+        resumeCard.style.display = "none"
+        return
     }
 
-    // Frais PayDunya: 2,5% + 75 FCFA (aligné avec la vue)
-    const fraisPourcent = montant * 0.025;
-    const fraisFixe = 75;
-    const fraisTotal = arrondiFCFA(fraisPourcent + fraisFixe);
-    const total = arrondiFCFA(montant + fraisTotal);
+    montant = Math.round(montant)
 
-    fraisEl.textContent = fmt.format(fraisTotal);
-    totalEl.textContent = fmt.format(total);
-    fraisCard.style.display = 'block';
-  }
+    totalEl.textContent = fmt.format(montant)
 
-  // Empêcher le double-submit + état chargement
-  form.addEventListener('submit', (event) => {
-    if (!form.checkValidity()) {
-      event.preventDefault();
-      event.stopPropagation();
-    } else {
-      // Verrouille l’UI si valide
-      submitBtn.disabled = true;
-      loadingBtn.classList.remove('d-none');
-    }
-    form.classList.add('was-validated');
-  });
+    resumeCard.style.display = "block"
 
-  // Arrondir automatiquement à la sortie du champ
-  montantInput.addEventListener('blur', () => {
-    const v = parseFloat(montantInput.value);
-    if (!isNaN(v) && v > 0) {
-      montantInput.value = arrondiFCFA(v);
-    }
-  });
+}
 
-  // Interactions
-  montantInput.addEventListener('input', updateFrais);
+montantInput.addEventListener("input", updateTotal)
 
-  // Init
-  updateFrais();
-})();
+document.getElementById("versement-form")
+.addEventListener("submit", function(){
+
+    submitBtn.disabled = true
+    loadingBtn.classList.remove("d-none")
+
+})
+
 </script>
+
 {% endblock %}
+
