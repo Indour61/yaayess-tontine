@@ -92,7 +92,6 @@ font-size:1.25rem;
 <body>
 
 <!-- NAVBAR -->
-
 <nav class="navbar navbar-expand-lg navbar-dark bg-success fixed-top shadow-sm">
 
 <div class="container">
@@ -112,16 +111,9 @@ YaayESS
 
 {% if user.is_authenticated %}
 
-{% if user.type_adhesion == 1 %}
+<!-- DASHBOARD SELON OPTION UTILISATEUR -->
 
-<li class="nav-item">
-<a class="nav-link" href="{% url 'epargnecredit:dashboard_epargne_credit' %}">
-<i class="fas fa-chart-line me-1"></i>
-Dashboard Épargne
-</a>
-</li>
-
-{% elif user.type_adhesion == 2 %}
+{% if user.option == "1" %}
 
 <li class="nav-item">
 <a class="nav-link" href="{% url 'cotisationtontine:dashboard_tontine_simple' %}">
@@ -130,11 +122,37 @@ Dashboard Tontine
 </a>
 </li>
 
+{% elif user.option == "2" %}
+
+<li class="nav-item">
+<a class="nav-link" href="{% url 'epargnecredit:dashboard_epargne_credit' %}">
+<i class="fas fa-chart-line me-1"></i>
+Dashboard Épargne
+</a>
+</li>
+
 {% endif %}
+
+
+<!-- DASHBOARD SAAS (SUPER ADMIN SEULEMENT) -->
+
+{% if user.is_super_admin %}
+
+<li class="nav-item">
+<a class="nav-link text-warning fw-bold" href="{% url 'accounts:saas_dashboard' %}">
+<i class="fas fa-chart-pie me-1"></i>
+SaaS Dashboard
+</a>
+</li>
+
+{% endif %}
+
+
+<!-- MENU UTILISATEUR -->
 
 <li class="nav-item dropdown">
 
-<a class="nav-link dropdown-toggle" data-bs-toggle="dropdown">
+<a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
 <i class="fas fa-user-circle me-1"></i>
 {{ user.nom|default:user.phone }}
 </a>
@@ -190,7 +208,6 @@ Inscription
 </div>
 
 </nav>
-
 <!-- MAIN -->
 
 <main class="container my-4">

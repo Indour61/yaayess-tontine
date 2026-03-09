@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}SaaS Dashboard{% endblock %}
+
+{% block content %}
+
+<div class="container-fluid">
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
+<h2 class="mb-2">
+<i class="fas fa-chart-pie me-2"></i>
+SaaS Dashboard
+</h2>
+</div>
+
+
+<!-- STATISTIQUES -->
+
+<div class="row g-3">
+
+<div class="col-xl-3 col-lg-6 col-md-6 col-sm-12">
+<div class="card shadow-sm h-100 text-center border-0">
+<div class="card-body">
+<i class="fas fa-users fa-2x text-primary mb-2"></i>
+<h6 class="text-muted">Utilisateurs</h6>
+<h3 class="fw-bold">{{ total_users }}</h3>
+</div>
+</div>
+</div>
+
+<div class="col-xl-3 col-lg-6 col-md-6 col-sm-12">
+<div class="card shadow-sm h-100 text-center border-0">
+<div class="card-body">
+<i class="fas fa-layer-group fa-2x text-success mb-2"></i>
+<h6 class="text-muted">Groupes</h6>
+<h3 class="fw-bold">{{ total_groups }}</h3>
+</div>
+</div>
+</div>
+
+<div class="col-xl-3 col-lg-6 col-md-6 col-sm-12">
+<div class="card shadow-sm h-100 text-center border-0">
+<div class="card-body">
+<i class="fas fa-user-friends fa-2x text-info mb-2"></i>
+<h6 class="text-muted">Membres</h6>
+<h3 class="fw-bold">{{ total_members }}</h3>
+</div>
+</div>
+</div>
+
+<div class="col-xl-3 col-lg-6 col-md-6 col-sm-12">
+<div class="card shadow-sm h-100 text-center border-0">
+<div class="card-body">
+<i class="fas fa-money-bill-wave fa-2x text-warning mb-2"></i>
+<h6 class="text-muted">Versements</h6>
+<h3 class="fw-bold">{{ total_versements }}</h3>
+</div>
+</div>
+</div>
+
+</div>
+
+
+<!-- REVENUS -->
+
+<div class="row g-3 mt-3">
+
+<div class="col-lg-6 col-md-12">
+<div class="card shadow-sm border-0 text-center h-100">
+<div class="card-body">
+<h6 class="text-muted">Revenus plateforme</h6>
+<h3 class="text-success fw-bold">
+{{ revenus_plateforme|default:0|intcomma }} FCFA
+</h3>
+</div>
+</div>
+</div>
+
+<div class="col-lg-6 col-md-12">
+<div class="card shadow-sm border-0 text-center h-100">
+<div class="card-body">
+<h6 class="text-muted">Abonnements expirés</h6>
+<h3 class="text-danger fw-bold">
+{{ abonnements_expired|default:0 }}
+</h3>
+</div>
+</div>
+</div>
+
+</div>
+
+
+<!-- TABLEAU UTILISATEURS -->
+
+<div class="card shadow-sm border-0 mt-4">
+
+<div class="card-header bg-white">
+<h5 class="mb-0">
+<i class="fas fa-user me-2"></i>
+Derniers utilisateurs
+</h5>
+</div>
+
+<div class="card-body p-0">
+
+<div class="table-responsive">
+
+<table class="table table-hover align-middle mb-0">
+
+<thead class="table-light">
+<tr>
+<th>Nom</th>
+<th>Téléphone</th>
+<th>Abonnement</th>
+<th class="text-center">Action</th>
+</tr>
+</thead>
+
+<tbody>
+
+{% for user in users %}
+
+<tr>
+
+<td>
+<strong>{{ user.nom }}</strong>
+</td>
+
+<td>{{ user.phone }}</td>
+
+<td>
+
+{% if user.abonnement_actif %}
+<span class="badge bg-success">
+<i class="fas fa-check me-1"></i>Actif
+</span>
+{% else %}
+<span class="badge bg-danger">
+<i class="fas fa-ban me-1"></i>Bloqué
+</span>
+{% endif %}
+
+</td>
+
+<td class="text-center">
+
+<a class="btn btn-sm btn-warning"
+href="{% url 'accounts:toggle_user_access' user.id %}">
+
+<i class="fas fa-power-off me-1"></i>
+Activer / Bloquer
+
+</a>
+
+</td>
+
+</tr>
+
+{% empty %}
+
+<tr>
+<td colspan="4" class="text-center text-muted py-4">
+Aucun utilisateur trouvé
+</td>
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+{% endblock %}

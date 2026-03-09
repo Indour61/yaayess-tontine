@@ -85,91 +85,114 @@ from .models import Group, ActionLog, Versement
 @login_required
 def dashboard_epargne_credit(request):
 
-    try:
-        attente_url = reverse("accounts:attente_validation")
-    except NoReverseMatch:
-        attente_url = reverse("accounts:login")
+    user = request.user
 
-    if not request.user.is_superuser and not getattr(request.user, "is_validated", False):
+    # ====================================
+    # 🔒 Vérification validation utilisateur
+    # ====================================
+
+    if not user.is_superuser and not getattr(user, "is_validated", False):
+
+        attente_url = "accounts:attente_validation"
+
+        if not resolve_url(attente_url):
+            attente_url = "accounts:login"
+
         messages.error(
             request,
             "⛔ Votre compte doit être validé par l’administrateur avant d’accéder à l’application Épargne & Crédit."
         )
+
         return redirect(attente_url)
 
-    # ============================
-    # Groupes
-    # ============================
+    # ====================================
+    # 📌 Groupes administrés
+    # ====================================
 
-    groupes_admin = Group.objects.filter(admin=request.user)
-
-    groupes_membre = Group.objects.filter(
-        membres_ec=request.user   # ✅ CORRECTION FINALE
-    ).exclude(admin=request.user).distinct()
-
-    # ============================
-    # Actions récentes
-    # ============================
-
-    dernieres_actions = ActionLog.objects.filter(
-        user=request.user
-    ).order_by('-date')[:10]
-
-    # ============================
-    # Total versements validés utilisateur
-    # ============================
-
-    total_versements = (
-        Versement.objects.filter(
-            member__user=request.user,
-            statut="VALIDE"
-        ).aggregate(total=Sum('montant'))['total'] or 0
+    groupes_admin = (
+        Group.objects
+        .filter(admin=user)
+        .prefetch_related("membres_ec")
+        .order_by("-date_creation")
     )
 
-    # ============================
-    # Total groupes
-    # ============================
+    # ====================================
+    # 👥 Groupes membre
+    # ====================================
 
-    total_groupes = groupes_membre.count() + groupes_admin.count()
+    groupes_membre = (
+        Group.objects
+        .filter(membres_ec=user)
+        .exclude(admin=user)
+        .distinct()
+    )
 
-    # ============================
-    # Versements récents (30 jours)
-    # ============================
+    # ====================================
+    # 📝 Actions récentes
+    # ====================================
+
+    dernieres_actions = (
+        ActionLog.objects
+        .filter(user=user)
+        .select_related("group")
+        .order_by("-date")[:10]
+    )
+
+    # ====================================
+    # 💰 Total versements utilisateur
+    # ====================================
+
+    total_versements = (
+        Versement.objects
+        .filter(member__user=user, statut="VALIDE")
+        .aggregate(total=Sum("montant"))["total"] or 0
+    )
+
+    # ====================================
+    # 📊 Total groupes utilisateur
+    # ====================================
+
+    total_groupes = (
+        Group.objects
+        .filter(
+            Q(admin=user) | Q(membres_ec=user)
+        )
+        .distinct()
+        .count()
+    )
+
+    # ====================================
+    # 📅 Versements récents
+    # ====================================
 
     date_limite = timezone.now() - timedelta(days=30)
 
     versements_recents = (
-        Versement.objects.filter(
-            member__user=request.user,
+        Versement.objects
+        .filter(
+            member__user=user,
             date_creation__gte=date_limite
         )
-        .select_related('member__user', 'member__group')
-        .order_by('-date_creation')[:5]
+        .select_related("member__group")
+        .order_by("-date_creation")[:5]
     )
 
-    # ============================
-    # Statistiques groupes admin
-    # ============================
+    # ====================================
+    # 📈 Statistiques groupes admin (optimisé)
+    # ====================================
 
-    stats_groupes_admin = []
-
-    for groupe in groupes_admin:
-
-        total_membres = groupe.membres_ec.count()
-
-        total_versements_groupe = (
-            Versement.objects.filter(
-                member__group=groupe,
-                statut="VALIDE"
-            )
-            .aggregate(total=Sum('montant'))['total'] or 0
+    stats_groupes_admin = (
+        Versement.objects
+        .filter(member__group__admin=user, statut="VALIDE")
+        .values("member__group__id", "member__group__nom")
+        .annotate(
+            versements_total=Sum("montant")
         )
+    )
 
-        stats_groupes_admin.append({
-            'groupe': groupe,
-            'membres_count': total_membres,
-            'versements_total': total_versements_groupe
-        })
+    # ====================================
+    # 📦 Context
+    # ====================================
 
     context = {
         "groupes_admin": groupes_admin,
@@ -181,11 +204,17 @@ def dashboard_epargne_credit(request):
         "stats_groupes_admin": stats_groupes_admin,
     }
 
-    return render(request, "epargnecredit/dashboard.html", context)
+    return render(
+        request,
+        "epargnecredit/dashboard.html",
+        context
+    )
 
-# Optionnel : vue simple fallback
+
+# fallback simple
 def dashboard_view(request):
     return render(request, "epargnecredit/dashboard.html")
+
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required

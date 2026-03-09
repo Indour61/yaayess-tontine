@@ -7,6 +7,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .views import MeView
 from .views import RegisterAPIView
 from .views import LoginAPIView
+from .views_admin import saas_dashboard, toggle_group_access
 
 class PhoneTokenObtainPairView(TokenObtainPairView):
     serializer_class = PhoneTokenObtainPairSerializer
@@ -29,5 +30,29 @@ urlpatterns = [
 
     path("api/login/", LoginAPIView.as_view(), name="api_login"),
 
+    path(
+        "super-admin/dashboard/",
+        saas_dashboard,
+        name="saas_dashboard"
+    ),
+
+    path(
+        "super-admin/toggle-user/<int:user_id>/",
+        toggle_group_access,
+        name="toggle_group_access"
+    ),
+    path(
+        "saas-dashboard/",
+        saas_dashboard,
+        name="saas_dashboard"
+    ),
+
+    path(
+        "toggle-group/<int:group_id>/",
+        toggle_group_access,
+        name="toggle_group_access"
+    ),
+
 ]
+
 

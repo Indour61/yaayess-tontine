@@ -33,14 +33,19 @@ from .models import Group, Versement, ActionLog
 @login_required
 def dashboard_tontine_simple(request):
     """
-    Dashboard principal utilisateur Tontine
-    - Groupes admin
-    - Groupes membre
-    - Statistiques personnelles
-    - Activité récente
+    Dashboard principal Tontine
+    - visible uniquement si l'utilisateur administre un groupe
     """
 
     user = request.user
+
+    # =====================================================
+    # 🔒 Sécurité : vérifier admin groupe
+    # =====================================================
+
+    if not Group.objects.filter(admin=user).exists():
+        messages.error(request, "Accès réservé à l'administrateur du groupe.")
+        return redirect("landing")
 
     # =====================================================
     # 📌 Groupes administrés
@@ -50,6 +55,7 @@ def dashboard_tontine_simple(request):
         Group.objects
         .filter(admin=user)
         .prefetch_related("membres")
+        .order_by("-date_creation")
     )
 
     # =====================================================
@@ -75,20 +81,17 @@ def dashboard_tontine_simple(request):
     )
 
     # =====================================================
-    # 💰 Total versements VALIDÉS utilisateur
+    # 💰 Total versements utilisateur
     # =====================================================
 
     total_versements = (
         Versement.objects
-        .filter(
-            member__user=user,
-            statut="VALIDE"
-        )
+        .filter(member__user=user, statut="VALIDE")
         .aggregate(total=Sum("montant"))["total"] or 0
     )
 
     # =====================================================
-    # 📊 Nombre total groupes
+    # 📊 Nombre total groupes utilisateur
     # =====================================================
 
     total_groupes = (
@@ -115,29 +118,17 @@ def dashboard_tontine_simple(request):
     )
 
     # =====================================================
-    # 📈 Stats groupes administrés
+    # 📈 Stats groupes administrés (optimisé)
     # =====================================================
 
-    stats_groupes_admin = []
-
-    for groupe in groupes_admin:
-
-        total_membres = groupe.membres.count()
-
-        total_versements_groupe = (
-            Versement.objects
-            .filter(
-                member__group=groupe,
-                statut="VALIDE"
-            )
-            .aggregate(total=Sum("montant"))["total"] or 0
+    stats_groupes_admin = (
+        Versement.objects
+        .filter(member__group__admin=user, statut="VALIDE")
+        .values("member__group__id", "member__group__nom")
+        .annotate(
+            versements_total=Sum("montant")
         )
-
-        stats_groupes_admin.append({
-            "groupe": groupe,
-            "membres_count": total_membres,
-            "versements_total": total_versements_groupe,
-        })
+    )
 
     # =====================================================
     # 📦 Context final
@@ -153,7 +144,11 @@ def dashboard_tontine_simple(request):
         "stats_groupes_admin": stats_groupes_admin,
     }
 
-    return render(request, "cotisationtontine/dashboard.html", context)
+    return render(
+        request,
+        "cotisationtontine/dashboard.html",
+        context
+    )
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
