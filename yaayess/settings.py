@@ -47,12 +47,37 @@ DATABASES = {
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+#    SESSION_COOKIE_SECURE = True
+#    CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
+DEBUG = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]
+
+CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = False
+
+
+# sécurité production
+if not DEBUG:
+
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    SECURE_SSL_REDIRECT = True
+
+    SESSION_COOKIE_SECURE = True
+
+    CSRF_COOKIE_SECURE = True
+
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # ----------------------------------------------------
 # 🌍 OPENAI
@@ -139,21 +164,29 @@ AUTHENTICATION_BACKENDS = [
 # ⚙️ MIDDLEWARE
 # ----------------------------------------------------
 
-
 MIDDLEWARE = [
+
     'django.middleware.security.SecurityMiddleware',
+
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    "corsheaders.middleware.CorsMiddleware",
+
     'django.contrib.sessions.middleware.SessionMiddleware',
+
+    'corsheaders.middleware.CorsMiddleware',
+
     'django.middleware.common.CommonMiddleware',
+
     'django.middleware.csrf.CsrfViewMiddleware',
+
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+
     'django.contrib.messages.middleware.MessageMiddleware',
+
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    "legal.middleware.TermsGateMiddleware"
+
+    "legal.middleware.TermsGateMiddleware",
 
 ]
-
 
 ROOT_URLCONF = 'yaayess.urls'
 WSGI_APPLICATION = 'yaayess.wsgi.application'
@@ -191,10 +224,15 @@ EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"] # Doit être défini
 # 🔑 AUTHENTICATION
 # ----------------------------------------------------
 
-AUTH_USER_MODEL = 'accounts.CustomUser'
-LOGIN_URL = '/login/'
-LOGIN_REDIRECT_URL = '/'
-LOGOUT_REDIRECT_URL = '/'
+#AUTH_USER_MODEL = 'accounts.CustomUser'
+#LOGIN_URL = '/login/'
+#LOGIN_REDIRECT_URL = '/'
+#LOGOUT_REDIRECT_URL = '/'
+
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/tontine/dashboard/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
+
 
 # ----------------------------------------------------
 # 🌍 INTERNATIONALIZATION

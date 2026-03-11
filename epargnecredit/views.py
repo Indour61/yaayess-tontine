@@ -69,9 +69,7 @@ try:
 except Exception:
     ActionLog = None  # on gérera plus bas
 
-from epargnecredit.decorators import validation_required
-
-from django.db.models import Sum
+from django.db.models import Sum, Q
 from django.utils import timezone
 from datetime import timedelta
 from django.urls import reverse, NoReverseMatch
@@ -93,10 +91,10 @@ def dashboard_epargne_credit(request):
 
     if not user.is_superuser and not getattr(user, "is_validated", False):
 
-        attente_url = "accounts:attente_validation"
-
-        if not resolve_url(attente_url):
-            attente_url = "accounts:login"
+        try:
+            attente_url = reverse("accounts:attente_validation")
+        except NoReverseMatch:
+            attente_url = reverse("accounts:login")
 
         messages.error(
             request,
@@ -117,7 +115,7 @@ def dashboard_epargne_credit(request):
     )
 
     # ====================================
-    # 👥 Groupes membre
+    # 👥 Groupes où l'utilisateur est membre
     # ====================================
 
     groupes_membre = (
@@ -145,24 +143,23 @@ def dashboard_epargne_credit(request):
     total_versements = (
         Versement.objects
         .filter(member__user=user, statut="VALIDE")
-        .aggregate(total=Sum("montant"))["total"] or 0
+        .aggregate(total=Sum("montant"))
+        .get("total") or 0
     )
 
     # ====================================
-    # 📊 Total groupes utilisateur
+    # 📊 Nombre total groupes utilisateur
     # ====================================
 
     total_groupes = (
         Group.objects
-        .filter(
-            Q(admin=user) | Q(membres_ec=user)
-        )
+        .filter(Q(admin=user) | Q(membres_ec=user))
         .distinct()
         .count()
     )
 
     # ====================================
-    # 📅 Versements récents
+    # 📅 Versements récents (30 jours)
     # ====================================
 
     date_limite = timezone.now() - timedelta(days=30)
@@ -178,7 +175,7 @@ def dashboard_epargne_credit(request):
     )
 
     # ====================================
-    # 📈 Statistiques groupes admin (optimisé)
+    # 📈 Statistiques groupes administrés
     # ====================================
 
     stats_groupes_admin = (
@@ -188,6 +185,7 @@ def dashboard_epargne_credit(request):
         .annotate(
             versements_total=Sum("montant")
         )
+        .order_by("-versements_total")
     )
 
     # ====================================
@@ -211,7 +209,11 @@ def dashboard_epargne_credit(request):
     )
 
 
-# fallback simple
+# ====================================
+# Fallback simple
+# ====================================
+
+@login_required
 def dashboard_view(request):
     return render(request, "epargnecredit/dashboard.html")
 
@@ -777,6 +779,12 @@ from .models import GroupMember, Versement
 # ==========================================
 # DECLARATION VERSEMENT CAISSE (EN ATTENTE)
 # ==========================================
+from decimal import Decimal, ROUND_HALF_UP
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, render, redirect
+from django.db import transaction
+from django.contrib import messages
+
 @login_required
 @transaction.atomic
 def initier_versement(request, member_id):
@@ -785,19 +793,31 @@ def initier_versement(request, member_id):
         GroupMember.objects.select_related("group", "user"),
         id=member_id
     )
+
     group = member.group
 
-    # 🔒 Sécurité : seul le membre lui-même ou admin peut verser
+    # 🔒 Sécurité
     if request.user != member.user and request.user != group.admin and not request.user.is_superuser:
         messages.error(request, "Vous n’avez pas l’autorisation d’effectuer ce versement.")
         return redirect("epargnecredit:group_detail", group_id=group.id)
 
+    # =============================
+    # GET
+    # =============================
     if request.method == "GET":
-        return render(request, "epargnecredit/initier_versement.html", {
-            "member": member,
-            "group": group
-        })
 
+        return render(
+            request,
+            "epargnecredit/initier_versement.html",
+            {
+                "member": member,
+                "group": group
+            }
+        )
+
+    # =============================
+    # POST
+    # =============================
     montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
 
     try:
@@ -812,16 +832,23 @@ def initier_versement(request, member_id):
 
     montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
+    # 💰 Frais YaayESS 1 %
+    frais = (montant * Decimal("0.01")).quantize(Decimal("1"))
+
     Versement.objects.create(
         member=member,
         montant=montant,
+        frais=frais,
         methode="CAISSE",
         statut="EN_ATTENTE"
     )
 
-    messages.success(request, "Versement enregistré. En attente de validation.")
-    return redirect("epargnecredit:group_detail", group_id=group.id)
+    messages.success(
+        request,
+        f"Versement enregistré. Frais plateforme : {frais} FCFA. En attente de validation."
+    )
 
+    return redirect("epargnecredit:group_detail", group_id=group.id)
 
 # ==========================================
 # VALIDATION ADMIN
@@ -1586,12 +1613,17 @@ class IsAdminOrSuper(BasePermission):
             request.user.is_staff or request.user.is_super_admin
         )
 
+from decimal import Decimal, ROUND_HALF_UP
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, get_object_or_404
+from .models import GroupMember
+
 
 @login_required
 def initier_paiement_remboursement(request, member_id: int):
     """
     Initie le paiement de remboursement pour un membre
-    (paiement PayDunya ou versement interne).
+    avec frais plateforme de 1 %.
     """
 
     member = get_object_or_404(
@@ -1601,9 +1633,36 @@ def initier_paiement_remboursement(request, member_id: int):
 
     group = member.group
 
+    montant = None
+    frais = None
+    total = None
+
+    if request.method == "POST":
+
+        montant_raw = request.POST.get("montant", "").replace(",", ".").strip()
+
+        try:
+            montant = Decimal(montant_raw)
+        except Exception:
+            montant = Decimal("0")
+
+        if montant > 0:
+
+            # 💰 Frais 1 %
+            frais = (montant * Decimal("0.01")).quantize(
+                Decimal("1"),
+                rounding=ROUND_HALF_UP
+            )
+
+            # 💳 Total à payer
+            total = montant + frais
+
     context = {
         "member": member,
         "group": group,
+        "montant": montant,
+        "frais": frais,
+        "total": total,
     }
 
     return render(

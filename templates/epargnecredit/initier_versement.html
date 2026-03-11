@@ -58,7 +58,6 @@ name="montant"
 id="montant"
 min="1"
 step="1"
-inputmode="numeric"
 required
 placeholder="Ex : 5 000">
 
@@ -72,31 +71,52 @@ Veuillez saisir un montant valide.
 
 </div>
 
-<!-- Total -->
+<!-- TOTAL -->
 <div class="card bg-light border-0 mb-3"
      id="total-section"
      style="display:none;">
 
 <div class="card-body">
 
-<div class="d-flex justify-content-between">
+<div class="d-flex justify-content-between mb-2">
 
 <span>
-💳 Total à payer
+💰 Montant
 </span>
 
-<strong id="total" class="text-success">
+<strong id="montant-affiche">
 0 FCFA
 </strong>
 
 </div>
 
-<small class="text-muted">
-Aucun frais appliqué.
-</small>
+<div class="d-flex justify-content-between mb-2">
+
+<span class="text-muted">
+Frais plateforme (1%)
+</span>
+
+<strong id="frais">
+0 FCFA
+</strong>
 
 </div>
 
+<hr>
+
+<div class="d-flex justify-content-between">
+
+<strong>
+💳 Total à payer
+</strong>
+
+<strong id="total" class="text-success fs-5">
+0 FCFA
+</strong>
+
+</div>
+
+</div>
 </div>
 
 <!-- Boutons -->
@@ -132,7 +152,7 @@ Annuler
 
 <script>
 
-// Validation Bootstrap + anti double paiement
+// Validation Bootstrap
 
 (() => {
 
@@ -162,10 +182,16 @@ form.classList.add('was-validated');
 })();
 
 
+// Calcul frais
+
 document.addEventListener('DOMContentLoaded', function(){
 
 const montantInput = document.getElementById('montant');
+
+const montantAffiche = document.getElementById('montant-affiche');
+const fraisEl = document.getElementById('frais');
 const totalEl = document.getElementById('total');
+
 const totalSection = document.getElementById('total-section');
 
 const fmt = new Intl.NumberFormat('fr-FR');
@@ -180,11 +206,21 @@ return Number.isFinite(n) ? Math.round(n) : 0;
 function updateTotal(){
 
 const v = parseFloat(montantInput.value);
+
 const montant = (!isNaN(v) && v > 0) ? arrondi(v) : 0;
 
 if(montant > 0){
 
-totalEl.textContent = fmt.format(montant) + " FCFA";
+// frais 1%
+
+const frais = Math.round(montant * 0.01);
+
+const total = montant + frais;
+
+montantAffiche.textContent = fmt.format(montant) + " FCFA";
+fraisEl.textContent = fmt.format(frais) + " FCFA";
+totalEl.textContent = fmt.format(total) + " FCFA";
+
 totalSection.style.display = "block";
 
 }else{

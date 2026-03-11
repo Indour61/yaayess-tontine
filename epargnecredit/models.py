@@ -1,10 +1,10 @@
 from django.db import models
 from django.conf import settings
-from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from decimal import Decimal
 import uuid
 from django.db.models import Sum
+
 
 # =========================================================
 # GROUPE
@@ -31,42 +31,43 @@ class Group(models.Model):
     montant_fixe_gagnant = models.DecimalField(max_digits=12, decimal_places=0, null=True, blank=True)
 
     prochain_gagnant = models.ForeignKey(
-        'GroupMember',
+        "GroupMember",
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name="groupes_prochain_gagnant_ec"
     )
 
     membres_ec = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        through='GroupMember',
-        related_name='groupes_ec'
+        through="GroupMember",
+        related_name="groupes_ec"
     )
 
     is_remboursement = models.BooleanField(default=False)
 
     parent_group = models.ForeignKey(
-        'self',
-        null=True, blank=True,
+        "self",
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
-        related_name='remboursement_children'
+        related_name="remboursement_children"
     )
 
     class Meta:
-        ordering = ['-date_creation']
+        ordering = ["-date_creation"]
         db_table = "epargnecredit_group"
 
     def __str__(self):
         suffix = " (remboursement)" if self.is_remboursement else ""
         return f"{self.nom}{suffix}"
 
-    # =====================================================
-    # 🔹 FINANCE CORE METHODS
-    # =====================================================
+    # =============================
+    # FINANCE
+    # =============================
 
     @property
     def total_versements_valides(self):
-        from .models import Versement
         return (
             Versement.objects.filter(
                 member__group=self,
@@ -76,7 +77,6 @@ class Group(models.Model):
 
     @property
     def total_prets_approuves(self):
-        from .models import PretDemande
         return (
             PretDemande.objects.filter(
                 member__group=self,
@@ -88,15 +88,7 @@ class Group(models.Model):
     def caisse_disponible(self):
         return self.total_versements_valides - self.total_prets_approuves
 
-    # =====================================================
-    # 🔹 LOGIQUE GROUPE REMBOURSEMENT
-    # =====================================================
-
     def get_remboursement_group(self):
-        """
-        Retourne le groupe remboursement associé,
-        ou None s'il n'existe pas.
-        """
         return self.remboursement_children.filter(is_remboursement=True).first()
 
 
@@ -109,17 +101,19 @@ class GroupMember(models.Model):
     group = models.ForeignKey(
         Group,
         on_delete=models.CASCADE,
-        related_name='members_ec'
+        related_name="members_ec"
     )
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='groupmembers_ec'
+        related_name="groupmembers_ec"
     )
 
     alias = models.CharField(max_length=100, blank=True, null=True)
+
     montant = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+
     actif = models.BooleanField(default=True)
     exit_liste = models.BooleanField(default=False)
 
@@ -128,14 +122,14 @@ class GroupMember(models.Model):
 
     class Meta:
         db_table = "epargnecredit_groupmember"
-        unique_together = ('group', 'user')
+        unique_together = ("group", "user")
 
     def __str__(self):
         return f"{self.user} - {self.group.nom}"
 
 
 # =========================================================
-# VERSEMENT (CAISSE UNIQUEMENT)
+# VERSEMENT
 # =========================================================
 
 class Versement(models.Model):
@@ -149,11 +143,16 @@ class Versement(models.Model):
     member = models.ForeignKey(
         GroupMember,
         on_delete=models.CASCADE,
-        related_name='versements_ec'
+        related_name="versements_ec"
     )
 
     montant = models.DecimalField(max_digits=12, decimal_places=0)
-    frais = models.DecimalField(max_digits=12, decimal_places=0, default=Decimal("0"))
+
+    frais = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        default=Decimal("0")
+    )
 
     methode = models.CharField(max_length=20, default="CAISSE")
 
@@ -171,7 +170,6 @@ class Versement(models.Model):
         related_name="versements_valides_ec"
     )
 
-    # 🔥 NOUVEAU : Numéro de reçu unique
     numero_recu = models.CharField(
         max_length=30,
         unique=True,
@@ -179,55 +177,42 @@ class Versement(models.Model):
         blank=True
     )
 
+    transaction_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
+    )
+
     date_creation = models.DateTimeField(auto_now_add=True)
     date_validation = models.DateTimeField(null=True, blank=True)
-
-    transaction_id = models.CharField(max_length=255, null=True, blank=True)
 
     class Meta:
         db_table = "epargnecredit_versement"
         ordering = ["-date_creation"]
-        indexes = [
-            models.Index(fields=["statut"]),
-            models.Index(fields=["methode"]),
-            models.Index(fields=["numero_recu"]),
-        ]
 
     def __str__(self):
-        return f"{self.member.user} - {self.montant} FCFA ({self.statut})"
+        return f"{self.member.user} - {self.montant} FCFA"
 
     @property
     def montant_total(self):
-        return self.montant + self.frais
+        return (self.montant or 0) + (self.frais or 0)
 
-    # =====================================================
-    # GENERATION AUTOMATIQUE NUMERO RECU
-    # =====================================================
+    def save(self, *args, **kwargs):
 
-    def generer_numero_recu(self):
-        """
-        Format :
-        YESS-20260224-000123
-        """
-        if not self.numero_recu and self.id:
-            date_str = timezone.now().strftime("%Y%m%d")
-            self.numero_recu = f"YESS-{date_str}-{self.id:06d}"
-            self.save(update_fields=["numero_recu"])
+        if not self.frais:
+            self.frais = (self.montant * Decimal("0.01")).quantize(Decimal("1"))
 
-    # =====================================================
-    # VALIDATION PROPRE
-    # =====================================================
+        if not self.numero_recu:
+            self.numero_recu = f"EC-{uuid.uuid4().hex[:10].upper()}"
+
+        super().save(*args, **kwargs)
 
     def valider(self, admin_user):
-        """
-        Méthode centralisée pour valider un versement.
-        """
         if self.statut != "VALIDE":
             self.statut = "VALIDE"
             self.valide_par = admin_user
             self.date_validation = timezone.now()
             self.save()
-            self.generer_numero_recu()
 
     def refuser(self, admin_user):
         if self.statut != "REFUSE":
@@ -238,7 +223,7 @@ class Versement(models.Model):
 
 
 # =========================================================
-# LOG GENERAL
+# ACTION LOG
 # =========================================================
 
 class ActionLog(models.Model):
@@ -247,13 +232,15 @@ class ActionLog(models.Model):
         Group,
         on_delete=models.CASCADE,
         related_name="action_logs_ec",
-        null=True, blank=True
+        null=True,
+        blank=True
     )
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         related_name="actionlogs_ec"
     )
 
@@ -261,7 +248,7 @@ class ActionLog(models.Model):
     date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-date']
+        ordering = ["-date"]
         db_table = "epargnecredit_actionlog"
 
     def __str__(self):
@@ -304,7 +291,7 @@ class PretDemande(models.Model):
     member = models.ForeignKey(
         GroupMember,
         on_delete=models.CASCADE,
-        related_name="demandes_pret_ec",
+        related_name="demandes_pret_ec"
     )
 
     montant = models.DecimalField(max_digits=12, decimal_places=0)
@@ -313,14 +300,17 @@ class PretDemande(models.Model):
     debut_remboursement = models.DateField()
 
     statut = models.CharField(max_length=10, choices=STATUTS, default="PENDING")
+
     commentaire = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
     decided_at = models.DateTimeField(null=True, blank=True)
 
     decided_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="prets_decides_ec"
     )
@@ -349,7 +339,7 @@ class PretDemande(models.Model):
 
 
 # =========================================================
-# REMBOURSEMENT DE PRET
+# REMBOURSEMENT PRET
 # =========================================================
 
 class PretRemboursement(models.Model):
@@ -368,10 +358,7 @@ class PretRemboursement(models.Model):
 
     montant = models.DecimalField(max_digits=12, decimal_places=0)
 
-    methode = models.CharField(
-        max_length=20,
-        default="CAISSE"
-    )
+    methode = models.CharField(max_length=20, default="CAISSE")
 
     statut = models.CharField(
         max_length=20,
@@ -379,11 +366,7 @@ class PretRemboursement(models.Model):
         default="VALIDE"
     )
 
-    transaction_id = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True
-    )
+    transaction_id = models.CharField(max_length=255, null=True, blank=True)
 
     date_creation = models.DateTimeField(auto_now_add=True)
 

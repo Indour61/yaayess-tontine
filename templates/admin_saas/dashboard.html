@@ -5,12 +5,12 @@
 
 {% block content %}
 
-<div class="container-fluid">
+<div class="container-fluid py-4">
 
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
-<h2 class="mb-2">
-<i class="fas fa-chart-pie me-2"></i>
-SaaS Dashboard
+<div class="d-flex justify-content-between align-items-center mb-4">
+<h2>
+<i class="fas fa-chart-line me-2"></i>
+SaaS Dashboard YaayESS
 </h2>
 </div>
 
@@ -19,86 +19,102 @@ SaaS Dashboard
 
 <div class="row g-3">
 
-<div class="col-xl-3 col-lg-6 col-md-6 col-sm-12">
-<div class="card shadow-sm h-100 text-center border-0">
+<div class="col-md-3">
+<div class="card shadow-sm text-center border-0">
 <div class="card-body">
 <i class="fas fa-users fa-2x text-primary mb-2"></i>
 <h6 class="text-muted">Utilisateurs</h6>
-<h3 class="fw-bold">{{ total_users }}</h3>
+<h3>{{ total_users|default:0 }}</h3>
 </div>
 </div>
 </div>
 
-<div class="col-xl-3 col-lg-6 col-md-6 col-sm-12">
-<div class="card shadow-sm h-100 text-center border-0">
+
+<div class="col-md-3">
+<div class="card shadow-sm text-center border-0">
 <div class="card-body">
 <i class="fas fa-layer-group fa-2x text-success mb-2"></i>
 <h6 class="text-muted">Groupes</h6>
-<h3 class="fw-bold">{{ total_groups }}</h3>
+<h3>{{ total_groups|default:0 }}</h3>
 </div>
 </div>
 </div>
 
-<div class="col-xl-3 col-lg-6 col-md-6 col-sm-12">
-<div class="card shadow-sm h-100 text-center border-0">
+
+<div class="col-md-3">
+<div class="card shadow-sm text-center border-0">
 <div class="card-body">
 <i class="fas fa-user-friends fa-2x text-info mb-2"></i>
 <h6 class="text-muted">Membres</h6>
-<h3 class="fw-bold">{{ total_members }}</h3>
+<h3>{{ total_members|default:0 }}</h3>
 </div>
 </div>
 </div>
 
-<div class="col-xl-3 col-lg-6 col-md-6 col-sm-12">
-<div class="card shadow-sm h-100 text-center border-0">
+
+<div class="col-md-3">
+<div class="card shadow-sm text-center border-0">
 <div class="card-body">
 <i class="fas fa-money-bill-wave fa-2x text-warning mb-2"></i>
 <h6 class="text-muted">Versements</h6>
-<h3 class="fw-bold">{{ total_versements }}</h3>
+<h3>{{ total_versements|default:0 }}</h3>
 </div>
 </div>
 </div>
 
 </div>
+
 
 
 <!-- REVENUS -->
 
-<div class="row g-3 mt-3">
+<div class="row mt-4">
 
-<div class="col-lg-6 col-md-12">
-<div class="card shadow-sm border-0 text-center h-100">
+<div class="col-md-6">
+
+<div class="card shadow-sm border-0 text-center">
 <div class="card-body">
+
 <h6 class="text-muted">Revenus plateforme</h6>
-<h3 class="text-success fw-bold">
+
+<h2 class="text-success fw-bold">
 {{ revenus_plateforme|default:0|intcomma }} FCFA
-</h3>
-</div>
+</h2>
+
 </div>
 </div>
 
-<div class="col-lg-6 col-md-12">
-<div class="card shadow-sm border-0 text-center h-100">
+</div>
+
+
+<div class="col-md-6">
+
+<div class="card shadow-sm border-0">
 <div class="card-body">
-<h6 class="text-muted">Abonnements expirés</h6>
-<h3 class="text-danger fw-bold">
-{{ abonnements_expired|default:0 }}
-</h3>
-</div>
+
+<h6 class="text-muted mb-3">
+Evolution des revenus
+</h6>
+
+<canvas id="revenusChart"></canvas>
+
 </div>
 </div>
 
 </div>
 
+</div>
 
-<!-- TABLEAU UTILISATEURS -->
+
+
+<!-- GROUPES -->
 
 <div class="card shadow-sm border-0 mt-4">
 
 <div class="card-header bg-white">
 <h5 class="mb-0">
-<i class="fas fa-user me-2"></i>
-Derniers utilisateurs
+<i class="fas fa-layer-group me-2"></i>
+Derniers groupes
 </h5>
 </div>
 
@@ -106,39 +122,43 @@ Derniers utilisateurs
 
 <div class="table-responsive">
 
-<table class="table table-hover align-middle mb-0">
+<table class="table table-hover mb-0">
 
 <thead class="table-light">
 <tr>
 <th>Nom</th>
-<th>Téléphone</th>
-<th>Abonnement</th>
+<th>Admin</th>
+<th>Statut</th>
 <th class="text-center">Action</th>
 </tr>
 </thead>
 
 <tbody>
 
-{% for user in users %}
+{% for group in groups %}
 
 <tr>
 
+<td>{{ group.nom }}</td>
+
 <td>
-<strong>{{ user.nom }}</strong>
+{{ group.admin.username|default:"-" }}
 </td>
 
-<td>{{ user.phone }}</td>
-
 <td>
 
-{% if user.abonnement_actif %}
+{% if group.is_active %}
+
 <span class="badge bg-success">
-<i class="fas fa-check me-1"></i>Actif
+Actif
 </span>
+
 {% else %}
+
 <span class="badge bg-danger">
-<i class="fas fa-ban me-1"></i>Bloqué
+Bloqué
 </span>
+
 {% endif %}
 
 </td>
@@ -146,10 +166,9 @@ Derniers utilisateurs
 <td class="text-center">
 
 <a class="btn btn-sm btn-warning"
-href="{% url 'accounts:toggle_user_access' user.id %}">
+href="{% url 'accounts:toggle_group_access' group.id %}">
 
-<i class="fas fa-power-off me-1"></i>
-Activer / Bloquer
+<i class="fas fa-power-off"></i>
 
 </a>
 
@@ -160,8 +179,8 @@ Activer / Bloquer
 {% empty %}
 
 <tr>
-<td colspan="4" class="text-center text-muted py-4">
-Aucun utilisateur trouvé
+<td colspan="4" class="text-center py-4 text-muted">
+Aucun groupe
 </td>
 </tr>
 
@@ -177,6 +196,76 @@ Aucun utilisateur trouvé
 
 </div>
 
+
 </div>
 
+
+
+<!-- CHART JS -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function(){
+
+const canvas = document.getElementById('revenusChart');
+
+if(!canvas) return;
+
+const ctx = canvas.getContext('2d');
+
+new Chart(ctx, {
+
+type: 'line',
+
+data: {
+
+labels: {{ months|default:"[]"|safe }},
+
+datasets: [{
+
+label: 'Revenus',
+
+data: {{ revenus_mensuels|default:"[]"|safe }},
+
+borderWidth: 3,
+borderColor: "#28a745",
+backgroundColor: "rgba(40,167,69,0.2)",
+fill: true,
+tension: 0.4
+
+}]
+
+},
+
+options: {
+
+responsive: true,
+
+plugins: {
+
+legend: {
+display: false
+}
+
+},
+
+scales: {
+
+y: {
+beginAtZero: true
+}
+
+}
+
+}
+
+});
+
+});
+
+</script>
+
 {% endblock %}
+

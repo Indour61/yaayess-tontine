@@ -359,3 +359,20 @@ class Versement(models.Model):
     def __str__(self):
         return f"{self.member} - {self.montant} FCFA"
 
+
+class Versement(models.Model):
+    member = models.ForeignKey(Member, on_delete=models.CASCADE)
+    montant = models.DecimalField(max_digits=10, decimal_places=2)
+    frais_plateforme = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    date = models.DateTimeField(auto_now_add=True)
+
+
+from decimal import Decimal
+
+def save(self, *args, **kwargs):
+
+    if not self.frais:
+        self.frais = (self.montant * Decimal("0.01")).quantize(Decimal("1"))
+
+    super().save(*args, **kwargs)
+

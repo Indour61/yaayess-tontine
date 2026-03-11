@@ -53,6 +53,7 @@ urlpatterns = [
         name="toggle_group_access"
     ),
 
+    path("create-group/", views.create_group, name="create_group"),
 ]
 
 

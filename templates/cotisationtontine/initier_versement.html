@@ -68,22 +68,34 @@
     </div>
 
 
-    <!-- Récapitulatif -->
+    <!-- Récapitulatif paiement -->
     <div class="card mt-3" id="resume-card" style="display:none;">
       <div class="card-body">
 
-        <div class="d-flex justify-content-between">
+        <table class="table table-sm mb-0">
 
-          <div>
-            💳 <strong>Total à payer :</strong>
-            <span id="total" class="fw-bold">0</span> FCFA
-          </div>
+          <tr>
+            <td>Montant</td>
+            <td class="text-end">
+              <span id="montant-affiche">0</span> FCFA
+            </td>
+          </tr>
 
-          <div class="text-muted small">
-            Aucun frais appliqué
-          </div>
+          <tr>
+            <td>Frais YaayESS (2%)</td>
+            <td class="text-end text-warning">
+              <span id="frais">0</span> FCFA
+            </td>
+          </tr>
 
-        </div>
+          <tr>
+            <th>Total à payer</th>
+            <th class="text-end text-success">
+              <span id="total">0</span> FCFA
+            </th>
+          </tr>
+
+        </table>
 
       </div>
     </div>
@@ -122,7 +134,11 @@
 <script>
 
 const montantInput = document.getElementById("montant")
+
+const montantAffiche = document.getElementById("montant-affiche")
+const fraisEl = document.getElementById("frais")
 const totalEl = document.getElementById("total")
+
 const resumeCard = document.getElementById("resume-card")
 
 const submitBtn = document.getElementById("submit-btn")
@@ -142,10 +158,15 @@ function updateTotal(){
 
     montant = Math.round(montant)
 
-    totalEl.textContent = fmt.format(montant)
+    let frais = Math.round(montant * 0.02)
+
+    let total = montant + frais
+
+    montantAffiche.textContent = fmt.format(montant)
+    fraisEl.textContent = fmt.format(frais)
+    totalEl.textContent = fmt.format(total)
 
     resumeCard.style.display = "block"
-
 }
 
 montantInput.addEventListener("input", updateTotal)
@@ -161,4 +182,3 @@ document.getElementById("versement-form")
 </script>
 
 {% endblock %}
-

@@ -177,94 +177,130 @@ def signup_view(request):
         {"form": form},
     )
 
-
 from django.apps import apps
-from django.urls import reverse
-
-# ----------------------------------------------------
-# Vue de connexion
-# ----------------------------------------------------
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import render, redirect
 from django.contrib import messages
-from django.apps import apps
+from django.contrib.auth.decorators import login_required
 
+
+def redirect_user(user):
+
+    # OPTION 1 : TONTINE
+    if user.option == "1":
+
+        try:
+            TMember = apps.get_model("cotisationtontine", "GroupMember")
+
+            member = (
+                TMember.objects
+                .select_related("group")
+                .filter(user=user)
+                .first()
+            )
+
+            if member and member.group:
+                return redirect(
+                    "cotisationtontine:group_detail",
+                    member.group.id
+                )
+
+        except Exception:
+            pass
+
+        return redirect("cotisationtontine:dashboard_tontine_simple")
+
+    # OPTION 2 : EPARGNE
+    if user.option == "2":
+
+        try:
+            EMember = apps.get_model("epargnecredit", "GroupMember")
+
+            member = (
+                EMember.objects
+                .select_related("group")
+                .filter(user=user)
+                .first()
+            )
+
+            if member and member.group:
+                return redirect(
+                    "epargnecredit:group_detail",
+                    member.group.id
+                )
+
+        except Exception:
+            pass
+
+        return redirect("epargnecredit:dashboard_epargne_credit")
+
+    # fallback
+    return redirect("/")
+
+
+# ----------------------------------------------------
+# LOGIN VIEW
+# ----------------------------------------------------
 
 def login_view(request):
-    """
-    Connexion avec téléphone + mot de passe uniquement.
-    L'utilisateur est redirigé automatiquement selon son option.
-    """
 
-    # 🔹 Fonction interne pour redirection
-    def redirect_user(user):
-
-        if user.option == '1':  # Cotisation & Tontine
-            try:
-                TMember = apps.get_model("cotisationtontine", "GroupMember")
-                member = TMember.objects.filter(user=user).first()
-                if member:
-                    return redirect("cotisationtontine:group_detail", member.group.id)
-            except Exception:
-                pass
-
-            return redirect("cotisationtontine:dashboard_tontine_simple")
-
-        else:  # Épargne & Crédit
-            try:
-                EMember = apps.get_model("epargnecredit", "GroupMember")
-                member = EMember.objects.filter(user=user).first()
-                if member:
-                    return redirect("epargnecredit:group_detail", member.group.id)
-            except Exception:
-                pass
-
-            return redirect("epargnecredit:dashboard_epargne_credit")
-
-    # 🔹 Si déjà connecté
+    # Si déjà connecté → rediriger
     if request.user.is_authenticated:
-        messages.info(request, "Vous êtes déjà connecté.")
         return redirect_user(request.user)
 
-    # 🔹 Connexion
     if request.method == "POST":
 
         phone = request.POST.get("phone", "").strip()
         password = request.POST.get("password", "").strip()
 
         if not phone or not password:
-            messages.error(request, "Veuillez saisir votre téléphone et votre mot de passe.")
+            messages.error(
+                request,
+                "Veuillez saisir votre téléphone et votre mot de passe."
+            )
             return render(request, "accounts/login.html")
 
         user = authenticate(request, username=phone, password=password)
-        if user is not None:
+
+        if user:
 
             if not user.is_active:
                 messages.error(request, "Votre compte est désactivé.")
                 return render(request, "accounts/login.html")
 
             login(request, user)
-            messages.success(request, f"Connexion réussie. Bienvenue {user.nom} !")
 
-            next_url = request.POST.get("next")
-            if next_url:
+            messages.success(
+                request,
+                f"Connexion réussie. Bienvenue {user.nom} !"
+            )
+
+            next_url = request.POST.get("next") or request.GET.get("next")
+
+            if next_url and next_url != "/accounts/login/":
                 return redirect(next_url)
 
             return redirect_user(user)
 
-        else:
-            messages.error(request, "Téléphone ou mot de passe incorrect.")
+        messages.error(request, "Téléphone ou mot de passe incorrect.")
 
     return render(request, "accounts/login.html")
 
+
+# ----------------------------------------------------
+# LOGOUT
+# ----------------------------------------------------
+
 @login_required
 def logout_view(request):
-    """
-    Déconnecte l'utilisateur et redirige vers la page de connexion.
-    """
     logout(request)
-    messages.success(request, "Vous avez été déconnecté avec succès.")
-    return redirect('accounts:login')
+    messages.success(request, "Vous avez été déconnecté.")
+    return redirect("accounts:login")
+
+# ----------------------------------------------------
+# Déconnexion
+# ----------------------------------------------------
+
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -875,3 +911,26 @@ def home_redirect(request):
     Redirection intelligente vers le bon module
     """
     return _redirect_by_option(request.user)
+
+
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from cotisationtontine.models import Group
+
+@login_required
+def create_group(request):
+
+    if request.method == "POST":
+
+        nom = request.POST.get("nom")
+
+        if nom:
+            Group.objects.create(
+                nom=nom,
+                admin=request.user
+            )
+
+            return redirect("tontine:dashboard")
+
+    return render(request, "accounts/create_group.html")
+

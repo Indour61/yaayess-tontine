@@ -18,7 +18,7 @@
         <p class="text-muted small">Connexion à votre compte</p>
       </div>
 
-      <!-- Messages -->
+      <!-- Messages Django -->
       {% if messages %}
         {% for message in messages %}
           <div class="alert alert-{{ message.tags|default:'info' }} text-center">
@@ -27,28 +27,33 @@
         {% endfor %}
       {% endif %}
 
-      <form method="post" class="needs-validation" novalidate>
+      <!-- FORMULAIRE LOGIN -->
+      <form method="POST" action="" class="needs-validation" novalidate>
 
         {% csrf_token %}
 
-        {% if next %}
-          <input type="hidden" name="next" value="{{ next }}">
+        {% if request.GET.next %}
+          <input type="hidden" name="next" value="{{ request.GET.next }}">
         {% endif %}
 
         <!-- TELEPHONE -->
         <div class="mb-3">
-          <label class="form-label fw-semibold">Numéro de téléphone</label>
+
+          <label for="phone" class="form-label fw-semibold">
+            Numéro de téléphone
+          </label>
 
           <div class="input-group">
+
             <span class="input-group-text">+221</span>
 
             <input
+              id="phone"
               type="text"
               name="phone"
               class="form-control"
               placeholder="77 123 45 67"
               required
-              value="{{ request.POST.phone }}"
             >
 
             <div class="invalid-feedback">
@@ -56,19 +61,22 @@
             </div>
 
           </div>
+
         </div>
 
         <!-- PASSWORD -->
         <div class="mb-3">
 
-          <label class="form-label fw-semibold">Mot de passe</label>
+          <label for="password" class="form-label fw-semibold">
+            Mot de passe
+          </label>
 
           <div class="input-group">
 
             <input
+              id="password"
               type="password"
               name="password"
-              id="password"
               class="form-control"
               placeholder="Mot de passe"
               required
@@ -90,20 +98,18 @@
 
         </div>
 
-        <!-- BUTTON -->
+        <!-- BOUTON -->
         <div class="d-grid mt-4">
 
           <button type="submit" class="btn btn-success btn-lg">
-
             🔐 Se connecter
-
           </button>
 
         </div>
 
       </form>
 
-      <!-- REGISTER -->
+      <!-- LIEN INSCRIPTION -->
       <div class="text-center mt-4 small">
 
         Pas encore de compte ?
@@ -126,40 +132,34 @@
 
 <script>
 
-(() => {
+document.addEventListener("DOMContentLoaded", function(){
 
-  'use strict'
+  const form = document.querySelector('.needs-validation');
 
-  const form = document.querySelector('.needs-validation')
+  if(form){
 
-  form.addEventListener('submit', event => {
+    form.addEventListener("submit", function(event){
 
-    if (!form.checkValidity()) {
+      if(!form.checkValidity()){
 
-      event.preventDefault()
-      event.stopPropagation()
+        event.preventDefault();
+        event.stopPropagation();
 
-    }
+      }
 
-    form.classList.add('was-validated')
+      form.classList.add("was-validated");
 
-  }, false)
+    });
 
-})();
+  }
+
+});
 
 function togglePassword(){
 
-  const input = document.getElementById("password")
+  const input = document.getElementById("password");
 
-  if(input.type === "password"){
-
-    input.type = "text"
-
-  } else {
-
-    input.type = "password"
-
-  }
+  input.type = input.type === "password" ? "text" : "password";
 
 }
 
@@ -167,24 +167,24 @@ function togglePassword(){
 
 {% endblock %}
 
+{% block extra_css %}
+
 <style>
 
 .login-card{
-
   max-width:420px;
   width:100%;
   border-radius:12px;
-
 }
 
 @media (max-width:576px){
 
   .container{
-
     padding:20px;
-
   }
 
 }
 
 </style>
+
+{% endblock %}

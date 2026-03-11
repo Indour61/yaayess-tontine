@@ -30,25 +30,27 @@ from django.shortcuts import render
 from .models import Group, Versement, ActionLog
 
 
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.db.models import Sum
+from django.utils import timezone
+from datetime import timedelta
+
+from .models import Group, Versement, ActionLog
+
+
 @login_required
 def dashboard_tontine_simple(request):
     """
     Dashboard principal Tontine
-    - visible uniquement si l'utilisateur administre un groupe
+    Visible uniquement si l'utilisateur administre un groupe
     """
 
     user = request.user
 
     # =====================================================
-    # 🔒 Sécurité : vérifier admin groupe
-    # =====================================================
-
-    if not Group.objects.filter(admin=user).exists():
-        messages.error(request, "Accès réservé à l'administrateur du groupe.")
-        return redirect("landing")
-
-    # =====================================================
-    # 📌 Groupes administrés
+    # 🔒 Sécurité : vérifier si utilisateur admin d'un groupe
     # =====================================================
 
     groupes_admin = (
@@ -58,6 +60,16 @@ def dashboard_tontine_simple(request):
         .order_by("-date_creation")
     )
 
+    if not groupes_admin.exists():
+        messages.warning(
+            request,
+            "Vous n’êtes administrateur d’aucun groupe."
+        )
+#        return redirect("accounts:login")
+        return render(
+            request,
+            "cotisationtontine/no_group.html"
+        )
     # =====================================================
     # 👥 Groupes où l'utilisateur est membre
     # =====================================================
@@ -87,7 +99,8 @@ def dashboard_tontine_simple(request):
     total_versements = (
         Versement.objects
         .filter(member__user=user, statut="VALIDE")
-        .aggregate(total=Sum("montant"))["total"] or 0
+        .aggregate(total=Sum("montant"))
+        .get("total") or 0
     )
 
     # =====================================================
@@ -118,20 +131,24 @@ def dashboard_tontine_simple(request):
     )
 
     # =====================================================
-    # 📈 Stats groupes administrés (optimisé)
+    # 📈 Stats groupes administrés
     # =====================================================
 
     stats_groupes_admin = (
         Versement.objects
         .filter(member__group__admin=user, statut="VALIDE")
-        .values("member__group__id", "member__group__nom")
+        .values(
+            "member__group__id",
+            "member__group__nom"
+        )
         .annotate(
             versements_total=Sum("montant")
         )
+        .order_by("-versements_total")
     )
 
     # =====================================================
-    # 📦 Context final
+    # 📦 Context
     # =====================================================
 
     context = {
@@ -331,23 +348,44 @@ from django.db.models import Sum, Q, Value, DecimalField, OuterRef, Subquery
 from django.db.models.functions import Coalesce
 
 from .models import Group, GroupMember, Versement, ActionLog
-from django.shortcuts import get_object_or_404, render, redirect
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.urls import reverse
-from django.db.models import Sum, Q, Value, DecimalField, OuterRef, Subquery
-from django.db.models.functions import Coalesce
 
-from .models import Group, GroupMember, Versement, ActionLog
+
+# =====================================================
+# 📊 Dashboard simple
+# =====================================================
+
+@login_required
+def dashboard(request):
+
+    action_logs = (
+        ActionLog.objects
+        .filter(user=request.user)
+        .order_by("-date")[:10]
+    )
+
+    context = {
+        "action_logs": action_logs
+    }
+
+    return render(
+        request,
+        "cotisationtontine/dashboard.html",
+        context
+    )
+
+
+# =====================================================
+# 👥 Détail d’un groupe
+# =====================================================
 
 @login_required
 def group_detail(request, group_id):
 
     group = get_object_or_404(Group, id=group_id)
 
-    # =====================================================
-    # 🔒 Vérification accès
-    # =====================================================
+    # -------------------------------------------------
+    # 🔒 Vérification accès utilisateur
+    # -------------------------------------------------
 
     has_access = (
         group.admin_id == request.user.id
@@ -358,11 +396,11 @@ def group_detail(request, group_id):
 
     if not has_access:
         messages.error(request, "⚠️ Vous n'avez pas accès à ce groupe.")
-        return redirect("cotisationtontine:group_list")
+        return redirect("cotisationtontine:dashboard")
 
-    # =====================================================
+    # -------------------------------------------------
     # 👑 Vérifier si admin
-    # =====================================================
+    # -------------------------------------------------
 
     user_is_admin = (
         request.user == group.admin
@@ -370,9 +408,9 @@ def group_detail(request, group_id):
         or request.user.is_superuser
     )
 
-    # =====================================================
-    # 💳 Versements EN ATTENTE (visible uniquement admin)
-    # =====================================================
+    # -------------------------------------------------
+    # 💳 Versements en attente (admin seulement)
+    # -------------------------------------------------
 
     versements_en_attente_liste = []
 
@@ -384,9 +422,9 @@ def group_detail(request, group_id):
             .order_by("-date_creation")
         )
 
-    # =====================================================
-    # Relation reverse (GroupMember -> Versement)
-    # =====================================================
+    # -------------------------------------------------
+    # 📊 Calcul versements membres
+    # -------------------------------------------------
 
     rel_lookup = "versements"
 
@@ -403,12 +441,13 @@ def group_detail(request, group_id):
         sum_filter &= Q(**{f"{rel_lookup}__date_creation__gte": group.date_reset})
 
     membres = (
-        GroupMember.objects.filter(group=group)
+        GroupMember.objects
+        .filter(group=group)
         .select_related("user")
         .annotate(
             total_montant=Coalesce(
                 Sum(f"{rel_lookup}__montant", filter=sum_filter),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
+                Value(0, output_field=DecimalField(max_digits=12, decimal_places=2)),
             ),
             last_amount=Subquery(last_qs.values("montant")[:1]),
             last_date=Subquery(last_qs.values("date_creation")[:1]),
@@ -416,9 +455,9 @@ def group_detail(request, group_id):
         .order_by("id")
     )
 
-    # =====================================================
-    # Total global du groupe
-    # =====================================================
+    # -------------------------------------------------
+    # 💰 Total global du groupe
+    # -------------------------------------------------
 
     total_filter = Q(member__group=group)
 
@@ -426,18 +465,19 @@ def group_detail(request, group_id):
         total_filter &= Q(date_creation__gte=group.date_reset)
 
     total_montant = (
-        Versement.objects.filter(total_filter)
+        Versement.objects
+        .filter(total_filter)
         .aggregate(
             total=Coalesce(
                 Sum("montant"),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
+                Value(0, output_field=DecimalField(max_digits=12, decimal_places=2)),
             )
         )["total"]
     )
 
-    # =====================================================
-    # Dernières actions
-    # =====================================================
+    # -------------------------------------------------
+    # 📝 Historique actions
+    # -------------------------------------------------
 
     actions = (
         ActionLog.objects
@@ -446,11 +486,12 @@ def group_detail(request, group_id):
         .order_by("-date")[:10]
     )
 
-    # =====================================================
-    # Lien d’invitation
-    # =====================================================
+    # -------------------------------------------------
+    # 🔗 Lien invitation
+    # -------------------------------------------------
 
     code = None
+
     for field in ("code_invitation", "invitation_token", "uuid"):
         if hasattr(group, field) and getattr(group, field):
             code = str(getattr(group, field))
@@ -459,15 +500,18 @@ def group_detail(request, group_id):
     invite_arg = code if code else str(group.id)
 
     invite_url = request.build_absolute_uri(
-        reverse("accounts:inscription_et_rejoindre", args=[invite_arg])
+        reverse(
+            "accounts:inscription_et_rejoindre",
+            args=[invite_arg]
+        )
     )
 
     if user_is_admin:
         request.session["last_invitation_link"] = invite_url
 
-    # =====================================================
-    # Context final
-    # =====================================================
+    # -------------------------------------------------
+    # 📦 Context final
+    # -------------------------------------------------
 
     context = {
         "group": group,
@@ -481,32 +525,11 @@ def group_detail(request, group_id):
         "versements_en_attente_liste": versements_en_attente_liste,
     }
 
-    return render(request, "cotisationtontine/group_detail.html", context)
-
-import json
-from decimal import Decimal, ROUND_HALF_UP
-import requests
-
-from django.conf import settings
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.db import transaction
-from django.http import JsonResponse, HttpRequest, HttpResponse, Http404
-from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
-from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
-
-#from .models import GroupMember, Versement
-
-from django.shortcuts import render
-
-@login_required
-def dashboard(request):
-    action_logs = ActionLog.objects.filter(user=request.user).order_by('-date')[:10]
-    return render(request, 'cotisationtontine/dashboard.html', {
-        'action_logs': action_logs
-    })
+    return render(
+        request,
+        "cotisationtontine/group_detail.html",
+        context
+    )
 
 # views.py
 import os
@@ -535,6 +558,11 @@ from django.utils import timezone
 # ==========================================
 # DECLARATION VERSEMENT CAISSE
 # ==========================================
+from decimal import Decimal, ROUND_HALF_UP
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect, get_object_or_404
+from django.db import transaction
+from django.contrib import messages
 
 @login_required
 @transaction.atomic
@@ -544,13 +572,10 @@ def initier_versement(request, member_id):
         GroupMember.objects.select_related("group", "user"),
         id=member_id
     )
+
     group = member.group
 
-    # 🔒 RÈGLE MÉTIER :
-    # - Le membre ne peut verser que pour lui-même
-    # - L'admin du groupe peut verser pour tout le monde
-    # - Le superuser est autorisé
-
+    # 🔒 RÈGLE MÉTIER
     user_is_admin = (
         request.user == group.admin
         or request.user.is_superuser
@@ -564,10 +589,23 @@ def initier_versement(request, member_id):
     # FORMULAIRE GET
     # =============================
     if request.method == "GET":
+
+        montant_base = group.montant_base or Decimal("0")
+
+        frais = (montant_base * Decimal("0.02")).quantize(Decimal("1"))
+
+        total = montant_base + frais
+
         return render(
             request,
             "cotisationtontine/initier_versement.html",
-            {"member": member, "group": group}
+            {
+                "member": member,
+                "group": group,
+                "montant_base": montant_base,
+                "frais": frais,
+                "total": total
+            }
         )
 
     # =============================
@@ -587,9 +625,13 @@ def initier_versement(request, member_id):
 
     montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
+    # 💰 Calcul frais YaayESS 2%
+    frais = (montant * Decimal("0.02")).quantize(Decimal("1"))
+
     Versement.objects.create(
         member=member,
         montant=montant,
+        frais=frais,
         methode="CAISSE",
         statut="EN_ATTENTE"
     )
@@ -600,7 +642,6 @@ def initier_versement(request, member_id):
     )
 
     return redirect("cotisationtontine:group_detail", group_id=group.id)
-
 
 # ==========================================
 # VALIDATION ADMIN

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container mt-5 text-center">
+
+<h3 class="mb-4">
+Vous n'administrez encore aucun groupe
+</h3>
+
+<a href="{% url 'accounts:create_group' %}" class="btn btn-primary">
+Créer mon premier groupe
+</a>
+
+</div>
+
+{% endblock %}

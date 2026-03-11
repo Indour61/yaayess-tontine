@@ -12,6 +12,7 @@ import uuid
 class Group(models.Model):
 
     nom = models.CharField(max_length=255)
+
     date_creation = models.DateTimeField(auto_now_add=True)
     date_reset = models.DateTimeField(null=True, blank=True)
 
@@ -27,7 +28,13 @@ class Group(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
 
     montant_base = models.DecimalField(max_digits=12, decimal_places=0, default=0)
-    montant_fixe_gagnant = models.DecimalField(max_digits=12, decimal_places=0, null=True, blank=True)
+
+    montant_fixe_gagnant = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        null=True,
+        blank=True
+    )
 
     prochain_gagnant = models.ForeignKey(
         'GroupMember',
@@ -36,6 +43,8 @@ class Group(models.Model):
         blank=True,
         related_name="groupes_prochain_gagnant"
     )
+
+    is_active = models.BooleanField(default=True)   # 👈 AJOUT ICI
 
     class Meta:
         ordering = ['-date_creation']
@@ -69,9 +78,10 @@ class GroupMember(models.Model):
         return f"{self.user} - {self.group.nom}"
 
 
-# =====================================================
-# VERSEMENT CAISSE
-# =====================================================
+from decimal import Decimal
+from django.db import models
+from django.conf import settings
+
 
 class Versement(models.Model):
 
@@ -88,7 +98,12 @@ class Versement(models.Model):
     )
 
     montant = models.DecimalField(max_digits=12, decimal_places=0)
-    frais = models.DecimalField(max_digits=12, decimal_places=0, default=Decimal("0"))
+
+    frais = models.DecimalField(
+        max_digits=12,
+        decimal_places=0,
+        default=Decimal("0")
+    )
 
     methode = models.CharField(max_length=20, default="CAISSE")
 
@@ -115,10 +130,17 @@ class Versement(models.Model):
     def __str__(self):
         return f"{self.member.user} - {self.montant} FCFA ({self.statut})"
 
+    # 🔹 Calcul automatique des frais YaayESS (2%)
+    def save(self, *args, **kwargs):
+
+        if not self.frais or self.frais == 0:
+            self.frais = (self.montant * Decimal("0.02")).quantize(Decimal("1"))
+
+        super().save(*args, **kwargs)
+
     @property
     def montant_total(self):
         return self.montant + self.frais
-
 
 # =====================================================
 # TIRAGE (AVEC CYCLE NUMBER)
@@ -206,4 +228,8 @@ class Invitation(models.Model):
     def __str__(self):
         return f"Invitation {self.phone} - {self.group.nom}"
 
+
+
+from django.db import models
+from accounts.models import CustomUser
 
