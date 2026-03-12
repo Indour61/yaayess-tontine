@@ -377,12 +377,6 @@ class Versement(models.Model):
         return f"{self.member} - {self.montant} FCFA"
 
 
-class Versement(models.Model):
-    member = models.ForeignKey(Member, on_delete=models.CASCADE)
-    montant = models.DecimalField(max_digits=10, decimal_places=2)
-    frais_plateforme = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    date = models.DateTimeField(auto_now_add=True)
-
 
 from decimal import Decimal
 
