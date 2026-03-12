@@ -8,188 +8,242 @@
 
 <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-100 to-green-200 px-4">
 
-  <div class="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 md:p-8">
+<div class="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 md:p-8">
 
-    <!-- Logo -->
-    <div class="text-center mb-6">
-      <img src="{% static 'img/logo.png' %}" class="mx-auto mb-3 w-14" alt="YaayESS">
-      <h1 class="text-2xl font-bold text-green-700">Créer un compte</h1>
-      <p class="text-sm text-gray-500">Rejoignez YaayESS en quelques secondes</p>
-    </div>
+<!-- LOGO -->
 
-    <!-- Messages -->
-    {% if messages %}
-      {% for message in messages %}
-        <div class="mb-4 p-3 rounded-lg text-sm bg-red-100 text-red-700">
-          {{ message }}
-        </div>
-      {% endfor %}
-    {% endif %}
+<div class="text-center mb-6">
 
-    <form method="post" class="space-y-4" novalidate>
+<img src="{% static 'img/logo.png' %}" class="mx-auto mb-3 w-14" alt="YaayESS">
 
-      {% csrf_token %}
+<h1 class="text-2xl font-bold text-green-700">
+Créer un compte
+</h1>
 
-      {% if form.non_field_errors %}
-        <div class="bg-red-100 text-red-700 p-3 rounded-lg text-sm">
-          {{ form.non_field_errors }}
-        </div>
-      {% endif %}
+<p class="text-sm text-gray-500">
+Rejoignez YaayESS en quelques secondes
+</p>
 
-      <!-- NOM -->
-      <div>
-        <label class="block text-sm font-semibold mb-1">
-          Nom complet
-        </label>
-
-        {{ form.nom|add_class:"w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500"|attr:"placeholder:Votre nom complet" }}
-
-        {% if form.nom.errors %}
-          <p class="text-red-500 text-sm mt-1">{{ form.nom.errors|striptags }}</p>
-        {% endif %}
-      </div>
+</div>
 
 
-      <!-- TELEPHONE -->
-      <div>
-        <label class="block text-sm font-semibold mb-1">
-          Numéro de téléphone
-        </label>
+<!-- MESSAGES -->
 
-        <div class="flex">
+{% if messages %}
+{% for message in messages %}
 
-          <span class="inline-flex items-center px-3 rounded-l-lg border border-r-0 bg-gray-100 text-gray-600 text-sm">
-            +221
-          </span>
+<div class="mb-4 p-3 rounded-lg text-sm bg-red-100 text-red-700">
+{{ message }}
+</div>
 
-          {{ form.phone|add_class:"flex-1 border rounded-r-lg px-3 py-2 focus:ring-2 focus:ring-green-500"|attr:"placeholder:77 123 45 67" }}
-
-        </div>
-
-        {% if form.phone.errors %}
-          <p class="text-red-500 text-sm mt-1">{{ form.phone.errors|striptags }}</p>
-        {% endif %}
-      </div>
+{% endfor %}
+{% endif %}
 
 
-      <!-- PASSWORD -->
-      <div>
-        <label class="block text-sm font-semibold mb-1">
-          Mot de passe
-        </label>
+<form method="post" class="space-y-4" novalidate>
 
-        <div class="relative">
-
-          {{ form.password1|add_class:"w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-green-500"|attr:"placeholder:Mot de passe"|attr:"id:password1" }}
-
-          <button
-            type="button"
-            onclick="togglePassword('password1')"
-            class="absolute right-3 top-2.5 text-gray-500">
-            👁
-          </button>
-
-        </div>
-
-        {% if form.password1.errors %}
-          <p class="text-red-500 text-sm mt-1">{{ form.password1.errors|striptags }}</p>
-        {% endif %}
-      </div>
+{% csrf_token %}
 
 
-      <!-- PASSWORD CONFIRM -->
-      <div>
-        <label class="block text-sm font-semibold mb-1">
-          Confirmer mot de passe
-        </label>
+<!-- NOM -->
 
-        <div class="relative">
+<div>
 
-          {{ form.password2|add_class:"w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-green-500"|attr:"placeholder:Confirmer mot de passe"|attr:"id:password2" }}
+<label class="block text-sm font-semibold mb-1">
+Nom complet
+</label>
 
-          <button
-            type="button"
-            onclick="togglePassword('password2')"
-            class="absolute right-3 top-2.5 text-gray-500">
-            👁
-          </button>
+{{ form.nom|add_class:"w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500"|attr:"placeholder:Votre nom complet" }}
 
-        </div>
-
-        {% if form.password2.errors %}
-          <p class="text-red-500 text-sm mt-1">{{ form.password2.errors|striptags }}</p>
-        {% endif %}
-      </div>
+</div>
 
 
-      <!-- OPTION -->
-      <div>
-        <label class="block text-sm font-semibold mb-1">
-          Type de compte
-        </label>
 
-        {{ form.option|add_class:"w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500" }}
+<!-- TELEPHONE -->
 
-        {% if form.option.errors %}
-          <p class="text-red-500 text-sm mt-1">{{ form.option.errors|striptags }}</p>
-        {% endif %}
-      </div>
+<div>
 
+<label class="block text-sm font-semibold mb-1">
+Numéro de téléphone
+</label>
 
-      <!-- CONDITIONS -->
-      <div class="flex items-start text-sm">
+<div class="flex">
 
-        <input
-          id="accept_terms"
-          name="accept_terms"
-          type="checkbox"
-          class="mt-1 mr-2 h-4 w-4 text-green-600 border-gray-300 rounded"
-          required
-          {% if request.POST.accept_terms %}checked{% endif %}>
+<select id="country_code"
+class="border rounded-l-lg px-2 bg-gray-100">
 
-        <label for="accept_terms" class="text-gray-700">
+<option value="+221">🇸🇳 +221</option>
+<option value="+225">🇨🇮 +225</option>
+<option value="+223">🇲🇱 +223</option>
+<option value="+226">🇧🇫 +226</option>
+<option value="+229">🇧🇯 +229</option>
 
-          J'accepte les
-          <a href="/legal/terms/" target="_blank"
-             class="text-green-700 underline hover:text-green-800">
-            Conditions d'utilisation
-          </a>
+</select>
 
-        </label>
+{{ form.phone|add_class:"flex-1 border rounded-r-lg px-3 py-2 focus:ring-2 focus:ring-green-500"|attr:"placeholder:77 123 45 67"|attr:"id:phone_input" }}
 
-      </div>
+</div>
+
+</div>
 
 
-      <!-- BUTTON -->
-      <button
-        type="submit"
-        class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition">
 
-        Créer mon compte
+<!-- PAYS AUTO -->
 
-      </button>
+<div>
 
-    </form>
+<label class="block text-sm font-semibold mb-1">
+Pays
+</label>
+
+{{ form.pays|add_class:"w-full border rounded-lg px-3 py-2 bg-gray-100"|attr:"readonly:true"|attr:"id:pays_input" }}
+
+</div>
 
 
-    <!-- LOGIN -->
-    <p class="mt-5 text-center text-sm text-gray-600">
 
-      Déjà inscrit ?
+<!-- VILLE -->
 
-      <a href="{% url 'accounts:login' %}" class="text-green-700 font-semibold hover:underline">
+<div>
 
-        Se connecter
+<label class="block text-sm font-semibold mb-1">
+Ville
+</label>
 
-      </a>
+{{ form.ville|add_class:"w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500"|attr:"placeholder:Dakar" }}
 
-    </p>
+</div>
 
-  </div>
+
+
+<!-- PASSWORD -->
+
+<div>
+
+<label class="block text-sm font-semibold mb-1">
+Mot de passe
+</label>
+
+<div class="relative">
+
+{{ form.password1|add_class:"w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-green-500"|attr:"id:password1" }}
+
+<button type="button"
+onclick="togglePassword('password1')"
+class="absolute right-3 top-2.5 text-gray-500">
+
+👁
+
+</button>
+
+</div>
+
+</div>
+
+
+
+<!-- PASSWORD CONFIRM -->
+
+<div>
+
+<label class="block text-sm font-semibold mb-1">
+Confirmer mot de passe
+</label>
+
+<div class="relative">
+
+{{ form.password2|add_class:"w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-green-500"|attr:"id:password2" }}
+
+<button type="button"
+onclick="togglePassword('password2')"
+class="absolute right-3 top-2.5 text-gray-500">
+
+👁
+
+</button>
+
+</div>
+
+</div>
+
+
+
+<!-- OPTION -->
+
+<div>
+
+<label class="block text-sm font-semibold mb-1">
+Type de compte
+</label>
+
+{{ form.option|add_class:"w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-green-500" }}
+
+</div>
+
+
+
+<!-- CONDITIONS -->
+
+<div class="flex items-start text-sm">
+
+<input id="accept_terms"
+type="checkbox"
+class="mt-1 mr-2 h-4 w-4 text-green-600 border-gray-300 rounded">
+
+<label for="accept_terms">
+
+J'accepte les
+
+<a href="/legal/terms/"
+target="_blank"
+class="text-green-700 underline">
+
+Conditions d'utilisation
+
+</a>
+
+</label>
+
+</div>
+
+
+
+<!-- BOUTON -->
+
+<button id="submit_btn"
+type="submit"
+disabled
+class="w-full bg-gray-400 text-white py-3 rounded-lg font-semibold">
+
+Créer mon compte
+
+</button>
+
+</form>
+
+
+
+<!-- LOGIN -->
+
+<p class="mt-5 text-center text-sm text-gray-600">
+
+Déjà inscrit ?
+
+<a href="{% url 'accounts:login' %}"
+class="text-green-700 font-semibold hover:underline">
+
+Se connecter
+
+</a>
+
+</p>
+
+</div>
 
 </div>
 
 {% endblock %}
+
 
 
 {% block extra_script %}
@@ -198,19 +252,55 @@
 
 function togglePassword(id){
 
-  const input = document.getElementById(id)
+const input = document.getElementById(id)
 
-  if(input.type === "password"){
-
-    input.type = "text"
-
-  }else{
-
-    input.type = "password"
-
-  }
+input.type = input.type === "password" ? "text" : "password"
 
 }
+
+
+
+// activation bouton conditions
+
+const checkbox = document.getElementById("accept_terms")
+const button = document.getElementById("submit_btn")
+
+checkbox.addEventListener("change", function(){
+
+button.disabled = !this.checked
+
+button.classList.toggle("bg-green-600")
+button.classList.toggle("hover:bg-green-700")
+
+})
+
+
+
+// detection pays automatique
+
+const countryMap = {
+
+"+221": "Sénégal",
+"+225": "Côte d'Ivoire",
+"+223": "Mali",
+"+226": "Burkina Faso",
+"+229": "Bénin"
+
+}
+
+const countryCode = document.getElementById("country_code")
+const paysInput = document.getElementById("pays_input")
+
+countryCode.addEventListener("change", function(){
+
+paysInput.value = countryMap[this.value]
+
+})
+
+
+// valeur initiale
+
+paysInput.value = countryMap[countryCode.value]
 
 </script>
 

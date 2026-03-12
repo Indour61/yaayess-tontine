@@ -7,6 +7,8 @@
 
 <div class="container-fluid py-4">
 
+<!-- HEADER -->
+
 <div class="d-flex justify-content-between align-items-center mb-4">
 <h2>
 <i class="fas fa-chart-line me-2"></i>
@@ -15,12 +17,12 @@ SaaS Dashboard YaayESS
 </div>
 
 
-<!-- STATISTIQUES -->
+<!-- KPI STATISTIQUES -->
 
 <div class="row g-3">
 
 <div class="col-md-3">
-<div class="card shadow-sm text-center border-0">
+<div class="card shadow-sm border-0 text-center">
 <div class="card-body">
 <i class="fas fa-users fa-2x text-primary mb-2"></i>
 <h6 class="text-muted">Utilisateurs</h6>
@@ -29,9 +31,8 @@ SaaS Dashboard YaayESS
 </div>
 </div>
 
-
 <div class="col-md-3">
-<div class="card shadow-sm text-center border-0">
+<div class="card shadow-sm border-0 text-center">
 <div class="card-body">
 <i class="fas fa-layer-group fa-2x text-success mb-2"></i>
 <h6 class="text-muted">Groupes</h6>
@@ -40,9 +41,8 @@ SaaS Dashboard YaayESS
 </div>
 </div>
 
-
 <div class="col-md-3">
-<div class="card shadow-sm text-center border-0">
+<div class="card shadow-sm border-0 text-center">
 <div class="card-body">
 <i class="fas fa-user-friends fa-2x text-info mb-2"></i>
 <h6 class="text-muted">Membres</h6>
@@ -51,9 +51,8 @@ SaaS Dashboard YaayESS
 </div>
 </div>
 
-
 <div class="col-md-3">
-<div class="card shadow-sm text-center border-0">
+<div class="card shadow-sm border-0 text-center">
 <div class="card-body">
 <i class="fas fa-money-bill-wave fa-2x text-warning mb-2"></i>
 <h6 class="text-muted">Versements</h6>
@@ -107,7 +106,48 @@ Evolution des revenus
 
 
 
-<!-- GROUPES -->
+<!-- STATISTIQUES PAYS -->
+
+<div class="row mt-4">
+
+<div class="col-md-6">
+
+<div class="card shadow-sm border-0">
+<div class="card-body">
+
+<h6 class="text-muted mb-3">
+Utilisateurs par pays
+</h6>
+
+<canvas id="usersCountryChart"></canvas>
+
+</div>
+</div>
+
+</div>
+
+
+<div class="col-md-6">
+
+<div class="card shadow-sm border-0">
+<div class="card-body">
+
+<h6 class="text-muted mb-3">
+Groupes par pays
+</h6>
+
+<canvas id="groupsCountryChart"></canvas>
+
+</div>
+</div>
+
+</div>
+
+</div>
+
+
+
+<!-- TABLE GROUPES -->
 
 <div class="card shadow-sm border-0 mt-4">
 
@@ -125,12 +165,14 @@ Derniers groupes
 <table class="table table-hover mb-0">
 
 <thead class="table-light">
+
 <tr>
 <th>Nom</th>
 <th>Admin</th>
 <th>Statut</th>
 <th class="text-center">Action</th>
 </tr>
+
 </thead>
 
 <tbody>
@@ -141,9 +183,7 @@ Derniers groupes
 
 <td>{{ group.nom }}</td>
 
-<td>
-{{ group.admin.username|default:"-" }}
-</td>
+<td>{{ group.admin.nom|default:"-" }}</td>
 
 <td>
 
@@ -197,11 +237,12 @@ Aucun groupe
 </div>
 
 
+
 </div>
 
 
 
-<!-- CHART JS -->
+<!-- SCRIPTS CHARTJS -->
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -209,13 +250,13 @@ Aucun groupe
 
 document.addEventListener("DOMContentLoaded", function(){
 
-const canvas = document.getElementById('revenusChart');
+// ----------- Revenus mensuels -----------
 
-if(!canvas) return;
+const revenusCtx = document.getElementById('revenusChart');
 
-const ctx = canvas.getContext('2d');
+if(revenusCtx){
 
-new Chart(ctx, {
+new Chart(revenusCtx, {
 
 type: 'line',
 
@@ -225,13 +266,13 @@ labels: {{ months|default:"[]"|safe }},
 
 datasets: [{
 
-label: 'Revenus',
+label: "Revenus",
 
 data: {{ revenus_mensuels|default:"[]"|safe }},
 
-borderWidth: 3,
 borderColor: "#28a745",
 backgroundColor: "rgba(40,167,69,0.2)",
+borderWidth: 3,
 fill: true,
 tension: 0.4
 
@@ -244,28 +285,85 @@ options: {
 responsive: true,
 
 plugins: {
-
-legend: {
-display: false
-}
-
+legend: { display: false }
 },
 
 scales: {
-
-y: {
-beginAtZero: true
-}
-
+y: { beginAtZero: true }
 }
 
 }
 
 });
+
+}
+
+
+
+// ----------- Utilisateurs par pays -----------
+
+const usersCtx = document.getElementById('usersCountryChart');
+
+if(usersCtx){
+
+new Chart(usersCtx, {
+
+type: "bar",
+
+data: {
+
+labels: {{ users_country_labels|default:"[]"|safe }},
+
+datasets: [{
+
+label: "Utilisateurs",
+
+data: {{ users_country_data|default:"[]"|safe }},
+
+backgroundColor: "#0d6efd"
+
+}]
+
+}
+
+});
+
+}
+
+
+
+// ----------- Groupes par pays -----------
+
+const groupsCtx = document.getElementById('groupsCountryChart');
+
+if(groupsCtx){
+
+new Chart(groupsCtx, {
+
+type: "bar",
+
+data: {
+
+labels: {{ groups_country_labels|default:"[]"|safe }},
+
+datasets: [{
+
+label: "Groupes",
+
+data: {{ groups_country_data|default:"[]"|safe }},
+
+backgroundColor: "#198754"
+
+}]
+
+}
+
+});
+
+}
 
 });
 
 </script>
 
 {% endblock %}
-

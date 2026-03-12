@@ -5,7 +5,6 @@ from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import get_user_model
 from .managers import CustomUserManager
 
-
 class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     phone_regex = RegexValidator(
@@ -41,6 +40,24 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(
         _('adresse email'),
         blank=True
+    )
+
+    # -----------------------------
+    # Localisation utilisateur
+    # -----------------------------
+
+    pays = models.CharField(
+        _('pays'),
+        max_length=100,
+        blank=True,
+        db_index=True
+    )
+
+    ville = models.CharField(
+        _('ville'),
+        max_length=100,
+        blank=True,
+        db_index=True
     )
 
     option = models.CharField(
