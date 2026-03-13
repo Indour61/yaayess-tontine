@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.db.models import Sum, Count
 from django.db.models.functions import TruncMonth
 from decimal import Decimal
+import json
 
 from accounts.models import CustomUser
 
@@ -165,21 +166,22 @@ def saas_dashboard(request):
 
         "groups": groups,
 
-        "months": months,
-        "revenus_mensuels": revenus_mensuels,
+        # ChartJS
+        "months": json.dumps(months),
+        "revenus_mensuels": json.dumps(revenus_mensuels),
 
-        # statistiques SaaS avancées
-        "users_country_labels": users_country_labels,
-        "users_country_data": users_country_data,
+        "users_country_labels": json.dumps(users_country_labels),
+        "users_country_data": json.dumps(users_country_data),
 
-        "groups_country_labels": groups_country_labels,
-        "groups_country_data": groups_country_data,
+        "groups_country_labels": json.dumps(groups_country_labels),
+        "groups_country_data": json.dumps(groups_country_data),
 
-        "revenus_country_labels": revenus_country_labels,
-        "revenus_country_data": revenus_country_data,
+        "revenus_country_labels": json.dumps(revenus_country_labels),
+        "revenus_country_data": json.dumps(revenus_country_data),
     }
 
     return render(request, "admin_saas/dashboard.html", context)
+
 
 # --------------------------------------------------
 # ACTIVER / DESACTIVER GROUPE
@@ -201,4 +203,3 @@ def toggle_group_access(request, group_id):
             messages.warning(request, "⛔ Groupe désactivé")
 
     return redirect("accounts:saas_dashboard")
-

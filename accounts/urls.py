@@ -1,4 +1,3 @@
-from django.urls import path
 from . import views
 from .api_views import LoginAPI
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -8,6 +7,8 @@ from .views import MeView
 from .views import RegisterAPIView
 from .views import LoginAPIView
 from .views_admin import saas_dashboard, toggle_group_access
+from django.urls import path
+from .views_compta import compta_dashboard
 
 class PhoneTokenObtainPairView(TokenObtainPairView):
     serializer_class = PhoneTokenObtainPairSerializer
@@ -54,6 +55,8 @@ urlpatterns = [
     ),
 
     path("create-group/", views.create_group, name="create_group"),
+
+    path("compta-dashboard/", compta_dashboard, name="compta_dashboard"),
 ]
 
 

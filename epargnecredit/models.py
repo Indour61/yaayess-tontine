@@ -13,6 +13,7 @@ from django.db.models import Sum
 class Group(models.Model):
 
     nom = models.CharField(max_length=255)
+
     date_creation = models.DateTimeField(auto_now_add=True)
     date_reset = models.DateTimeField(null=True, blank=True)
 
@@ -72,7 +73,7 @@ class Group(models.Model):
             Versement.objects.filter(
                 member__group=self,
                 statut="VALIDE"
-            ).aggregate(total=Sum("montant"))["total"] or 0
+            ).aggregate(total=Sum("montant"))["total"] or Decimal("0")
         )
 
     @property
@@ -81,7 +82,7 @@ class Group(models.Model):
             PretDemande.objects.filter(
                 member__group=self,
                 statut="APPROVED"
-            ).aggregate(total=Sum("montant"))["total"] or 0
+            ).aggregate(total=Sum("montant"))["total"] or Decimal("0")
         )
 
     @property
@@ -318,13 +319,6 @@ class PretDemande(models.Model):
     class Meta:
         db_table = "epargnecredit_pretdemande"
         ordering = ["-created_at"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["member"],
-                condition=models.Q(statut="PENDING"),
-                name="uniq_pending_pret_par_membre_ec",
-            )
-        ]
 
     def __str__(self):
         return f"Demande prêt {self.member.user} - {self.montant} FCFA"
@@ -344,7 +338,7 @@ class PretDemande(models.Model):
 
 class PretRemboursement(models.Model):
 
-    STATUTS = (
+    STATUT_CHOICES = (
         ("EN_ATTENTE", "En attente"),
         ("VALIDE", "Validé"),
         ("REFUSE", "Refusé"),
@@ -362,13 +356,22 @@ class PretRemboursement(models.Model):
 
     statut = models.CharField(
         max_length=20,
-        choices=STATUTS,
-        default="VALIDE"
+        choices=STATUT_CHOICES,
+        default="EN_ATTENTE"
+    )
+
+    valide_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="remboursements_valides"
     )
 
     transaction_id = models.CharField(max_length=255, null=True, blank=True)
 
     date_creation = models.DateTimeField(auto_now_add=True)
+    date_validation = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "epargnecredit_pret_remboursement"
@@ -376,5 +379,3 @@ class PretRemboursement(models.Model):
 
     def __str__(self):
         return f"Remboursement {self.pret.member.user} - {self.montant} FCFA"
-
-

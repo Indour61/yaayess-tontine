@@ -139,4 +139,7 @@ urlpatterns = [
     path("api/epargne/versements/", UserVersementsAPI.as_view()),
     path("api/epargne/versement/create/", CreateVersementAPI.as_view()),
     path("api/epargne/stats/", UserStatsAPI.as_view()),
+
+
 ]
+

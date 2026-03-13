@@ -147,6 +147,16 @@ SaaS Dashboard
 
 {% endif %}
 
+{% if user.is_superuser %}
+<li class="nav-item">
+    <a class="nav-link text-warning" href="{% url 'accounts:compta_dashboard' %}">
+
+        💰 Compta Dashboard
+    </a>
+</li>
+{% endif %}
+
+
 
 <!-- MENU UTILISATEUR -->
 

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Comptabilité YaayESS{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+<h3 class="mb-4">💰 Comptabilité YaayESS</h3>
+
+<div class="row g-3">
+
+<div class="col-md-3">
+<div class="card shadow-sm text-center p-3">
+<h6>Frais Cotisation</h6>
+<h3 class="text-primary">{{ tontine_frais|default:0 }} FCFA</h3>
+</div>
+</div>
+
+<div class="col-md-3">
+<div class="card shadow-sm text-center p-3">
+<h6>Frais Épargne</h6>
+<h3 class="text-success">{{ epargne_frais|default:0 }} FCFA</h3>
+</div>
+</div>
+
+<div class="col-md-3">
+<div class="card shadow-sm text-center p-3">
+<h6>Frais Remboursements</h6>
+<h3 class="text-warning">{{ remboursement_frais|default:0 }} FCFA</h3>
+</div>
+</div>
+
+<div class="col-md-3">
+<div class="card shadow-sm text-center p-3 bg-light">
+<h6>Total Plateforme</h6>
+<h2>{{ total_frais|default:0 }} FCFA</h2>
+</div>
+</div>
+
+</div>
+
+<hr class="my-4">
+
+<div class="card shadow-sm p-3 mb-4">
+
+<h5>📊 Frais par groupe</h5>
+
+<table class="table table-striped">
+
+<thead>
+<tr>
+<th>Groupe</th>
+<th>Admin</th>
+<th>Total frais</th>
+</tr>
+</thead>
+
+<tbody>
+
+{% for g in frais_par_groupe %}
+
+<tr>
+<td>{{ g.group__nom }}</td>
+<td>{{ g.group__admin__phone }}</td>
+<td>{{ g.total_frais|default:0 }} FCFA</td>
+</tr>
+
+{% empty %}
+
+<tr>
+<td colspan="3" class="text-center">Aucune donnée</td>
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+<div class="card shadow-sm p-3">
+
+<h5>📅 Frais par mois</h5>
+
+<table class="table table-bordered">
+
+<thead>
+<tr>
+<th>Mois</th>
+<th>Total frais</th>
+</tr>
+</thead>
+
+<tbody>
+
+{% for m in frais_par_mois %}
+
+<tr>
+<td>{{ m.mois|date:"F Y" }}</td>
+<td>{{ m.total|default:0 }} FCFA</td>
+</tr>
+
+{% empty %}
+
+<tr>
+<td colspan="2" class="text-center">Aucune donnée</td>
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+</div>
+
+{% endblock %}
