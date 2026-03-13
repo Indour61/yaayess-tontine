@@ -8,7 +8,7 @@ from accounts.api.auth_views import MobileLoginView
 
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 from accounts.jwt_serializer import PhoneTokenObtainPairSerializer
-
+from core.views import robots_txt
 
 class PhoneTokenObtainPairView(TokenObtainPairView):
     serializer_class = PhoneTokenObtainPairSerializer
@@ -29,6 +29,8 @@ urlpatterns = [
 
     # API mobile
     path("api/mobile/login/", MobileLoginView.as_view(), name="mobile_login"),
+
+    path("robots.txt", robots_txt),
 ]
 
 if settings.DEBUG:
