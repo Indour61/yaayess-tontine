@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import render
 from django.db.models import Sum
@@ -11,54 +13,100 @@ from epargnecredit.models import PretRemboursement
 @staff_member_required
 def compta_dashboard(request):
 
-    # FRAIS TONTINE
+    # ===================================
+    # 💰 FRAIS TONTINE
+    # ===================================
+
     tontine_frais = (
-        TontineVersement.objects.aggregate(
-            total=Sum("frais")
-        )["total"] or 0
+        TontineVersement.objects
+        .filter(statut="VALIDE")
+        .aggregate(total=Sum("frais"))["total"]
+        or Decimal("0")
     )
 
-    # FRAIS EPARGNE
+    # ===================================
+    # 💰 FRAIS EPARGNE
+    # ===================================
+
     epargne_frais = (
-        EpargneVersement.objects.aggregate(
-            total=Sum("frais")
-        )["total"] or 0
+        EpargneVersement.objects
+        .filter(statut="VALIDE")
+        .aggregate(total=Sum("frais"))["total"]
+        or Decimal("0")
     )
 
-    # REMBOURSEMENTS CREDIT
-    remboursement_frais = (
+    # ===================================
+    # 💰 REMBOURSEMENTS CREDIT
+    # ===================================
+
+    total_remboursements = (
         PretRemboursement.objects.aggregate(
             total=Sum("montant")
-        )["total"] or 0
+        )["total"] or Decimal("0")
     )
 
-    # TOTAL PLATEFORME
+    # frais plateforme 1%
+    remboursement_frais = total_remboursements * Decimal("0.01")
+
+    # ===================================
+    # 💰 TOTAL PLATEFORME
+    # ===================================
+
     total_frais = tontine_frais + epargne_frais + remboursement_frais
 
-    # FRAIS PAR MOIS
+    # ===================================
+    # 📈 FRAIS PAR MOIS (TONTINE)
+    # ===================================
+
     frais_par_mois = (
         TontineVersement.objects
+        .filter(statut="VALIDE")
         .annotate(mois=TruncMonth("date_creation"))
         .values("mois")
-        .annotate(total=Sum("frais"))
+        .annotate(total_frais=Sum("frais"))
         .order_by("mois")
     )
 
-    # FRAIS PAR GROUPE
+    # ===================================
+    # 👥 FRAIS PAR GROUPE (TONTINE)
+    # ===================================
+
     frais_par_groupe = (
         TontineVersement.objects
-        .values("member__group__nom", "member__group__admin__phone")
+        .filter(statut="VALIDE")
+        .values("member__group__nom")
         .annotate(total_frais=Sum("frais"))
         .order_by("-total_frais")
     )
 
+    # ===================================
+    # 💰 REVENUS PAR TYPE
+    # ===================================
+
+    revenus_types = {
+        "tontine": tontine_frais,
+        "epargne": epargne_frais,
+        "credit": remboursement_frais
+    }
+
+    # ===================================
+    # CONTEXT TEMPLATE
+    # ===================================
+
     context = {
+
+        # Résumé financier
         "tontine_frais": tontine_frais,
         "epargne_frais": epargne_frais,
         "remboursement_frais": remboursement_frais,
         "total_frais": total_frais,
+
+        # analyses
         "frais_par_mois": frais_par_mois,
         "frais_par_groupe": frais_par_groupe,
+
+        # graphique
+        "revenus_types": revenus_types,
     }
 
     return render(request, "accounts/compta_dashboard.html", context)
