@@ -320,25 +320,43 @@ def ajouter_membre_view(request, group_id):
 
 from django.db.models import Q  # Ajoutez cette importation en haut du fichier
 
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from django.db.models import Q
+from cotisationtontine.models import Group
+
+
 @login_required
 def group_list_view(request):
     """
-    Affiche la liste des groupes :
-    - Tous les groupes si super admin
-    - Sinon, seulement ceux créés par l'utilisateur ou ceux où l'utilisateur est membre
+    Liste des groupes de l'utilisateur
     """
-    if request.user.is_super_admin:
-        groupes = Group.objects.all()
-    else:
-        # Groupes dont l'utilisateur est admin OU membre
-        groupes = Group.objects.filter(
-            Q(admin=request.user) |  # Utilisez Q directement sans le préfixe models
-            Q(membres__user=request.user)
-        ).distinct()
 
-    return render(request, 'cotisationtontine/group_list.html', {
-        'groupes': groupes
-    })
+    user = request.user
+
+    # 🔑 Super admin : voir tous les groupes
+    if getattr(user, "is_super_admin", False):
+        groupes = Group.objects.all().order_by("-date_creation")
+
+    else:
+        groupes = (
+            Group.objects.filter(
+                Q(admin=user) |
+                Q(membres__user=user)
+            )
+            .distinct()
+            .order_by("-date_creation")
+        )
+
+    context = {
+        "groupes": groupes
+    }
+
+    return render(
+        request,
+        "cotisationtontine/group_list.html",
+        context
+    )
 
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
