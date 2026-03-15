@@ -1,13 +1,86 @@
-<h2>Créer une vidéo de lancement</h2>
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container py-5">
+
+<div class="row justify-content-center">
+
+<div class="col-xl-6 col-lg-7 col-md-9 col-sm-12">
+
+<div class="card shadow-lg border-0">
+
+<div class="card-header bg-dark text-white text-center">
+
+<h4 class="mb-0">🎬 Créer une vidéo de lancement</h4>
+
+</div>
+
+<div class="card-body p-4">
 
 <form method="post">
-    {% csrf_token %}
 
-    <label>Sujet</label>
-    <input type="text" name="topic" placeholder="YaayESS">
+{% csrf_token %}
 
-    <button type="submit">
-        Créer vidéo
-    </button>
+<!-- Sujet -->
+
+<div class="mb-3">
+
+<label class="form-label fw-bold">Sujet de la vidéo</label>
+
+<input
+type="text"
+name="topic"
+class="form-control form-control-lg"
+placeholder="Ex : Lancement YaayESS au Sénégal"
+required
+>
+
+</div>
+
+
+<!-- Script -->
+
+<div class="mb-3">
+
+<label class="form-label fw-bold">Script de la vidéo</label>
+
+<textarea
+name="script"
+rows="6"
+class="form-control"
+placeholder="Ex : Bienvenue sur YaayESS, la plateforme qui révolutionne la tontine digitale au Sénégal..."
+></textarea>
+
+<small class="text-muted">
+Vous pouvez laisser vide pour que l'IA génère automatiquement le script.
+</small>
+
+</div>
+
+
+<!-- Bouton -->
+
+<div class="d-grid">
+
+<button class="btn btn-primary btn-lg">
+
+🚀 Générer la vidéo
+
+</button>
+
+</div>
 
 </form>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+{% endblock %}
