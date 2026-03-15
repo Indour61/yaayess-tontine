@@ -10,6 +10,8 @@ from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 from accounts.jwt_serializer import PhoneTokenObtainPairSerializer
 from core.views import robots_txt
 
+
+
 class PhoneTokenObtainPairView(TokenObtainPairView):
     serializer_class = PhoneTokenObtainPairSerializer
 
@@ -31,7 +33,11 @@ urlpatterns = [
     path("api/mobile/login/", MobileLoginView.as_view(), name="mobile_login"),
 
     path("robots.txt", robots_txt),
+
+    path('video/', include('video_ai.urls')),
+
 ]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

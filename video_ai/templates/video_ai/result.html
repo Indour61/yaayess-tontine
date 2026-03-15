@@ -1,0 +1,13 @@
+<h2>Vidéo générée</h2>
+
+<p>{{ video.script }}</p>
+
+<video width="600" controls>
+    <source src="{{ video.video_file.url }}" type="video/mp4">
+</video>
+
+<br><br>
+
+<a href="{{ video.video_file.url }}" download>
+    Télécharger la vidéo
+</a>

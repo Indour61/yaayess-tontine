@@ -1,0 +1,13 @@
+<h2>Créer une vidéo de lancement</h2>
+
+<form method="post">
+    {% csrf_token %}
+
+    <label>Sujet</label>
+    <input type="text" name="topic" placeholder="YaayESS">
+
+    <button type="submit">
+        Créer vidéo
+    </button>
+
+</form>
