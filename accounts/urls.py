@@ -10,6 +10,8 @@ from .views_admin import saas_dashboard, toggle_group_access
 from django.urls import path
 from .views_compta import compta_dashboard
 
+from .views_recus import mes_recus
+
 class PhoneTokenObtainPairView(TokenObtainPairView):
     serializer_class = PhoneTokenObtainPairSerializer
 
@@ -57,6 +59,8 @@ urlpatterns = [
     path("create-group/", views.create_group, name="create_group"),
 
     path("compta-dashboard/", compta_dashboard, name="compta_dashboard"),
+
+    path("mes-recus/", mes_recus, name="mes_recus"),
 ]
 
 

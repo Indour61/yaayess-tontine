@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}
+Mes reçus - YaayESS
+{% endblock %}
+
+{% block content %}
+
+<div class="container">
+
+<div class="card shadow-sm">
+
+<div class="card-header bg-success text-white">
+<h5 class="mb-0">
+<i class="fas fa-file-invoice me-2"></i>
+Mes reçus
+</h5>
+</div>
+
+<div class="card-body">
+
+{% if payments %}
+
+<div class="table-responsive">
+
+<table class="table table-striped align-middle">
+
+<thead class="table-light">
+
+<tr>
+<th>Date</th>
+<th>Montant</th>
+<th>Actions</th>
+</tr>
+
+</thead>
+
+<tbody>
+
+{% for p in payments %}
+
+<tr>
+
+<td>
+{{ p.created_at|date:"d/m/Y H:i" }}
+</td>
+
+<td>
+<strong>{{ p.montant }} FCFA</strong>
+</td>
+
+<td>
+
+<a href="{{ p.receipt_pdf.url }}" target="_blank"
+class="btn btn-sm btn-primary me-1">
+
+<i class="fas fa-file-pdf"></i>
+Voir
+
+</a>
+
+<a href="{{ p.receipt_pdf.url }}" download
+class="btn btn-sm btn-success me-1">
+
+<i class="fas fa-download"></i>
+Télécharger
+
+</a>
+
+<a href="https://wa.me/?text=Voici mon reçu YaayESS : {{ request.build_absolute_uri }}{{ p.receipt_pdf.url }}"
+target="_blank"
+class="btn btn-sm btn-success">
+
+<i class="fab fa-whatsapp"></i>
+WhatsApp
+
+</a>
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+{% else %}
+
+<div class="alert alert-info">
+
+<i class="fas fa-info-circle me-2"></i>
+Aucun reçu disponible pour le moment.
+
+</div>
+
+{% endif %}
+
+</div>
+
+</div>
+
+</div>
+
+{% endblock %}
+

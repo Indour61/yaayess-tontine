@@ -159,7 +159,6 @@ SaaS Dashboard
 
 
 <!-- MENU UTILISATEUR -->
-
 <li class="nav-item dropdown">
 
 <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
@@ -171,13 +170,22 @@ SaaS Dashboard
 
 <li>
 <a class="dropdown-item" href="#">
-<i class="fas fa-user me-2"></i>Profil
+<i class="fas fa-user me-2"></i>
+Profil
 </a>
 </li>
 
 <li>
 <a class="dropdown-item" href="#">
-<i class="fas fa-cog me-2"></i>Paramètres
+<i class="fas fa-cog me-2"></i>
+Paramètres
+</a>
+</li>
+
+<li>
+<a class="dropdown-item" href="{% url 'accounts:mes_recus' %}">
+<i class="fas fa-file-invoice me-2"></i>
+Mes reçus
 </a>
 </li>
 
@@ -185,13 +193,16 @@ SaaS Dashboard
 
 <li>
 <a class="dropdown-item text-danger" href="{% url 'accounts:logout' %}">
-<i class="fas fa-sign-out-alt me-2"></i>Déconnexion
+<i class="fas fa-sign-out-alt me-2"></i>
+Déconnexion
 </a>
 </li>
 
 </ul>
 
 </li>
+
+
 
 {% else %}
 
