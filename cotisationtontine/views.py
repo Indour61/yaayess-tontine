@@ -154,7 +154,7 @@ def dashboard_tontine_simple(request):
     context = {
         "groupes_admin": groupes_admin,
         "groupes_membre": groupes_membre,
-        "dernieres_actions": dernieres_actions,
+        "action_logs": dernieres_actions,  # 🔥 CORRECTION ICI
         "total_versements": total_versements,
         "total_groupes": total_groupes,
         "versements_recents": versements_recents,
