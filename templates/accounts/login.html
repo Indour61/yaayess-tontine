@@ -39,14 +39,28 @@
         <!-- TELEPHONE -->
         <div class="mb-3">
 
-          <label for="phone" class="form-label fw-semibold">
+          <label class="form-label fw-semibold">
             Numéro de téléphone
           </label>
 
           <div class="input-group">
 
-            <span class="input-group-text">+221</span>
+            <!-- SELECT CODE PAYS -->
+            <select name="country_code" class="form-select" style="max-width:120px;" required>
+              <option value="+221" selected>🇸🇳 +221</option>
+              <option value="+225">🇨🇮 +225</option>
+              <option value="+226">🇧🇫 +226</option>
+              <option value="+223">🇲🇱 +223</option>
+              <option value="+224">🇬🇳 +224</option>
+              <option value="+228">🇹🇬 +228</option>
+              <option value="+229">🇧🇯 +229</option>
+              <option value="+237">🇨🇲 +237</option>
+              <option value="+234">🇳🇬 +234</option>
+              <option value="+33">🇫🇷 +33</option>
+              <option value="+1">🇺🇸 +1</option>
+            </select>
 
+            <!-- TELEPHONE -->
             <input
               id="phone"
               type="text"
@@ -141,10 +155,8 @@ document.addEventListener("DOMContentLoaded", function(){
     form.addEventListener("submit", function(event){
 
       if(!form.checkValidity()){
-
         event.preventDefault();
         event.stopPropagation();
-
       }
 
       form.classList.add("was-validated");
@@ -155,13 +167,16 @@ document.addEventListener("DOMContentLoaded", function(){
 
 });
 
+// Toggle password
 function togglePassword(){
-
   const input = document.getElementById("password");
-
   input.type = input.type === "password" ? "text" : "password";
-
 }
+
+// Nettoyage du numéro (option UX)
+document.getElementById("phone").addEventListener("input", function(e){
+  this.value = this.value.replace(/[^0-9 ]/g, '');
+});
 
 </script>
 
@@ -178,11 +193,9 @@ function togglePassword(){
 }
 
 @media (max-width:576px){
-
   .container{
     padding:20px;
   }
-
 }
 
 </style>
