@@ -7,19 +7,18 @@
 
 <div class="container py-4">
 
-  <!-- Header -->
-  <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+  <!-- HEADER -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-2">
 
-    <h3 class="fw-bold text-success">
+    <h3 class="fw-bold text-success mb-0">
       📜 Historique des cycles
     </h3>
 
-    <span class="text-muted">
+    <span class="text-muted small">
       {{ group.nom }}
     </span>
 
   </div>
-
 
   {% if anciens_cycles %}
 
@@ -27,88 +26,125 @@
 
     {% for cycle in anciens_cycles %}
 
-    <div class="accordion-item shadow-sm border-0 mb-3">
+    <div class="accordion-item shadow-sm border-0 mb-3 rounded-3 overflow-hidden">
 
+      <!-- HEADER -->
       <h2 class="accordion-header">
-
         <button
-          class="accordion-button collapsed fw-semibold"
+          class="accordion-button collapsed fw-semibold d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2"
           type="button"
           data-bs-toggle="collapse"
-          data-bs-target="#cycle{{ forloop.counter }}"
+          data-bs-target="#cycle{{ cycle.id }}"
         >
 
-          🔄 Cycle
-          <span class="ms-2 text-muted">
+          <span>🔄 Cycle</span>
 
+          <span class="text-muted small">
             {{ cycle.date_debut|date:"d/m/Y" }}
-
             →
-
-            {{ cycle.date_fin|default:"En cours" }}
-
+            {% if cycle.date_fin %}
+              {{ cycle.date_fin|date:"d/m/Y" }}
+            {% else %}
+              En cours
+            {% endif %}
           </span>
 
         </button>
-
       </h2>
 
+      <!-- BODY -->
       <div
-        id="cycle{{ forloop.counter }}"
+        id="cycle{{ cycle.id }}"
         class="accordion-collapse collapse"
         data-bs-parent="#cyclesAccordion"
       >
 
-        <div class="accordion-body">
+        <div class="accordion-body p-2 p-md-3">
 
+          <!-- 🔥 PROGRESSION -->
+          <div class="mb-3">
+
+            <div class="d-flex justify-content-between small mb-1">
+              <span class="text-muted">Progression</span>
+              <span class="fw-semibold">{{ cycle.progression }}%</span>
+            </div>
+
+            <div class="progress" style="height:10px; border-radius:10px;">
+              <div
+                class="progress-bar
+                  {% if cycle.progression < 40 %}
+                    bg-danger
+                  {% elif cycle.progression < 80 %}
+                    bg-warning
+                  {% else %}
+                    bg-success
+                  {% endif %}
+                "
+                style="width: {{ cycle.progression }}%; transition: width 0.5s;">
+              </div>
+            </div>
+
+            <div class="small text-muted mt-1">
+              {{ cycle.completed_etapes }} / {{ cycle.total_etapes }} étapes complétées
+            </div>
+
+            <!-- STATUT -->
+            <div class="mt-2">
+              {% if cycle.progression == 100 %}
+                <span class="badge bg-success">✔ Terminé</span>
+              {% elif cycle.progression > 0 %}
+                <span class="badge bg-warning text-dark">⏳ En cours</span>
+              {% else %}
+                <span class="badge bg-secondary">Non démarré</span>
+              {% endif %}
+            </div>
+
+          </div>
+
+          <!-- ETAPES -->
           {% if cycle.etapes.all %}
 
-          <div class="list-group">
+          <div class="list-group list-group-flush">
 
             {% for etape in cycle.etapes.all %}
 
-            <div class="list-group-item d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+            <div class="list-group-item px-2 px-md-3 py-3">
 
-              <div>
+              <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
 
-                <strong>
-                  Étape {{ etape.numero_etape }}
-                </strong>
-
-                <br>
-
-                <small class="text-muted">
-                  📅 {{ etape.date_etape|date:"d/m/Y" }}
-                </small>
-
-              </div>
-
-
-              <div class="text-md-end">
-
-                {% if etape.tirage %}
-
-                  <div class="fw-semibold text-success">
-
-                    🎯 {{ etape.tirage.beneficiaire.user.nom }}
-
+                <!-- LEFT -->
+                <div>
+                  <div class="fw-semibold">
+                    Étape {{ etape.numero_etape }}
                   </div>
 
-                  <small class="text-primary fw-bold">
-
-                    💰 {{ etape.tirage.montant_total|intcomma }} FCFA
-
+                  <small class="text-muted">
+                    📅 {{ etape.date_etape|date:"d/m/Y" }}
                   </small>
+                </div>
 
-                {% else %}
+                <!-- RIGHT -->
+                <div class="text-md-end w-100 w-md-auto">
 
-                  <span class="text-muted">
+                  {% if etape.tirage %}
 
-                    ⏳ Tirage non effectué
+                    <div class="fw-semibold text-success text-truncate">
+                      🎯 {{ etape.tirage.beneficiaire.user.nom }}
+                    </div>
 
-                  </span>
+                    <span class="badge bg-success-subtle text-success fw-bold">
+                      💰 {{ etape.tirage.montant_total|intcomma }} FCFA
+                    </span>
 
-                {% endif %}
+                  {% else %}
+
+                    <span class="badge bg-secondary-subtle text-secondary">
+                      ⏳ Tirage non effectué
+                    </span>
+
+                  {% endif %}
+
+                </div>
 
               </div>
 
@@ -120,10 +156,8 @@
 
           {% else %}
 
-          <div class="text-muted">
-
-            Aucune étape enregistrée pour ce cycle.
-
+          <div class="text-center text-muted py-3">
+            📭 Aucune étape enregistrée pour ce cycle.
           </div>
 
           {% endif %}
@@ -138,19 +172,38 @@
 
   </div>
 
+  <!-- PAGINATION -->
+  <div class="d-flex justify-content-center mt-4">
+
+    {% if anciens_cycles.has_previous %}
+      <a class="btn btn-sm btn-outline-success me-2" href="?page={{ anciens_cycles.previous_page_number }}">
+        ⬅ Précédent
+      </a>
+    {% endif %}
+
+    <span class="align-self-center small">
+      Page {{ anciens_cycles.number }} / {{ anciens_cycles.paginator.num_pages }}
+    </span>
+
+    {% if anciens_cycles.has_next %}
+      <a class="btn btn-sm btn-outline-success ms-2" href="?page={{ anciens_cycles.next_page_number }}">
+        Suivant ➡
+      </a>
+    {% endif %}
+
+  </div>
 
   {% else %}
 
-  <div class="card shadow-sm border-0 text-center">
+  <!-- EMPTY -->
+  <div class="card shadow-sm border-0 text-center rounded-4">
 
     <div class="card-body py-5">
 
-      <div style="font-size:40px;">📭</div>
+      <div style="font-size:50px;">📭</div>
 
       <p class="mt-3 mb-0 text-muted">
-
         Aucun cycle archivé pour ce groupe.
-
       </p>
 
     </div>
