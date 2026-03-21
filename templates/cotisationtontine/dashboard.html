@@ -19,6 +19,31 @@
 
   </div>
 
+ <!-- STATS -->
+<div class="row g-4 mb-4 text-center">
+
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 p-3">
+      <h6 class="text-muted">Total groupes</h6>
+      <h3 class="text-success fw-bold">{{ total_groupes }}</h3>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 p-3">
+      <h6 class="text-muted">Total cotisé</h6>
+      <h3 class="text-primary fw-bold">{{ total_versements }} FCFA</h3>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card shadow-sm border-0 p-3">
+      <h6 class="text-muted">Groupes admin</h6>
+      <h3 class="fw-bold">{{ groupes_admin|length }}</h3>
+    </div>
+  </div>
+
+</div>
 
   <!-- Messages -->
   {% if messages %}
@@ -93,6 +118,49 @@
 
   </div>
 
+  <!-- GROUPES ADMIN -->
+<div class="mb-5">
+
+  <h4 class="fw-bold mb-3">👑 Mes groupes</h4>
+
+  <div class="row g-4">
+
+    {% for group in groupes_admin %}
+
+    <div class="col-md-4">
+      <div class="card shadow-sm border-0 p-3 h-100 group-card">
+
+        <h5 class="fw-bold text-success">
+          {{ group.nom }}
+        </h5>
+
+        <p class="text-muted mb-1">
+          👥 {{ group.membres.count }} membres
+        </p>
+
+        <p class="text-muted mb-3">
+          📅 {{ group.date_creation|date:"d/m/Y" }}
+        </p>
+
+        <a href="{% url 'cotisationtontine:group_detail' group.id %}"
+           class="btn btn-success w-100">
+          🚀 Entrer
+        </a>
+
+      </div>
+    </div>
+
+    {% empty %}
+
+    <div class="text-muted">
+      Aucun groupe créé
+    </div>
+
+    {% endfor %}
+
+  </div>
+
+</div>
 
   <!-- HISTORIQUE -->
   <div class="card shadow-sm border-0">

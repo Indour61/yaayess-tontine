@@ -177,66 +177,23 @@ def signup_view(request):
         {"form": form},
     )
 
-from django.apps import apps
-from django.contrib.auth import authenticate, login, logout
-from django.shortcuts import render, redirect
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-
+from django.shortcuts import redirect
 
 def redirect_user(user):
+    """
+    Redirection intelligente SANS forcer un groupe
+    """
 
     # OPTION 1 : TONTINE
     if user.option == "1":
-
-        try:
-            TMember = apps.get_model("cotisationtontine", "GroupMember")
-
-            member = (
-                TMember.objects
-                .select_related("group")
-                .filter(user=user)
-                .first()
-            )
-
-            if member and member.group:
-                return redirect(
-                    "cotisationtontine:group_detail",
-                    member.group.id
-                )
-
-        except Exception:
-            pass
-
         return redirect("cotisationtontine:dashboard_tontine_simple")
 
     # OPTION 2 : EPARGNE
     if user.option == "2":
-
-        try:
-            EMember = apps.get_model("epargnecredit", "GroupMember")
-
-            member = (
-                EMember.objects
-                .select_related("group")
-                .filter(user=user)
-                .first()
-            )
-
-            if member and member.group:
-                return redirect(
-                    "epargnecredit:group_detail",
-                    member.group.id
-                )
-
-        except Exception:
-            pass
-
         return redirect("epargnecredit:dashboard_epargne_credit")
 
     # fallback
-    return redirect("/")
-
+    return redirect("accounts:landing")
 
 # ----------------------------------------------------
 # LOGIN VIEW
@@ -934,3 +891,30 @@ def create_group(request):
 
     return render(request, "accounts/create_group.html")
 
+
+from django.shortcuts import render, redirect
+
+
+def landing_view(request):
+    """
+    Page d'accueil intelligente :
+    - Redirige l'utilisateur connecté vers SON dashboard selon son type
+    - Affiche la landing page sinon
+    """
+
+    if request.user.is_authenticated:
+
+        # 🔥 Redirection intelligente selon type d'adhésion
+        if hasattr(request.user, 'type_adhesion'):
+
+            if request.user.type_adhesion == 1:
+                return redirect('epargnecredit:dashboard_epargne_credit')
+
+            elif request.user.type_adhesion == 2:
+                return redirect('cotisationtontine:dashboard_tontine_simple')
+
+        # fallback sécurité
+        return redirect('accounts:login')
+
+    # 👇 utilisateur non connecté
+    return render(request, 'landing.html')

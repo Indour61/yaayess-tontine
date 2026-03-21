@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Accueil - YaayESS{% endblock %}
 
@@ -20,8 +21,12 @@
 Bienvenue sur YaayESS
 </h1>
 
-<p class="lead mb-4">
+<p class="lead mb-2">
 Gérez facilement vos tontines, cotisations et épargnes collectives.
+</p>
+
+<p class="text-muted mb-4">
+En Afrique, la tontine est une confiance… YaayESS la rend simple, transparente et sécurisée.
 </p>
 
 {% if user.is_authenticated %}
@@ -46,6 +51,7 @@ Accéder au Dashboard
 
 {% else %}
 
+
 <div class="d-flex flex-column flex-md-row justify-content-center gap-3">
 
 <a href="{% url 'accounts:login' %}"
@@ -58,6 +64,21 @@ class="btn btn-outline-primary btn-lg px-4 py-3">
 Inscription
 </a>
 
+<!-- 🔥 WhatsApp -->
+<a href="https://wa.me/221767213935"
+class="btn btn-dark btn-lg px-4 py-3 d-flex align-items-center gap-2 justify-content-center">
+
+<img src="{% static 'images/whatsapp.png' %}"
+     alt="WhatsApp"
+     style="width:24px; height:24px;">
+
+<span>WhatsApp</span>
+
+</a>
+
+</div>
+
+
 </div>
 
 {% endif %}
@@ -66,7 +87,6 @@ Inscription
 
 </div>
 
-</div>
 
 </section>
 

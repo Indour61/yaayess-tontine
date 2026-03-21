@@ -9,17 +9,6 @@ from django.utils.decorators import method_decorator
 from cotisationtontine.models import Group, GroupMember, Versement, ActionLog
 
 
-def landing_view(request):
-    """
-    Page d'accueil qui redirige vers le dashboard si l'utilisateur est connecté,
-    ou affiche une page de présentation sinon.
-    """
-    # Si l'utilisateur est déjà connecté, rediriger vers le dashboard
-    if request.user.is_authenticated:
-        return redirect('cotisationtontine:dashboard_tontine_simple')
-
-    # Sinon, afficher la page d'accueil publique
-    return render(request, 'landing.html')
 
 from django.db.models import Sum, Count
 from django.utils import timezone
@@ -404,7 +393,6 @@ def group_detail(request, group_id):
     # -------------------------------------------------
     # 🔒 Vérification accès utilisateur
     # -------------------------------------------------
-
     has_access = (
         group.admin_id == request.user.id
         or GroupMember.objects.filter(group=group, user=request.user).exists()
@@ -414,12 +402,11 @@ def group_detail(request, group_id):
 
     if not has_access:
         messages.error(request, "⚠️ Vous n'avez pas accès à ce groupe.")
-        return redirect("cotisationtontine:dashboard")
+        return redirect("cotisationtontine:dashboard_tontine_simple")
 
     # -------------------------------------------------
     # 👑 Vérifier si admin
     # -------------------------------------------------
-
     user_is_admin = (
         request.user == group.admin
         or getattr(request.user, "is_super_admin", False)
@@ -429,7 +416,6 @@ def group_detail(request, group_id):
     # -------------------------------------------------
     # 💳 Versements en attente (admin seulement)
     # -------------------------------------------------
-
     versements_en_attente_liste = []
 
     if user_is_admin:
@@ -443,18 +429,19 @@ def group_detail(request, group_id):
     # -------------------------------------------------
     # 📊 Calcul versements membres
     # -------------------------------------------------
-
     rel_lookup = "versements"
 
-    last_qs = Versement.objects.filter(member=OuterRef("pk"))
+    last_qs = Versement.objects.filter(
+        member=OuterRef("pk"),
+        statut="VALIDE"
+    )
 
     if group.date_reset:
         last_qs = last_qs.filter(date_creation__gte=group.date_reset)
 
     last_qs = last_qs.order_by("-date_creation")
 
-    sum_filter = Q()
-
+    sum_filter = Q(**{f"{rel_lookup}__statut": "VALIDE"})
     if group.date_reset:
         sum_filter &= Q(**{f"{rel_lookup}__date_creation__gte": group.date_reset})
 
@@ -474,10 +461,30 @@ def group_detail(request, group_id):
     )
 
     # -------------------------------------------------
-    # 💰 Total global du groupe
+    # 🔄 Associer versement en attente à chaque membre
     # -------------------------------------------------
+    versements_map = {}
 
-    total_filter = Q(member__group=group)
+    if user_is_admin:
+        versements = (
+            Versement.objects
+            .filter(member__group=group, statut="EN_ATTENTE")
+            .select_related("member")
+            .order_by("-date_creation")
+        )
+
+        # garder le plus récent par membre
+        for v in versements:
+            if v.member_id not in versements_map:
+                versements_map[v.member_id] = v
+
+    for m in membres:
+        m.versement_en_attente = versements_map.get(m.id)
+
+    # -------------------------------------------------
+    # 💰 Total global du groupe (VALIDÉS seulement)
+    # -------------------------------------------------
+    total_filter = Q(member__group=group, statut="VALIDE")
 
     if group.date_reset:
         total_filter &= Q(date_creation__gte=group.date_reset)
@@ -496,7 +503,6 @@ def group_detail(request, group_id):
     # -------------------------------------------------
     # 📝 Historique actions
     # -------------------------------------------------
-
     actions = (
         ActionLog.objects
         .filter(group=group)
@@ -507,7 +513,6 @@ def group_detail(request, group_id):
     # -------------------------------------------------
     # 🔗 Lien invitation
     # -------------------------------------------------
-
     code = None
 
     for field in ("code_invitation", "invitation_token", "uuid"):
@@ -530,7 +535,6 @@ def group_detail(request, group_id):
     # -------------------------------------------------
     # 📦 Context final
     # -------------------------------------------------
-
     context = {
         "group": group,
         "membres": membres,
@@ -1010,18 +1014,69 @@ def reset_cycle_view(request, group_id):
         messages.error(request, "Accès non autorisé.")
         return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-    # 1️⃣ Supprimer les anciens tirages
+    # -------------------------------------------------
+    # 🧠 1. ENREGISTRER LE CYCLE AVANT RESET
+    # -------------------------------------------------
+
+    from .models import Cycle, EtapeCycle
+
+    date_debut_cycle = group.date_reset or group.date_creation
+    date_fin_cycle = timezone.now()
+
+    # créer cycle
+    cycle = Cycle.objects.create(
+        group=group,
+        date_debut=date_debut_cycle,
+        date_fin=date_fin_cycle
+    )
+
+    # -------------------------------------------------
+    # 🏆 2. SAUVEGARDER LES ÉTAPES (tirages)
+    # -------------------------------------------------
+
+    tirages = group.tirages.select_related("gagnant__user").all()
+    for index, tirage in enumerate(tirages, start=1):
+
+        EtapeCycle.objects.create(
+            cycle=cycle,
+            numero_etape=index,
+            date_etape=tirage.date_tirage if hasattr(tirage, "date_tirage") else timezone.now(),
+            tirage=tirage
+        )
+
+    # -------------------------------------------------
+    # 🧹 3. SUPPRIMER LES TIRAGES ACTUELS
+    # -------------------------------------------------
+
     group.tirages.all().delete()
 
-    # 2️⃣ Mettre à jour date_reset (important pour tes calculs)
+    # -------------------------------------------------
+    # 🔄 4. RESET DATE
+    # -------------------------------------------------
+
     group.date_reset = timezone.now()
     group.save(update_fields=["date_reset"])
 
-    messages.success(request, f"✅ Nouveau cycle démarré pour le groupe {group.nom}.")
+    # -------------------------------------------------
+    # 📝 5. LOG
+    # -------------------------------------------------
+
+    ActionLog.objects.create(
+        user=request.user,
+        group=group,
+        action=f"Reset du cycle (Cycle #{cycle.id})"
+    )
+
+    # -------------------------------------------------
+    # ✅ MESSAGE
+    # -------------------------------------------------
+
+    messages.success(
+        request,
+        f"✅ Cycle archivé et nouveau cycle démarré pour {group.nom}."
+    )
 
     return redirect("cotisationtontine:group_detail", group_id=group.id)
-
-
 
 
 from rest_framework.views import APIView

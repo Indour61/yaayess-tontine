@@ -204,6 +204,46 @@ class ActionLog(models.Model):
         return f"{self.date} - {self.user}"
 
 
+class Cycle(models.Model):
+    group = models.ForeignKey("Group", on_delete=models.CASCADE, related_name="cycles")
+    date_debut = models.DateTimeField()
+    date_fin = models.DateTimeField()
+
+    def __str__(self):
+        return f"Cycle {self.id} - {self.group.nom}"
+
+    @property
+    def total_etapes(self):
+        return self.etapes.count()
+
+    @property
+    def completed_etapes(self):
+        return self.etapes.filter(tirage__isnull=False).count()
+
+    @property
+    def progression(self):
+        if self.total_etapes == 0:
+            return 0
+        return int((self.completed_etapes / self.total_etapes) * 100)
+
+
+class EtapeCycle(models.Model):
+    cycle = models.ForeignKey(Cycle, on_delete=models.CASCADE, related_name="etapes")
+    numero_etape = models.IntegerField()
+    date_etape = models.DateTimeField()
+
+    tirage = models.ForeignKey(
+        "Tirage",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    def __str__(self):
+        return f"Étape {self.numero_etape} - Cycle {self.cycle.id}"
+
+
+
 # =====================================================
 # INVITATION
 # =====================================================
@@ -230,6 +270,4 @@ class Invitation(models.Model):
 
 
 
-from django.db import models
-from accounts.models import CustomUser
 
