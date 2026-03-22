@@ -42,11 +42,13 @@ urlpatterns = [
     # 🌐 SEO
     path("robots.txt", robots_txt),
 
-    # 🎥 VIDEO IA
 
+    path('legal/', include('legal.urls')),
 ]
 
 
 # 📁 MEDIA FILES
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+
