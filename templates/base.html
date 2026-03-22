@@ -3,6 +3,11 @@
 <html lang="fr">
 
 <head>
+<meta property="og:title" content="YaayESS - Tontine digitale">
+<meta property="og:description" content="Gérez vos tontines facilement avec YaayESS">
+<meta property="og:image" content="{% static 'img/logo.png' %}">
+<meta property="og:url" content="{{ request.build_absolute_uri }}">
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -21,7 +26,44 @@
 
 <link rel="stylesheet" href="{% static 'css/style.css' %}">
 
+
 <style>
+.social-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    color: white;
+    font-size: 20px;
+    transition: 0.3s;
+}
+
+.social-icon:hover {
+    transform: scale(1.15);
+}
+
+/* Couleurs officielles */
+.facebook { background: #1877F2; }
+.instagram { background: #E4405F; }
+.tiktok { background: #000000; }
+.linkedin { background: #0A66C2; }
+.youtube { background: #FF0000; }
+
+
+
+ .social-links a {
+    color: #ffffff; /* blanc visible */
+    transition: 0.3s;
+}
+
+.social-links a:hover {
+    color: #00b894; /* vert YaayESS */
+    transform: scale(1.2);
+}
+
+
 
 :root{
 --yaayess-primary:#198754;
@@ -91,11 +133,14 @@ font-size:1.25rem;
 
 </head>
 
+
+<body>
+
+<body>
+
 <a href="https://wa.me/221767213935" class="whatsapp-float">
     <img src="{% static 'images/whatsapp.png' %}" alt="WhatsApp">
 </a>
-
-<body>
 
 <!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-success fixed-top shadow-sm">
@@ -333,7 +378,34 @@ ibrahim.ndr@gmail.com
 
 </div>
 
+
+
+<div class="text-center social-links mt-4">
+
+    <h6 class="fw-bold mb-3">Suivez-nous</h6>
+
+    <a href="https://facebook.com/yaayess" target="_blank" class="mx-2 social-icon facebook">
+        <i class="fab fa-facebook-f"></i>
+    </a>
+
+    <a href="https://instagram.com/yaayess" target="_blank" class="mx-2 social-icon instagram">
+        <i class="fab fa-instagram"></i>
+    </a>
+
+    <a href="https://tiktok.com/@yaayess" target="_blank" class="mx-2 social-icon tiktok">
+        <i class="fab fa-tiktok"></i>
+    </a>
+
+    <a href="https://linkedin.com/company/yaayess" target="_blank" class="mx-2 social-icon linkedin">
+        <i class="fab fa-linkedin-in"></i>
+    </a>
+
+    <a href="https://youtube.com/@yaayess" target="_blank" class="mx-2 social-icon youtube">
+        <i class="fab fa-youtube"></i>
+    </a>
+
 </div>
+
 
 <hr>
 
