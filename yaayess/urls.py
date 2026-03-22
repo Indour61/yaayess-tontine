@@ -43,7 +43,7 @@ urlpatterns = [
     path("robots.txt", robots_txt),
 
     # 🎥 VIDEO IA
-    path('video/', include('video_ai.urls')),
+
 ]
 
 

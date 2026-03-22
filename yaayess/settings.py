@@ -111,7 +111,7 @@ INSTALLED_APPS = [
     "corsheaders",
     'rest_framework_simplejwt.token_blacklist',
 
-    "video_ai",
+
 ]
 
 MEDIA_URL = "/media/"
