@@ -60,8 +60,9 @@ urlpatterns = [
     # ============================
     # TIRAGE
     # ============================
-    path("group/<int:group_id>/tirage/", views.tirage_au_sort_view, name="tirage_au_sort"),
-    path("group/<int:group_id>/tirage/resultat/", views.tirage_resultat_view, name="tirage_resultat"),
+
+    path('group/<int:group_id>/tirage/', views.tirage_au_sort_view, name='tirage_au_sort'),
+    path('group/<int:group_id>/tirage/resultat/', views.tirage_resultat_view, name='tirage_resultat'),
 
     # ============================
     # CYCLE
@@ -74,3 +75,4 @@ urlpatterns = [
     path("group/<int:group_id>/historique-cycles/", views.historique_cycles_view, name="historique_cycles"),
     path("historique-actions/", views.historique_actions_view, name="historique_actions"),
 ]
+

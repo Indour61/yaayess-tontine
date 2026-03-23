@@ -66,7 +66,7 @@
         </div>
     </div>
 
-    <!-- 🔗 Invitation -->
+<!-- 🔗 Invitation -->
     {% if user_is_admin %}
     <div class="card border-success shadow-sm mb-4">
         <div class="card-body">
@@ -74,19 +74,29 @@
             <h6 class="fw-bold text-success">🔗 Lien d'invitation</h6>
 
             <div class="input-group mb-2">
-                <input id="inviteLink" type="text" readonly value="{{ invite_url }}" class="form-control">
-                <button class="btn btn-outline-secondary" onclick="copyInvite()">📋</button>
+                <input id="inviteLink"
+                       type="text"
+                       readonly
+                       value="{{ invite_url }}"
+                       class="form-control">
+
+                <button class="btn btn-outline-secondary" onclick="copyInvite()">
+                    📋
+                </button>
             </div>
 
-            <a href="https://wa.me/?text=Rejoins%20notre%20tontine%20YaayESS%20👉%20{{ invite_url }}"
+            <!-- WhatsApp -->
+            <a id="whatsappInviteBtn"
                target="_blank"
-               class="btn btn-success btn-sm">
-                💬 WhatsApp
+               class="btn btn-success btn-sm w-100">
+                💬 Inviter via WhatsApp
             </a>
 
         </div>
     </div>
     {% endif %}
+
+
 
     <!-- 🚨 Alertes -->
     {% if versements_en_attente_liste %}
@@ -99,8 +109,10 @@
     {% if user_is_admin %}
     <div class="d-flex gap-2 mb-4 flex-wrap">
 
-        <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}" class="btn btn-outline-primary">🎲 Tirage</a>
 
+        <button onclick="lancerTirage()" class="btn btn-outline-primary">
+            🎲 Tirage
+        </button>
         <a href="{% url 'cotisationtontine:tirage_resultat' group.id %}" class="btn btn-outline-success">📊 Résultats</a>
 
         <a href="{% url 'cotisationtontine:historique_cycles' group.id %}" class="btn btn-outline-dark">📜 Historique</a>
@@ -199,13 +211,36 @@
 </div>
 
 <script>
+
+// Copier lien moderne
 function copyInvite(){
-    const input = document.getElementById("inviteLink");
-    input.select();
-    document.execCommand("copy");
-    alert("Lien copié !");
+
+    let link = document.getElementById("inviteLink").value;
+
+    navigator.clipboard.writeText(link)
+    .then(() => alert("✅ Lien copié !"))
+    .catch(() => alert("❌ Impossible de copier"));
 }
+
+// WhatsApp dynamique
+document.addEventListener("DOMContentLoaded", function(){
+
+    let link = document.getElementById("inviteLink").value;
+
+    let message = encodeURIComponent(
+        "👋 Bonjour !\n\n" +
+        "Tu es invité à rejoindre notre tontine sur YaayESS 💰\n\n" +
+        "👉 Clique ici pour rejoindre : " + link + "\n\n" +
+        "Rejoins-nous dès maintenant 🚀"
+    );
+
+    document.getElementById("whatsappInviteBtn").href =
+        "https://wa.me/?text=" + message;
+
+});
+
 </script>
+
 
 <style>
 .group-header{
@@ -215,6 +250,44 @@ function copyInvite(){
   background:#f8f9fa;
 }
 </style>
+
+<script>
+function lancerTirage(){
+
+    let btn = event.target;
+
+    btn.innerText = "⏳ Tirage en cours...";
+    btn.disabled = true;
+
+    fetch("{% url 'cotisationtontine:tirage_au_sort' group.id %}")
+    .then(res => res.json())
+    .then(data => {
+
+        if(data.error){
+            alert(data.error);
+            btn.innerText = "🎲 Tirage";
+            btn.disabled = false;
+            return;
+        }
+
+        // 🔄 CAS RESET
+        if(data.reset){
+            alert(data.message);
+            location.reload();
+            return;
+        }
+
+        // ✅ CAS NORMAL
+        window.location.href = "{% url 'cotisationtontine:tirage_resultat' group.id %}";
+
+    })
+    .catch(() => {
+        alert("Erreur serveur");
+        btn.innerText = "🎲 Tirage";
+        btn.disabled = false;
+    });
+}
+</script>
 
 {% endblock %}
 

@@ -13,11 +13,12 @@
             <div class="card shadow border-0 text-center">
 
                 <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">🎲 Tirage au sort</h4>
+                    <h4 class="mb-0">🎲 Tirage en direct</h4>
                 </div>
 
                 <div class="card-body">
 
+                    <!-- Groupe -->
                     <h5 class="mb-4">
                         Groupe :
                         <span class="text-success fw-semibold">
@@ -25,18 +26,24 @@
                         </span>
                     </h5>
 
+                    <!-- Message erreur -->
                     {% if erreur %}
                         <div class="alert alert-danger">
                             ⚠️ {{ erreur }}
                         </div>
                     {% endif %}
 
+                    <!-- 🎰 ZONE ANIMATION -->
+                    <div id="roulette" class="roulette-box mb-4">
+                        Cliquez pour lancer le tirage
+                    </div>
+
+                    <!-- Bouton -->
                     {% if tirage_possible %}
                         <div class="d-grid mb-4">
-                            <a href="{% url 'cotisationtontine:tirage_au_sort' group.id %}"
-                               class="btn btn-primary btn-lg">
-                               🎲 Lancer le tirage au sort
-                            </a>
+                            <button onclick="lancerTirage()" class="btn btn-danger btn-lg">
+                                🎰 Lancer le tirage
+                            </button>
                         </div>
                     {% else %}
                         <div class="d-grid mb-4">
@@ -46,6 +53,7 @@
                         </div>
                     {% endif %}
 
+                    <!-- 🏆 RESULTAT -->
                     {% if gagnant %}
 
                         <div class="winner-box mt-4">
@@ -64,35 +72,57 @@
                                 </p>
                             {% endif %}
 
-                            <p class="fs-4 mt-3">
-                                Montant remporté :
-                            </p>
+                            <p class="fs-5 mt-3">Montant remporté :</p>
 
                             <h2 class="text-danger fw-bold">
                                 {{ montant_total|floatformat:0|intcomma }} FCFA
                             </h2>
-
-                            <div class="d-grid mt-4">
-                                <a href="{% url 'cotisationtontine:group_detail' group.id %}"
-                                   class="btn btn-success btn-lg">
-                                   📊 Voir le détail du groupe
-                                </a>
-                            </div>
 
                         </div>
 
                     {% else %}
 
                         <div class="alert alert-warning mt-4">
-                            ⚠️ Aucun membre éligible au tirage pour le moment.
+                            ⚠️ Aucun membre éligible au tirage.
                         </div>
 
                     {% endif %}
 
+                    <!-- 🔗 PARTAGE -->
+            <div class="mt-4">
+                <p class="fw-bold">📲 Partager avec les membres</p>
+
+                <!-- Lien -->
+                <div class="input-group mb-2">
+                    <input type="text"
+                           id="resultLink"
+                           class="form-control"
+                           value="{{ request.build_absolute_uri }}"
+                           readonly>
+
+                    <button class="btn btn-outline-secondary" onclick="copyResultLink()">
+                        📋
+                    </button>
+                </div>
+
+                <!-- Bouton WhatsApp -->
+                <button onclick="shareWhatsApp()" class="btn btn-success w-100">
+                    📲 Partager sur WhatsApp
+                </button>
+            </div>
+
+                    <!-- Navigation -->
                     <div class="d-grid mt-4">
+                        <a href="{% url 'cotisationtontine:group_detail' group.id %}"
+                           class="btn btn-success">
+                           📊 Voir le groupe
+                        </a>
+                    </div>
+
+                    <div class="d-grid mt-2">
                         <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}"
                            class="btn btn-outline-primary">
-                            ⬅ Retour au tableau de bord
+                            ⬅ Retour dashboard
                         </a>
                     </div>
 
@@ -105,41 +135,108 @@
 
 </div>
 
+<!-- 🎰 STYLE -->
 <style>
+
+.roulette-box{
+    font-size: 26px;
+    font-weight: bold;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 12px;
+    min-height: 70px;
+}
 
 .winner-box{
     background:#f8f9fa;
     border-radius:12px;
     padding:25px;
-    animation:winnerReveal 1.5s ease-out;
+    animation:winnerReveal 1.2s ease-out;
 }
 
 @keyframes winnerReveal{
-
-    0%{
-        transform:scale(0.7);
-        opacity:0;
-    }
-
-    60%{
-        transform:scale(1.1);
-    }
-
-    100%{
-        transform:scale(1);
-        opacity:1;
-    }
-
-}
-
-@media (max-width:768px){
-
-    .display-5{
-        font-size:2rem;
-    }
-
+    0%{ transform:scale(0.7); opacity:0; }
+    60%{ transform:scale(1.1); }
+    100%{ transform:scale(1); opacity:1; }
 }
 
 </style>
+
+<!-- 🎰 SCRIPT ANIMATION -->
+<script>
+
+let membres = [
+    {% for m in group.membres.all %}
+        "{{ m.alias|default:m.user.nom|default:m.user.phone }}",
+    {% endfor %}
+];
+
+function lancerTirage() {
+
+    let roulette = document.getElementById("roulette");
+
+    let index = 0;
+
+    let interval = setInterval(() => {
+        roulette.innerText = membres[index % membres.length];
+        index++;
+    }, 100);
+
+    setTimeout(() => {
+
+        clearInterval(interval);
+
+        fetch("{% url 'cotisationtontine:tirage_au_sort' group.id %}")
+        .then(response => response.json())
+        .then(data => {
+
+            roulette.innerText = "🏆 " + data.gagnant;
+
+            roulette.style.color = "green";
+            roulette.style.fontSize = "32px";
+
+        })
+        .catch(() => {
+            roulette.innerText = "Erreur tirage";
+        });
+
+    }, 3000);
+}
+
+</script>
+
+<script>
+
+// ✅ Copier lien (version moderne)
+function copyResultLink(){
+    let link = document.getElementById("resultLink").value;
+
+    navigator.clipboard.writeText(link)
+    .then(() => {
+        alert("✅ Lien copié !");
+    })
+    .catch(() => {
+        alert("❌ Impossible de copier");
+    });
+}
+
+// ✅ WhatsApp dynamique
+function shareWhatsApp(){
+
+    let link = document.getElementById("resultLink").value;
+
+    let message = encodeURIComponent(
+        "🎉 Résultat du tirage YaayESS\n\n" +
+        "🏆 Un gagnant vient d’être tiré !\n" +
+        "👉 Voir le résultat : " + link + "\n\n" +
+        "Rejoins YaayESS 🚀"
+    );
+
+    let url = "https://wa.me/?text=" + message;
+
+    window.open(url, "_blank");
+}
+
+</script>
 
 {% endblock %}

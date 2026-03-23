@@ -742,6 +742,13 @@ from cotisationtontine.models import Group, Tirage, Versement
 
 from django.db.models import Sum
 
+import random
+from django.db.models import Sum, Q
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
+from django.db import transaction
+
 @login_required
 @transaction.atomic
 def tirage_au_sort_view(request, group_id):
@@ -750,67 +757,103 @@ def tirage_au_sort_view(request, group_id):
 
     # 🔒 Sécurité
     if request.user != group.admin and not request.user.is_superuser:
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"error": "Accès non autorisé"}, status=403)
+
         messages.error(request, "Accès non autorisé.")
         return redirect("cotisationtontine:group_detail", group_id=group.id)
 
     membres_actifs = group.membres.filter(actif=True, exit_liste=False)
 
     if not membres_actifs.exists():
-        messages.error(request, "Aucun membre actif.")
-        return redirect("cotisationtontine:group_detail", group_id=group.id)
+        return JsonResponse({"error": "Aucun membre actif"}, status=400)
 
-    # Bloquer si versements en attente
+    # 🔒 Vérifier versements en attente
     versements_en_attente = Versement.objects.filter(
         member__group=group,
         statut="EN_ATTENTE"
     )
 
     if versements_en_attente.exists():
-        messages.error(request, "Tous les versements doivent être validés avant le tirage.")
-        return redirect("cotisationtontine:group_detail", group_id=group.id)
+        return JsonResponse({
+            "error": "Tous les versements doivent être validés avant le tirage."
+        }, status=400)
 
-    # Membres ayant déjà gagné
-    tirages = group.tirages.all()
-    gagnants_ids = tirages.values_list("gagnant_id", flat=True)
+    # 🔁 Détection du cycle actuel
+    dernier_tirage = group.tirages.order_by("-date_tirage").first()
+    cycle_actuel = dernier_tirage.cycle_number if dernier_tirage else 1
+
+    # 👥 Gagnants du cycle courant seulement
+    gagnants_ids = group.tirages.filter(
+        cycle_number=cycle_actuel
+    ).values_list("gagnant_id", flat=True)
+
     membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
 
-    # Reset si tout le monde a gagné
+    # 🔄 Reset cycle automatique
     if not membres_restants.exists():
-        messages.success(request, "Tous les membres ont gagné. Cycle réinitialisé.")
-        return redirect("cotisationtontine:reset_cycle", group_id=group.id)
+        return JsonResponse({
+            "reset": True,
+            "message": "Tous les membres ont gagné. Nouveau cycle."
+        })
 
-    # 🎲 Tirage
+    # 🎲 Tirage sécurisé
     gagnant = random.choice(list(membres_restants))
 
-    montant_total = Versement.objects.filter(
-        member__group=group,
-        statut="VALIDE"
-    ).aggregate(total=Sum("montant"))["total"] or 0
+    # 💰 Calcul montant avec reset
+    filter_q = Q(member__group=group, statut="VALIDE")
 
-    # Création du tirage en base
+    if group.date_reset:
+        filter_q &= Q(date_creation__gte=group.date_reset)
+
+    montant_total = (
+        Versement.objects
+        .filter(filter_q)
+        .aggregate(total=Sum("montant"))["total"] or 0
+    )
+
+    # 🧠 Lock anti double tirage (important)
+    if Tirage.objects.filter(
+        group=group,
+        gagnant=gagnant,
+        cycle_number=cycle_actuel
+    ).exists():
+        return JsonResponse({"error": "Tirage déjà effectué pour ce membre"}, status=400)
+
+    # 💾 Enregistrement
     Tirage.objects.create(
         group=group,
         gagnant=gagnant,
         montant=montant_total,
+        cycle_number=cycle_actuel
     )
 
-    messages.success(
-        request,
-        f"🎉 {gagnant.user.nom or gagnant.user.phone} a gagné {montant_total} FCFA !"
-    )
+    # 📲 (optionnel) WhatsApp ici
+    # send_whatsapp(gagnant, group)
 
-    return redirect("cotisationtontine:tirage_resultat", group_id=group.id)
-
-# =====================================================
-# PAGE RÉSULTAT DU TIRAGE
-# =====================================================
+    # ⚡ Réponse JSON (clé pour ton animation)
+    return JsonResponse({
+        "success": True,
+        "gagnant": gagnant.alias or getattr(gagnant.user, "username", "") or getattr(gagnant.user, "phone", ""),
+        "montant": montant_total,
+        "cycle": cycle_actuel
+    })
 
 from django.db.models import Sum, Q
+from django.http import HttpResponseForbidden
 
-@login_required
-def tirage_resultat_view(request, group_id):
+def tirage_resultat_view(request, group_id, token=None):
 
     group = get_object_or_404(Group, id=group_id)
+
+    # 🔐 Vérification accès
+    is_member = False
+    if request.user.is_authenticated:
+        is_member = group.membres.filter(user=request.user).exists()
+
+    if not is_member:
+        if not token or str(group.access_token) != str(token):
+            return HttpResponseForbidden("Accès refusé")
 
     tirages = group.tirages.select_related("gagnant__user").order_by("-date_tirage")
     dernier_tirage = tirages.first()
@@ -823,7 +866,6 @@ def tirage_resultat_view(request, group_id):
         gagnant = dernier_tirage.gagnant
         cycle_actuel = dernier_tirage.cycle_number
 
-        # 🔥 Recalcul propre du montant du cycle courant
         filter_q = Q(member__group=group, statut="VALIDE")
 
         if group.date_reset:
@@ -835,7 +877,6 @@ def tirage_resultat_view(request, group_id):
             .aggregate(total=Sum("montant"))["total"] or 0
         )
 
-    # Vérifier s’il reste des membres à tirer dans ce cycle
     membres_actifs = group.membres.filter(actif=True, exit_liste=False)
 
     if cycle_actuel:

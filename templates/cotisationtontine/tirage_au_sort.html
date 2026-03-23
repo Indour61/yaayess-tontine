@@ -12,11 +12,13 @@
             <div class="card shadow border-0 text-center">
 
                 <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0">🎲 Tirage au sort</h4>
+                    <h4 class="mb-0">🎲 Résultat du tirage</h4>
                 </div>
+
 
                 <div class="card-body">
 
+                    <!-- Groupe -->
                     <h5 class="mb-4">
                         Groupe :
                         <span class="text-success fw-semibold">
@@ -24,23 +26,46 @@
                         </span>
                     </h5>
 
+                    <!-- 🎰 Zone dynamique -->
+                    <div id="roulette" class="roulette-box mb-4">
+                        {% if gagnant %}
+                            🏆 {{ gagnant.alias|default:gagnant.user.nom|default:gagnant.user.phone }}
+                        {% else %}
+                            🔄 En attente du tirage...
+                        {% endif %}
+                    </div>
+
+                    <!-- 🎯 Bouton tirage -->
+                    {% if tirage_possible %}
+                    <button onclick="lancerTirage()" class="btn btn-danger btn-lg mb-3">
+                        🎰 Lancer le tirage
+                    </button>
+                    {% endif %}
+
+                    <!-- 🏆 Résultat -->
                     {% if gagnant %}
 
-                        <div class="winner-box py-3">
+                        <div class="winner-box py-3 mt-3">
 
                             <h4 class="text-success mb-3">
                                 👏 Félicitations !
                             </h4>
 
-                            <h1 class="display-5 fw-bold text-dark">
-                                🎉 {{ gagnant.user.nom|default:gagnant.user.username }}
+                            <h1 id="winner-name" class="display-5 fw-bold text-dark">
+                                🎉 {{ gagnant.alias|default:gagnant.user.nom|default:gagnant.user.phone }}
                             </h1>
 
-                            <p class="fs-4 mt-3">
+                            {% if cycle_actuel %}
+                                <p class="text-muted">
+                                    Cycle : {{ cycle_actuel }}
+                                </p>
+                            {% endif %}
+
+                            <p class="fs-5 mt-3">
                                 Gain du cycle :
                             </p>
 
-                            <h2 class="text-danger fw-bold">
+                            <h2 id="winner-amount" class="text-danger fw-bold">
                                 {{ montant_total|floatformat:0|intcomma }} FCFA
                             </h2>
 
@@ -49,16 +74,31 @@
                     {% else %}
 
                         <div class="alert alert-warning mt-4">
-                            ⚠️ Aucun membre éligible au tirage pour le moment.
+                            ⚠️ Aucun membre éligible pour le moment.
                         </div>
 
                     {% endif %}
 
+                    <!-- 📲 Partage WhatsApp -->
+                    <div class="mt-4">
+                        <a id="whatsapp-btn" target="_blank" class="btn btn-success w-100">
+                            📲 Partager sur WhatsApp
+                        </a>
+                    </div>
+
+                    <!-- Navigation -->
                     <div class="d-grid gap-2 mt-4">
+
+                        <a href="{% url 'cotisationtontine:group_detail' group.id %}"
+                           class="btn btn-success">
+                            📊 Voir le groupe
+                        </a>
+
                         <a href="{% url 'cotisationtontine:dashboard_tontine_simple' %}"
                            class="btn btn-outline-primary">
-                            ⬅ Retour au tableau de bord
+                            ⬅ Retour dashboard
                         </a>
+
                     </div>
 
                 </div>
@@ -70,41 +110,91 @@
 
 </div>
 
+<!-- 🎨 STYLE -->
 <style>
+
+.roulette-box{
+    font-size: 26px;
+    font-weight: bold;
+    background: #111;
+    color: #0f0;
+    padding: 20px;
+    border-radius: 12px;
+    min-height: 70px;
+}
 
 .winner-box{
     background:#f8f9fa;
     border-radius:12px;
     padding:20px;
-    animation: winnerReveal 1.5s ease-out;
+    animation: winnerReveal 1s ease-out;
 }
 
 @keyframes winnerReveal{
-
-    0%{
-        transform:scale(0.7);
-        opacity:0;
-    }
-
-    60%{
-        transform:scale(1.1);
-    }
-
-    100%{
-        transform:scale(1);
-        opacity:1;
-    }
-
-}
-
-@media (max-width:768px){
-
-    .display-5{
-        font-size:2rem;
-    }
-
+    0%{ transform:scale(0.7); opacity:0; }
+    60%{ transform:scale(1.1); }
+    100%{ transform:scale(1); opacity:1; }
 }
 
 </style>
 
+<!-- 🎉 CONFETTI -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<!-- ⚡ SCRIPT -->
+<script>
+confetti({
+    particleCount: 150,
+    spread: 90
+});
+
+
+function lancerTirage(){
+
+    let roulette = document.getElementById("roulette");
+
+    roulette.innerText = "🎰 Tirage en cours...";
+
+    fetch("{% url 'cotisationtontine:tirage_au_sort' group.id %}")
+    .then(res => res.json())
+    .then(data => {
+
+        if(data.error){
+            alert(data.error);
+            return;
+        }
+
+        roulette.innerText = "🏆 " + data.gagnant;
+
+        confetti({
+            particleCount: 150,
+            spread: 90
+        });
+
+        // sécuriser existence des éléments
+        let nameEl = document.getElementById("winner-name");
+        let amountEl = document.getElementById("winner-amount");
+
+        if(nameEl){
+            nameEl.innerText = "🎉 " + data.gagnant;
+        }
+
+        if(amountEl){
+            amountEl.innerText = data.montant + " FCFA";
+        }
+
+        let message = encodeURIComponent(
+            "🎉 " + data.gagnant + " a gagné " + data.montant + " FCFA sur YaayESS 🚀"
+        );
+
+        document.getElementById("whatsapp-btn").href =
+            "https://wa.me/?text=" + message;
+
+    });
+
+}
+
+</script>
+
 {% endblock %}
+
