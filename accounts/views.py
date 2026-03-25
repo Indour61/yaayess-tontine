@@ -959,3 +959,4 @@ def dashboard(request):
 
     # 🛑 fallback
     return render(request, 'dashboard.html', context)
+

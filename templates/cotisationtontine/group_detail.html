@@ -200,13 +200,23 @@
 
                 {% else %}
 
-                    {% if m.total_montant < group.montant_base %}
-                        <span class="badge bg-warning">⏳</span>
+                    {% if m.user == request.user %}
+
+                        {% if m.total_montant < group.montant_base %}
+                            <a href="{% url 'cotisationtontine:initier_versement' m.id %}"
+                               class="btn btn-sm btn-primary">
+                               💳 Payer
+                            </a>
+                        {% else %}
+                            <span class="badge bg-success">✔ Payé</span>
+                        {% endif %}
+
                     {% else %}
-                        <span class="badge bg-success">✔</span>
+                        <span class="badge bg-secondary">👤</span>
                     {% endif %}
 
                 {% endif %}
+
 
                 </td>
 

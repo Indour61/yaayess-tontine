@@ -109,8 +109,8 @@ INSTALLED_APPS = [
     'django.contrib.humanize',
     "django_countries",
     # Apps locales
+    'cotisationtontine.apps.CotisationtontineConfig',
 
-    'cotisationtontine',
     'epargnecredit',
     'legal',
     'rest_framework',

@@ -29,6 +29,7 @@ from datetime import timedelta
 from .models import Group, Versement, ActionLog
 
 
+
 @login_required
 def dashboard_tontine_simple(request):
     """
@@ -603,6 +604,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.db import transaction
 from django.contrib import messages
 
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.shortcuts import get_object_or_404, redirect, render
+from django.contrib import messages
+from django.db.models import Sum
+from decimal import Decimal, ROUND_HALF_UP
+
 @login_required
 @transaction.atomic
 def initier_versement(request, member_id):
@@ -614,7 +622,7 @@ def initier_versement(request, member_id):
 
     group = member.group
 
-    # 🔒 RÈGLE MÉTIER
+    # 🔒 RÈGLE MÉTIER (sécurité)
     user_is_admin = (
         request.user == group.admin
         or request.user.is_superuser
@@ -625,15 +633,23 @@ def initier_versement(request, member_id):
         return redirect("cotisationtontine:group_detail", group_id=group.id)
 
     # =============================
+    # 📊 TOTAL ACTUEL
+    # =============================
+    total_actuel = member.versements.filter(
+        statut__in=["EN_ATTENTE", "VALIDE"]
+    ).aggregate(total=Sum("montant"))["total"] or Decimal("0")
+
+    montant_max = group.montant_base or Decimal("0")
+
+    reste = montant_max - total_actuel
+
+    # =============================
     # FORMULAIRE GET
     # =============================
     if request.method == "GET":
 
-        montant_base = group.montant_base or Decimal("0")
-
-        frais = (montant_base * Decimal("0.02")).quantize(Decimal("1"))
-
-        total = montant_base + frais
+        frais = (reste * Decimal("0.02")).quantize(Decimal("1"))
+        total = reste + frais
 
         return render(
             request,
@@ -641,7 +657,8 @@ def initier_versement(request, member_id):
             {
                 "member": member,
                 "group": group,
-                "montant_base": montant_base,
+                "montant_base": montant_max,
+                "reste": reste,
                 "frais": frais,
                 "total": total
             }
@@ -655,18 +672,40 @@ def initier_versement(request, member_id):
     try:
         montant = Decimal(montant_raw)
     except Exception:
-        messages.error(request, "Montant invalide.")
+        messages.error(request, "❌ Montant invalide.")
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
     if montant <= 0:
-        messages.error(request, "Le montant doit être supérieur à 0.")
+        messages.error(request, "❌ Le montant doit être supérieur à 0.")
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
     montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    # 💰 Calcul frais YaayESS 2%
+    # =============================
+    # 🔒 BLOQUER SI DÉJÀ PAYÉ
+    # =============================
+    if reste <= 0:
+        messages.warning(request, "✅ Vous avez déjà atteint le montant requis.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # =============================
+    # 🔒 BLOQUER DÉPASSEMENT
+    # =============================
+    if montant > reste:
+        messages.error(
+            request,
+            f"❌ Dépassement interdit ! Il vous reste seulement {reste} FCFA à payer."
+        )
+        return redirect("cotisationtontine:initier_versement", member_id=member_id)
+
+    # =============================
+    # 💰 CALCUL FRAIS
+    # =============================
     frais = (montant * Decimal("0.02")).quantize(Decimal("1"))
 
+    # =============================
+    # 💾 ENREGISTREMENT
+    # =============================
     Versement.objects.create(
         member=member,
         montant=montant,
@@ -677,7 +716,7 @@ def initier_versement(request, member_id):
 
     messages.success(
         request,
-        f"Versement enregistré pour {member.user.nom or member.user.phone}. En attente de validation."
+        f"✅ Versement de {montant} FCFA enregistré pour {member.user.nom or member.user.phone}. En attente de validation."
     )
 
     return redirect("cotisationtontine:group_detail", group_id=group.id)
