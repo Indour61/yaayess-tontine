@@ -1,5 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from accounts.views import dashboard
+
 from . import views
 from .views_api import (
     GroupViewSet,
@@ -36,6 +38,8 @@ urlpatterns = [
     path("", views.dashboard_tontine_simple, name="home"),  # 🔥 IMPORTANT
     path("dashboard/", views.dashboard_tontine_simple, name="dashboard_tontine_simple"),
 
+
+#    path("dashboard/", dashboard, name="dashboard_tontine_simple"),
     # ============================
     # GROUPES
     # ============================
@@ -75,4 +79,3 @@ urlpatterns = [
     path("group/<int:group_id>/historique-cycles/", views.historique_cycles_view, name="historique_cycles"),
     path("historique-actions/", views.historique_actions_view, name="historique_actions"),
 ]
-

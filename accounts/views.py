@@ -918,3 +918,44 @@ def landing_view(request):
 
     # 👇 utilisateur non connecté
     return render(request, 'landing.html')
+
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from accounts.models import Notification
+
+
+@login_required
+def dashboard(request):
+    user = request.user
+
+    # 🔔 Notifications (filtrées par utilisateur si champ existe)
+    if hasattr(Notification, "user"):
+        notifications = Notification.objects.filter(user=user).order_by('-created_at')[:5]
+        unread_count = Notification.objects.filter(user=user, is_read=False).count()
+    else:
+        # fallback (si pas encore lié au user)
+        notifications = Notification.objects.order_by('-created_at')[:5]
+        unread_count = Notification.objects.filter(is_read=False).count()
+
+    # ✅ Marquer comme lues (uniquement pour ce user)
+    if hasattr(Notification, "user"):
+        Notification.objects.filter(user=user, is_read=False).update(is_read=True)
+    else:
+        Notification.objects.filter(is_read=False).update(is_read=True)
+
+    context = {
+        'notifications': notifications,
+        'unread_count': unread_count,
+    }
+
+    # 🎯 Redirection selon type d'inscription
+    choix = getattr(user, 'choix_inscription', None)
+
+    if choix == "cotisationtontine":
+        return render(request, 'cotisationtontine/dashboard.html', context)
+
+    elif choix == "epargnecredit":
+        return render(request, 'epargnecredit/dashboard.html', context)
+
+    # 🛑 fallback
+    return render(request, 'dashboard.html', context)

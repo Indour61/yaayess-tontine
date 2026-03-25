@@ -42,6 +42,30 @@
         </div>
     </div>
 
+<!-- 🔔 NOTIFICATIONS -->
+<div class="card border-warning shadow-sm mb-4">
+    <div class="card-header bg-warning text-dark">
+        🔔 Activités récentes
+    </div>
+
+    <div class="card-body" style="max-height: 200px; overflow-y: auto;">
+        {% if notifications %}
+            <ul class="list-group list-group-flush">
+                {% for notif in notifications %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>{{ notif.message }}</span>
+                        <small class="text-muted">
+                            {{ notif.created_at|date:"d/m H:i" }}
+                        </small>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-muted">Aucune activité récente</p>
+        {% endif %}
+    </div>
+</div>
+
     <!-- 📊 Résumé -->
     <div class="row text-center g-3 mb-4">
         <div class="col-md-4">

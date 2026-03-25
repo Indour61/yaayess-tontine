@@ -27,6 +27,17 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
 ]
 
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+EMAIL_HOST = 'smtp-relay.brevo.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+EMAIL_HOST_USER = 'a5d583001@smtp-brevo.com'
+
+
+EMAIL_HOST_PASSWORD = os.getenv("BREVO_SMTP_KEY")
+
 # ----------------------------------------------------
 # 🗄 DATABASE - Version sécurisée
 # ----------------------------------------------------
@@ -98,7 +109,7 @@ INSTALLED_APPS = [
     'django.contrib.humanize',
     "django_countries",
     # Apps locales
-    'accounts',
+
     'cotisationtontine',
     'epargnecredit',
     'legal',
@@ -110,7 +121,7 @@ INSTALLED_APPS = [
     'sslserver',
     "corsheaders",
     'rest_framework_simplejwt.token_blacklist',
-
+    'accounts.apps.AccountsConfig',
 
 ]
 
@@ -216,11 +227,11 @@ TEMPLATES = [
 # ----------------------------------------------------
 # ✉️ EMAIL CONFIG - Version sécurisée
 # ----------------------------------------------------
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
-EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
-EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]        # Doit être défini
-EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"] # Doit être défini
+#EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+#EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
+#EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
+#EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]        # Doit être défini
+#EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"] # Doit être défini
 
 
 # ----------------------------------------------------

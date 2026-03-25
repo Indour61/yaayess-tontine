@@ -12,7 +12,7 @@ from datetime import timedelta
 from django.db.models import Exists, OuterRef, Sum, Value, DecimalField
 from django.db.models.functions import Coalesce
 from epargnecredit.models import Group, GroupMember, Versement, ActionLog
-
+from accounts.models import Notification
 
 def landing_view(request):
     """
@@ -471,7 +471,16 @@ from django.urls import reverse
 from django.db.models import (
     Sum, Q, Value, DecimalField, OuterRef, Subquery, Exists
 )
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.urls import reverse
+
+from django.db.models import Q, Sum, Value, DecimalField, Subquery, OuterRef, Exists
 from django.db.models.functions import Coalesce
+
+from accounts.models import Notification
 
 from .models import Group, GroupMember, Versement, PretDemande, ActionLog
 
@@ -493,6 +502,11 @@ def group_detail(request, group_id):
     if not has_access:
         messages.error(request, "⚠️ Vous n'avez pas accès à ce groupe.")
         return redirect("epargnecredit:group_list")
+
+    # =============================
+    # 🔔 NOTIFICATIONS
+    # =============================
+    notifications = Notification.objects.order_by('-created_at')[:5]
 
     # =============================
     # 💰 Groupe remboursement
@@ -566,7 +580,7 @@ def group_detail(request, group_id):
     ).select_related("member__user").order_by("-created_at")
 
     # =============================
-    # 💰 Versements en attente (ADMIN)
+    # 💰 Versements en attente
     # =============================
     versements_en_attente = Versement.objects.filter(
         member__group=group,
@@ -591,7 +605,7 @@ def group_detail(request, group_id):
     )
 
     # =============================
-    # 📦 Context template
+    # 📦 Context
     # =============================
     context = {
         "group": group,
@@ -606,6 +620,7 @@ def group_detail(request, group_id):
         "remb_group": remb_group,
         "pending_prets": pending_prets,
         "versements_en_attente": versements_en_attente,
+        "notifications": notifications,  # 🔥 IMPORTANT
     }
 
     return render(request, "epargnecredit/group_detail.html", context)

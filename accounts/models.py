@@ -404,3 +404,12 @@ class Payment(models.Model):
     def __str__(self):
         return f"Paiement {self.montant} - {self.member}"
 
+
+class Notification(models.Model):
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.message
+

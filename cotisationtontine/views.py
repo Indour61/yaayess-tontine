@@ -385,10 +385,28 @@ def dashboard(request):
 # 👥 Détail d’un groupe
 # =====================================================
 
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.urls import reverse
+
+from django.db.models import Q, Sum, Value, DecimalField, Subquery, OuterRef
+from django.db.models.functions import Coalesce
+
+from accounts.models import Notification
+
+from .models import Group, GroupMember, Versement, ActionLog
+
+
 @login_required
 def group_detail(request, group_id):
 
     group = get_object_or_404(Group, id=group_id)
+
+    # -------------------------------------------------
+    # 🔔 NOTIFICATIONS
+    # -------------------------------------------------
+    notifications = Notification.objects.order_by('-created_at')[:5]
 
     # -------------------------------------------------
     # 🔒 Vérification accès utilisateur
@@ -442,6 +460,7 @@ def group_detail(request, group_id):
     last_qs = last_qs.order_by("-date_creation")
 
     sum_filter = Q(**{f"{rel_lookup}__statut": "VALIDE"})
+
     if group.date_reset:
         sum_filter &= Q(**{f"{rel_lookup}__date_creation__gte": group.date_reset})
 
@@ -473,7 +492,6 @@ def group_detail(request, group_id):
             .order_by("-date_creation")
         )
 
-        # garder le plus récent par membre
         for v in versements:
             if v.member_id not in versements_map:
                 versements_map[v.member_id] = v
@@ -482,7 +500,7 @@ def group_detail(request, group_id):
         m.versement_en_attente = versements_map.get(m.id)
 
     # -------------------------------------------------
-    # 💰 Total global du groupe (VALIDÉS seulement)
+    # 💰 Total global du groupe
     # -------------------------------------------------
     total_filter = Q(member__group=group, statut="VALIDE")
 
@@ -523,17 +541,14 @@ def group_detail(request, group_id):
     invite_arg = code if code else str(group.id)
 
     invite_url = request.build_absolute_uri(
-        reverse(
-            "accounts:inscription_et_rejoindre",
-            args=[invite_arg]
-        )
+        reverse("accounts:inscription_et_rejoindre", args=[invite_arg])
     )
 
     if user_is_admin:
         request.session["last_invitation_link"] = invite_url
 
     # -------------------------------------------------
-    # 📦 Context final
+    # 📦 CONTEXT FINAL
     # -------------------------------------------------
     context = {
         "group": group,
@@ -545,6 +560,7 @@ def group_detail(request, group_id):
         "invite_url": invite_url,
         "last_invitation_link": request.session.get("last_invitation_link"),
         "versements_en_attente_liste": versements_en_attente_liste,
+        "notifications": notifications,  # 🔥 IMPORTANT
     }
 
     return render(
@@ -552,6 +568,7 @@ def group_detail(request, group_id):
         "cotisationtontine/group_detail.html",
         context
     )
+
 
 # views.py
 import os

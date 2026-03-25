@@ -3,6 +3,53 @@
 {% block title %}Dashboard – Cotisation & Tontine{% endblock %}
 
 {% block content %}
+<!-- 🔔 NOTIFICATION ICON -->
+<div style="position: absolute; top: 15px; right: 20px; z-index: 1000;">
+    <div style="position: relative; display: inline-block;">
+        <span style="font-size: 24px;">🔔</span>
+
+        {% if unread_count > 0 %}
+        <span style="
+            position: absolute;
+            top: -8px;
+            right: -10px;
+            background: red;
+            color: white;
+            border-radius: 50%;
+            padding: 3px 7px;
+            font-size: 12px;
+            font-weight: bold;">
+            {{ unread_count }}
+        </span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 📋 NOTIFICATIONS LIST -->
+<div class="card mt-4 shadow-sm">
+    <div class="card-header bg-success text-white">
+        <strong>🔔 Notifications</strong>
+    </div>
+
+    <div class="card-body" style="max-height: 250px; overflow-y: auto;">
+        {% if notifications %}
+            <ul class="list-group list-group-flush">
+                {% for notif in notifications %}
+                    <li class="list-group-item">
+                        <div>
+                            <strong>{{ notif.message }}</strong><br>
+                            <small class="text-muted">
+                                {{ notif.created_at|date:"d M Y H:i" }}
+                            </small>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-muted">Aucune notification pour le moment</p>
+        {% endif %}
+    </div>
+</div>
 
 <div class="container py-4">
 

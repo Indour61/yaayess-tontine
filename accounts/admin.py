@@ -83,3 +83,13 @@ class CustomUserAdmin(DjangoUserAdmin):
     def invalider_comptes(self, request, queryset):
         updated = queryset.update(is_validated=False)
         self.message_user(request, f"{updated} compte(s) invalidé(s).")
+
+from django.contrib import admin
+from .models import Notification
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('message', 'is_read', 'created_at')
+    list_filter = ('is_read',)
+    search_fields = ('message',)
+

@@ -19,3 +19,4 @@ def generate_alias(nom):
     base = ''.join(e for e in nom if e.isalnum())  # supprime les espaces et caractères spéciaux
     return f"{base}-{suffixe}"
 
+
