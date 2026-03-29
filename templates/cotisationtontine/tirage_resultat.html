@@ -26,6 +26,25 @@
                         </span>
                     </h5>
 
+                    <!-- 🔥 STATUT CYCLE -->
+                    <div class="mb-3">
+                        {% if cycle_termine %}
+                            <span class="badge bg-success">✅ Cycle terminé</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">
+                                ⏳ Cycle en cours ({{ nb_restants }} restants)
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    <!-- 📊 PROGRESSION -->
+                    <div class="progress mb-3">
+                        <div class="progress-bar bg-success"
+                             style="width: {{ progress }}%">
+                            {{ progress }}%
+                        </div>
+                    </div>
+
                     <!-- Message erreur -->
                     {% if erreur %}
                         <div class="alert alert-danger">
@@ -48,7 +67,7 @@
                     {% else %}
                         <div class="d-grid mb-4">
                             <button class="btn btn-secondary btn-lg" disabled>
-                                🎲 Tirage déjà effectué
+                                🎲 Tirage terminé
                             </button>
                         </div>
                     {% endif %}
@@ -66,11 +85,9 @@
                                 🏆 {{ gagnant.alias|default:gagnant.user.nom|default:gagnant.user.phone }}
                             </h1>
 
-                            {% if cycle_actuel %}
-                                <p class="text-muted">
-                                    Cycle : {{ cycle_actuel }}
-                                </p>
-                            {% endif %}
+                            <p class="text-muted">
+                                Cycle : {{ cycle_actuel }}
+                            </p>
 
                             <p class="fs-5 mt-3">Montant remporté :</p>
 
@@ -80,36 +97,28 @@
 
                         </div>
 
-                    {% else %}
-
-                        <div class="alert alert-warning mt-4">
-                            ⚠️ Aucun membre éligible au tirage.
-                        </div>
-
                     {% endif %}
 
                     <!-- 🔗 PARTAGE -->
-            <div class="mt-4">
-                <p class="fw-bold">📲 Partager avec les membres</p>
+                    <div class="mt-4">
+                        <p class="fw-bold">📲 Partager avec les membres</p>
 
-                <!-- Lien -->
-                <div class="input-group mb-2">
-                    <input type="text"
-                           id="resultLink"
-                           class="form-control"
-                           value="{{ request.build_absolute_uri }}"
-                           readonly>
+                        <div class="input-group mb-2">
+                            <input type="text"
+                                   id="resultLink"
+                                   class="form-control"
+                                   value="{{ request.build_absolute_uri }}"
+                                   readonly>
 
-                    <button class="btn btn-outline-secondary" onclick="copyResultLink()">
-                        📋
-                    </button>
-                </div>
+                            <button class="btn btn-outline-secondary" onclick="copyResultLink()">
+                                📋
+                            </button>
+                        </div>
 
-                <!-- Bouton WhatsApp -->
-                <button onclick="shareWhatsApp()" class="btn btn-success w-100">
-                    📲 Partager sur WhatsApp
-                </button>
-            </div>
+                        <button onclick="shareWhatsApp()" class="btn btn-success w-100">
+                            📲 Partager sur WhatsApp
+                        </button>
+                    </div>
 
                     <!-- Navigation -->
                     <div class="d-grid mt-4">
@@ -135,9 +144,8 @@
 
 </div>
 
-<!-- 🎰 STYLE -->
+<!-- 🎨 STYLE -->
 <style>
-
 .roulette-box{
     font-size: 26px;
     font-weight: bold;
@@ -159,10 +167,9 @@
     60%{ transform:scale(1.1); }
     100%{ transform:scale(1); opacity:1; }
 }
-
 </style>
 
-<!-- 🎰 SCRIPT ANIMATION -->
+<!-- 🎰 SCRIPT -->
 <script>
 
 let membres = [
@@ -174,6 +181,10 @@ let membres = [
 function lancerTirage() {
 
     let roulette = document.getElementById("roulette");
+    let btn = event.target;
+
+    btn.disabled = true;
+    btn.innerText = "⏳ Tirage en cours...";
 
     let index = 0;
 
@@ -187,40 +198,47 @@ function lancerTirage() {
         clearInterval(interval);
 
         fetch("{% url 'cotisationtontine:tirage_au_sort' group.id %}")
-        .then(response => response.json())
+        .then(res => res.json())
         .then(data => {
 
-            roulette.innerText = "🏆 " + data.gagnant;
+            if(data.error){
+                alert(data.error);
 
+                if(data.non_payes){
+                    alert("Membres non à jour :\n- " + data.non_payes.join("\n- "));
+                }
+
+                btn.disabled = false;
+                btn.innerText = "🎰 Lancer le tirage";
+                return;
+            }
+
+            roulette.innerText = "🏆 " + data.gagnant;
             roulette.style.color = "green";
             roulette.style.fontSize = "32px";
 
+            // reload pour afficher résultat
+            setTimeout(() => location.reload(), 2000);
+
         })
         .catch(() => {
-            roulette.innerText = "Erreur tirage";
+            roulette.innerText = "Erreur serveur";
+            btn.disabled = false;
         });
 
     }, 3000);
 }
-
 </script>
 
 <script>
-
-// ✅ Copier lien (version moderne)
 function copyResultLink(){
     let link = document.getElementById("resultLink").value;
 
     navigator.clipboard.writeText(link)
-    .then(() => {
-        alert("✅ Lien copié !");
-    })
-    .catch(() => {
-        alert("❌ Impossible de copier");
-    });
+    .then(() => alert("✅ Lien copié !"))
+    .catch(() => alert("❌ Impossible de copier"));
 }
 
-// ✅ WhatsApp dynamique
 function shareWhatsApp(){
 
     let link = document.getElementById("resultLink").value;
@@ -232,11 +250,9 @@ function shareWhatsApp(){
         "Rejoins YaayESS 🚀"
     );
 
-    let url = "https://wa.me/?text=" + message;
-
-    window.open(url, "_blank");
+    window.open("https://wa.me/?text=" + message, "_blank");
 }
-
 </script>
 
 {% endblock %}
+

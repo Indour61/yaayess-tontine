@@ -56,7 +56,7 @@ urlpatterns = [
 
     # 🏢 SaaS Admin
     path("super-admin/dashboard/", saas_dashboard, name="saas_dashboard"),
-    path("super-admin/toggle-user/<int:user_id>/", toggle_group_access, name="toggle_group_access"),
+    path("super-admin/toggle-group/<int:group_id>/", toggle_group_access, name="toggle_group_access"),
 
     # (option simplifiée)
     path("saas-dashboard/", saas_dashboard, name="saas_dashboard_alt"),

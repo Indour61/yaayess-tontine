@@ -549,6 +549,37 @@ def group_detail(request, group_id):
         request.session["last_invitation_link"] = invite_url
 
     # -------------------------------------------------
+    # 🎲 ÉTAT DU CYCLE (tirage)
+    # -------------------------------------------------
+
+    # 🔁 Détection cycle actuel
+    dernier_tirage = group.tirages.order_by("-date_tirage").first()
+    cycle_actuel = dernier_tirage.cycle_number if dernier_tirage else 1
+
+    # 👥 membres actifs uniquement
+    membres_actifs = group.membres.filter(actif=True, exit_liste=False)
+
+    # 🏆 gagnants du cycle actuel
+    gagnants_ids = group.tirages.filter(
+        cycle_number=cycle_actuel
+    ).values_list("gagnant_id", flat=True)
+
+    # 👤 membres restants
+    membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
+
+    # ✅ état final
+    cycle_termine = not membres_restants.exists()
+
+    # 📊 infos utiles UI
+    nb_restants = membres_restants.count()
+    total_membres = membres_actifs.count()
+    nb_termines = total_membres - nb_restants
+
+    progress = int((nb_termines / total_membres) * 100) if total_membres > 0 else 0
+
+
+
+    # -------------------------------------------------
     # 📦 CONTEXT FINAL
     # -------------------------------------------------
     context = {
@@ -561,8 +592,15 @@ def group_detail(request, group_id):
         "invite_url": invite_url,
         "last_invitation_link": request.session.get("last_invitation_link"),
         "versements_en_attente_liste": versements_en_attente_liste,
-        "notifications": notifications,  # 🔥 IMPORTANT
+        "notifications": notifications,
+
+        # 🎲 AJOUT ICI
+        "cycle_termine": cycle_termine,
+        "cycle_actuel": cycle_actuel,
+        "nb_restants": nb_restants,
+        "progress": progress,
     }
+
 
     return render(
         request,
@@ -821,6 +859,38 @@ def tirage_au_sort_view(request, group_id):
 
     membres_actifs = group.membres.filter(actif=True, exit_liste=False)
 
+    # 🔒 Vérifier que tous les membres ont payé (cotisation du cycle)
+
+    # 🔒 Vérifier que tous les membres ont payé (cotisation du cycle)
+
+    from .models import Versement
+
+    filter_q = Q(member__group=group, statut="VALIDE")
+
+    # 🔄 gérer reset
+    if group.date_reset:
+        filter_q &= Q(date_creation__gte=group.date_reset)
+
+    membres_non_a_jour = []
+
+    for membre in membres_actifs:
+        a_paye = Versement.objects.filter(
+            filter_q,
+            member=membre
+        ).exists()
+
+        if not a_paye:
+            membres_non_a_jour.append(
+                membre.alias or getattr(membre.user, "username", "Membre")
+            )
+
+    if membres_non_a_jour:
+        return JsonResponse({
+            "error": "Tous les membres doivent payer avant le tirage.",
+            "non_payes": membres_non_a_jour
+        }, status=400)
+
+
     if not membres_actifs.exists():
         return JsonResponse({"error": "Aucun membre actif"}, status=400)
 
@@ -857,6 +927,7 @@ def tirage_au_sort_view(request, group_id):
     gagnant = random.choice(list(membres_restants))
 
     # 💰 Calcul montant avec reset
+
     filter_q = Q(member__group=group, statut="VALIDE")
 
     if group.date_reset:
@@ -884,6 +955,13 @@ def tirage_au_sort_view(request, group_id):
         cycle_number=cycle_actuel
     )
 
+    # 🔄 RESET AUTOMATIQUE APRÈS CHAQUE TIRAGE
+    from django.utils import timezone
+
+    group.date_reset = timezone.now()
+    group.save(update_fields=["date_reset"])
+
+
     # 📲 (optionnel) WhatsApp ici
     # send_whatsapp(gagnant, group)
 
@@ -897,55 +975,89 @@ def tirage_au_sort_view(request, group_id):
 
 from django.db.models import Sum, Q
 from django.http import HttpResponseForbidden
+from django.shortcuts import render, get_object_or_404
 
 def tirage_resultat_view(request, group_id, token=None):
 
     group = get_object_or_404(Group, id=group_id)
 
-    # 🔐 Vérification accès
+    # -------------------------------------------------
+    # 🔐 SÉCURITÉ ACCÈS
+    # -------------------------------------------------
     is_member = False
+
     if request.user.is_authenticated:
         is_member = group.membres.filter(user=request.user).exists()
 
+    # accès via lien invité sécurisé
     if not is_member:
-        if not token or str(group.access_token) != str(token):
-            return HttpResponseForbidden("Accès refusé")
+        if not token or str(getattr(group, "access_token", "")) != str(token):
+            return HttpResponseForbidden("❌ Accès refusé")
 
-    tirages = group.tirages.select_related("gagnant__user").order_by("-date_tirage")
+    # -------------------------------------------------
+    # 📊 TIRAGES
+    # -------------------------------------------------
+    tirages = (
+        group.tirages
+        .select_related("gagnant__user")
+        .order_by("-date_tirage")
+    )
+
     dernier_tirage = tirages.first()
 
     gagnant = None
     montant_total = 0
-    cycle_actuel = None
+    cycle_actuel = 1
 
+    # -------------------------------------------------
+    # 🔁 DÉTECTION CYCLE
+    # -------------------------------------------------
     if dernier_tirage:
         gagnant = dernier_tirage.gagnant
-        cycle_actuel = dernier_tirage.cycle_number
+        cycle_actuel = dernier_tirage.cycle_number or 1
 
-        filter_q = Q(member__group=group, statut="VALIDE")
+    # -------------------------------------------------
+    # 💰 CALCUL MONTANT
+    # -------------------------------------------------
+    filter_q = Q(member__group=group, statut="VALIDE")
 
-        if group.date_reset:
-            filter_q &= Q(date_creation__gte=group.date_reset)
+    if group.date_reset:
+        filter_q &= Q(date_creation__gte=group.date_reset)
 
-        montant_total = (
-            Versement.objects
-            .filter(filter_q)
-            .aggregate(total=Sum("montant"))["total"] or 0
-        )
+    montant_total = (
+        Versement.objects
+        .filter(filter_q)
+        .aggregate(total=Sum("montant"))["total"] or 0
+    )
 
+    # -------------------------------------------------
+    # 👥 MEMBRES
+    # -------------------------------------------------
     membres_actifs = group.membres.filter(actif=True, exit_liste=False)
 
-    if cycle_actuel:
-        gagnants_ids = tirages.filter(
-            cycle_number=cycle_actuel
-        ).values_list("gagnant_id", flat=True)
+    # gagnants du cycle actuel
+    gagnants_ids = tirages.filter(
+        cycle_number=cycle_actuel
+    ).values_list("gagnant_id", flat=True)
 
-        membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
-    else:
-        membres_restants = membres_actifs
+    membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
 
+    # -------------------------------------------------
+    # 🎯 ÉTAT DU CYCLE
+    # -------------------------------------------------
+    cycle_termine = not membres_restants.exists()
     tirage_possible = membres_restants.exists()
 
+    # 📊 progression
+    total = membres_actifs.count()
+    restants = membres_restants.count()
+    termines = total - restants
+
+    progress = int((termines / total) * 100) if total > 0 else 0
+
+    # -------------------------------------------------
+    # 📦 CONTEXT
+    # -------------------------------------------------
     context = {
         "group": group,
         "tirages": tirages,
@@ -953,6 +1065,9 @@ def tirage_resultat_view(request, group_id, token=None):
         "montant_total": montant_total,
         "tirage_possible": tirage_possible,
         "cycle_actuel": cycle_actuel,
+        "cycle_termine": cycle_termine,
+        "nb_restants": restants,
+        "progress": progress,
     }
 
     return render(
@@ -1099,6 +1214,8 @@ def membres_eligibles_pour_tirage(group):
 from django.db import transaction
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
 
 @login_required
 @transaction.atomic
@@ -1111,8 +1228,30 @@ def reset_cycle_view(request, group_id):
         messages.error(request, "Accès non autorisé.")
         return redirect("cotisationtontine:group_detail", group_id=group.id)
 
+    membres_actifs = group.membres.filter(actif=True, exit_liste=False)
+
     # -------------------------------------------------
-    # 🧠 1. ENREGISTRER LE CYCLE AVANT RESET
+    # 🧠 0. VÉRIFIER SI CYCLE TERMINÉ
+    # -------------------------------------------------
+
+    dernier_tirage = group.tirages.order_by("-date_tirage").first()
+    cycle_actuel = dernier_tirage.cycle_number if dernier_tirage else 1
+
+    gagnants_ids = group.tirages.filter(
+        cycle_number=cycle_actuel
+    ).values_list("gagnant_id", flat=True)
+
+    membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
+
+    if membres_restants.exists():
+        messages.error(
+            request,
+            "❌ Impossible de réinitialiser : le cycle n'est pas terminé."
+        )
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # -------------------------------------------------
+    # 🧠 1. ENREGISTRER LE CYCLE
     # -------------------------------------------------
 
     from .models import Cycle, EtapeCycle
@@ -1120,7 +1259,6 @@ def reset_cycle_view(request, group_id):
     date_debut_cycle = group.date_reset or group.date_creation
     date_fin_cycle = timezone.now()
 
-    # créer cycle
     cycle = Cycle.objects.create(
         group=group,
         date_debut=date_debut_cycle,
@@ -1128,24 +1266,27 @@ def reset_cycle_view(request, group_id):
     )
 
     # -------------------------------------------------
-    # 🏆 2. SAUVEGARDER LES ÉTAPES (tirages)
+    # 🏆 2. SAUVEGARDER LES ÉTAPES
     # -------------------------------------------------
 
-    tirages = group.tirages.select_related("gagnant__user").all()
+    tirages = group.tirages.filter(cycle_number=cycle_actuel)\
+                           .select_related("gagnant__user")\
+                           .order_by("date_tirage")
+
     for index, tirage in enumerate(tirages, start=1):
 
         EtapeCycle.objects.create(
             cycle=cycle,
             numero_etape=index,
-            date_etape=tirage.date_tirage if hasattr(tirage, "date_tirage") else timezone.now(),
+            date_etape=getattr(tirage, "date_tirage", timezone.now()),
             tirage=tirage
         )
 
     # -------------------------------------------------
-    # 🧹 3. SUPPRIMER LES TIRAGES ACTUELS
+    # 🧹 3. SUPPRIMER UNIQUEMENT LE CYCLE ACTUEL
     # -------------------------------------------------
 
-    group.tirages.all().delete()
+    group.tirages.filter(cycle_number=cycle_actuel).delete()
 
     # -------------------------------------------------
     # 🔄 4. RESET DATE
@@ -1158,10 +1299,12 @@ def reset_cycle_view(request, group_id):
     # 📝 5. LOG
     # -------------------------------------------------
 
+    from .models import ActionLog
+
     ActionLog.objects.create(
         user=request.user,
         group=group,
-        action=f"Reset du cycle (Cycle #{cycle.id})"
+        action=f"Reset du cycle #{cycle_actuel}"
     )
 
     # -------------------------------------------------
@@ -1170,7 +1313,7 @@ def reset_cycle_view(request, group_id):
 
     messages.success(
         request,
-        f"✅ Cycle archivé et nouveau cycle démarré pour {group.nom}."
+        f"✅ Cycle #{cycle_actuel} archivé. Nouveau cycle démarré pour {group.nom}."
     )
 
     return redirect("cotisationtontine:group_detail", group_id=group.id)

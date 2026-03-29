@@ -183,23 +183,35 @@ def saas_dashboard(request):
     return render(request, "admin_saas/dashboard.html", context)
 
 
-# --------------------------------------------------
-# ACTIVER / DESACTIVER GROUPE
-# --------------------------------------------------
+from django.contrib.admin.views.decorators import staff_member_required
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
 
 @staff_member_required
-def toggle_group_access(request, group_id):
+def toggle_group_access(request, group_id=None, user_id=None):
 
-    group = get_object_or_404(Group, id=group_id)
+    # 🔥 gérer les 2 cas (sécurité)
+    target_id = group_id or user_id
 
-    if hasattr(group, "is_active"):
+    if not target_id:
+        messages.error(request, "❌ ID manquant")
+        return redirect("accounts:saas_dashboard")
 
-        group.is_active = not group.is_active
-        group.save()
+    group = get_object_or_404(Group, id=target_id)
 
-        if group.is_active:
-            messages.success(request, "✅ Groupe activé")
-        else:
-            messages.warning(request, "⛔ Groupe désactivé")
+    # 🔒 Vérifier champ
+    if not hasattr(group, "is_active"):
+        messages.error(request, "⚠️ Champ is_active introuvable sur le groupe")
+        return redirect("accounts:saas_dashboard")
+
+    # 🔄 Toggle
+    group.is_active = not group.is_active
+    group.save(update_fields=["is_active"])
+
+    # ✅ Message UX
+    if group.is_active:
+        messages.success(request, f"✅ Groupe '{group.nom}' activé")
+    else:
+        messages.warning(request, f"⛔ Groupe '{group.nom}' désactivé")
 
     return redirect("accounts:saas_dashboard")
