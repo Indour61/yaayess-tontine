@@ -410,7 +410,7 @@ def group_detail(request, group_id):
     notifications = Notification.objects.order_by('-created_at')[:5]
 
     # -------------------------------------------------
-    # 🔒 Vérification accès utilisateur
+    # 🔒 ACCÈS
     # -------------------------------------------------
     has_access = (
         group.admin_id == request.user.id
@@ -420,50 +420,55 @@ def group_detail(request, group_id):
     )
 
     if not has_access:
-        messages.error(request, "⚠️ Vous n'avez pas accès à ce groupe.")
+        messages.error(request, "⚠️ Accès refusé.")
         return redirect("cotisationtontine:dashboard_tontine_simple")
 
-    # -------------------------------------------------
-    # 👑 Vérifier si admin
-    # -------------------------------------------------
     user_is_admin = (
         request.user == group.admin
         or getattr(request.user, "is_super_admin", False)
         or request.user.is_superuser
     )
 
-    # -------------------------------------------------
-    # 💳 Versements en attente (admin seulement)
-    # -------------------------------------------------
+    # =====================================================
+    # 🔥 VARIABLES IMPORTANTES
+    # =====================================================
+    cycle_actuel = group.cycle_numero
+    tour_actuel = group.tour_actuel
+
+    # =====================================================
+    # 💳 VERSEMENTS EN ATTENTE (PAR TOUR)
+    # =====================================================
     versements_en_attente_liste = []
 
     if user_is_admin:
         versements_en_attente_liste = (
             Versement.objects
-            .filter(member__group=group, statut="EN_ATTENTE")
+            .filter(
+                member__group=group,
+                statut="EN_ATTENTE",
+                tour=tour_actuel
+            )
             .select_related("member__user")
             .order_by("-date_creation")
         )
 
-    # -------------------------------------------------
-    # 📊 Calcul versements membres
-    # -------------------------------------------------
+    # =====================================================
+    # 📊 MEMBRES + CALCUL PAR TOUR 🔥
+    # =====================================================
     rel_lookup = "versements"
 
     last_qs = Versement.objects.filter(
         member=OuterRef("pk"),
-        statut="VALIDE"
+        statut="VALIDE",
+        tour=tour_actuel  # 🔥 IMPORTANT
+    ).order_by("-date_creation")
+
+    sum_filter = Q(
+        **{
+            f"{rel_lookup}__statut": "VALIDE",
+            f"{rel_lookup}__tour": tour_actuel  # 🔥 IMPORTANT
+        }
     )
-
-    if group.date_reset:
-        last_qs = last_qs.filter(date_creation__gte=group.date_reset)
-
-    last_qs = last_qs.order_by("-date_creation")
-
-    sum_filter = Q(**{f"{rel_lookup}__statut": "VALIDE"})
-
-    if group.date_reset:
-        sum_filter &= Q(**{f"{rel_lookup}__date_creation__gte": group.date_reset})
 
     membres = (
         GroupMember.objects
@@ -480,17 +485,20 @@ def group_detail(request, group_id):
         .order_by("id")
     )
 
-    # -------------------------------------------------
-    # 🔄 Associer versement en attente à chaque membre
-    # -------------------------------------------------
+    # =====================================================
+    # 🔄 VERSEMENT EN ATTENTE PAR MEMBRE
+    # =====================================================
     versements_map = {}
 
     if user_is_admin:
         versements = (
             Versement.objects
-            .filter(member__group=group, statut="EN_ATTENTE")
+            .filter(
+                member__group=group,
+                statut="EN_ATTENTE",
+                tour=tour_actuel
+            )
             .select_related("member")
-            .order_by("-date_creation")
         )
 
         for v in versements:
@@ -500,17 +508,16 @@ def group_detail(request, group_id):
     for m in membres:
         m.versement_en_attente = versements_map.get(m.id)
 
-    # -------------------------------------------------
-    # 💰 Total global du groupe
-    # -------------------------------------------------
-    total_filter = Q(member__group=group, statut="VALIDE")
-
-    if group.date_reset:
-        total_filter &= Q(date_creation__gte=group.date_reset)
-
+    # =====================================================
+    # 💰 TOTAL DU GROUPE (PAR TOUR)
+    # =====================================================
     total_montant = (
         Versement.objects
-        .filter(total_filter)
+        .filter(
+            member__group=group,
+            statut="VALIDE",
+            tour=tour_actuel
+        )
         .aggregate(
             total=Coalesce(
                 Sum("montant"),
@@ -519,9 +526,9 @@ def group_detail(request, group_id):
         )["total"]
     )
 
-    # -------------------------------------------------
-    # 📝 Historique actions
-    # -------------------------------------------------
+    # =====================================================
+    # 📝 HISTORIQUE
+    # =====================================================
     actions = (
         ActionLog.objects
         .filter(group=group)
@@ -529,48 +536,33 @@ def group_detail(request, group_id):
         .order_by("-date")[:10]
     )
 
-    # -------------------------------------------------
-    # 🔗 Lien invitation
-    # -------------------------------------------------
-    code = None
-
-    for field in ("code_invitation", "invitation_token", "uuid"):
-        if hasattr(group, field) and getattr(group, field):
-            code = str(getattr(group, field))
-            break
-
-    invite_arg = code if code else str(group.id)
+    # =====================================================
+    # 🔗 LIEN INVITATION
+    # =====================================================
+    code = str(group.code_invitation or group.invitation_token or group.id)
 
     invite_url = request.build_absolute_uri(
-        reverse("accounts:inscription_et_rejoindre", args=[invite_arg])
+        reverse("accounts:inscription_et_rejoindre", args=[code])
     )
 
     if user_is_admin:
         request.session["last_invitation_link"] = invite_url
 
-    # -------------------------------------------------
-    # 🎲 ÉTAT DU CYCLE (tirage)
-    # -------------------------------------------------
+    # =====================================================
+    # 🎲 LOGIQUE CYCLE + TOUR 🔥 (CORRIGÉE)
+    # =====================================================
 
-    # 🔁 Détection cycle actuel
-    dernier_tirage = group.tirages.order_by("-date_tirage").first()
-    cycle_actuel = dernier_tirage.cycle_number if dernier_tirage else 1
-
-    # 👥 membres actifs uniquement
     membres_actifs = group.membres.filter(actif=True, exit_liste=False)
 
-    # 🏆 gagnants du cycle actuel
+    # 🔥 IMPORTANT : NE PAS UTILISER tour ici
     gagnants_ids = group.tirages.filter(
         cycle_number=cycle_actuel
     ).values_list("gagnant_id", flat=True)
 
-    # 👤 membres restants
     membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
 
-    # ✅ état final
     cycle_termine = not membres_restants.exists()
 
-    # 📊 infos utiles UI
     nb_restants = membres_restants.count()
     total_membres = membres_actifs.count()
     nb_termines = total_membres - nb_restants
@@ -578,10 +570,9 @@ def group_detail(request, group_id):
     progress = int((nb_termines / total_membres) * 100) if total_membres > 0 else 0
 
 
-
-    # -------------------------------------------------
+    # =====================================================
     # 📦 CONTEXT FINAL
-    # -------------------------------------------------
+    # =====================================================
     context = {
         "group": group,
         "membres": membres,
@@ -594,20 +585,19 @@ def group_detail(request, group_id):
         "versements_en_attente_liste": versements_en_attente_liste,
         "notifications": notifications,
 
-        # 🎲 AJOUT ICI
+        # 🎯 IMPORTANT
         "cycle_termine": cycle_termine,
         "cycle_actuel": cycle_actuel,
+        "tour_actuel": tour_actuel,
         "nb_restants": nb_restants,
         "progress": progress,
     }
-
 
     return render(
         request,
         "cotisationtontine/group_detail.html",
         context
     )
-
 
 # views.py
 import os
@@ -660,7 +650,10 @@ def initier_versement(request, member_id):
 
     group = member.group
 
-    # 🔒 RÈGLE MÉTIER (sécurité)
+    # 🔥 sync DB
+    group.refresh_from_db()
+
+    # 🔒 sécurité
     user_is_admin = (
         request.user == group.admin
         or request.user.is_superuser
@@ -670,20 +663,43 @@ def initier_versement(request, member_id):
         messages.error(request, "❌ Vous ne pouvez verser que pour vous-même.")
         return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-    # =============================
-    # 📊 TOTAL ACTUEL
-    # =============================
-    total_actuel = member.versements.filter(
-        statut__in=["EN_ATTENTE", "VALIDE"]
-    ).aggregate(total=Sum("montant"))["total"] or Decimal("0")
+    # =====================================================
+    # 🔥 VÉRIFIER SI CYCLE EST TERMINÉ (LOGIQUE RÉELLE)
+    # =====================================================
+
+    membres_actifs = group.membres.filter(actif=True, exit_liste=False)
+
+    gagnants_ids = group.tirages.filter(
+        cycle_number=group.cycle_numero
+    ).values_list("gagnant_id", flat=True)
+
+    membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
+
+    cycle_termine_reel = not membres_restants.exists()
+
+    if cycle_termine_reel:
+        messages.error(request, "❌ Le cycle est terminé. Veuillez réinitialiser.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # =====================================================
+    # 🔥 TOTAL PAR TOUR
+    # =====================================================
+
+    versements_tour = member.versements.filter(
+        statut__in=["EN_ATTENTE", "VALIDE"],
+        tour=group.tour_actuel
+    )
+
+    total_actuel = versements_tour.aggregate(
+        total=Sum("montant")
+    )["total"] or Decimal("0")
 
     montant_max = group.montant_base or Decimal("0")
-
     reste = montant_max - total_actuel
 
-    # =============================
+    # =====================================================
     # FORMULAIRE GET
-    # =============================
+    # =====================================================
     if request.method == "GET":
 
         frais = (reste * Decimal("0.02")).quantize(Decimal("1"))
@@ -698,13 +714,14 @@ def initier_versement(request, member_id):
                 "montant_base": montant_max,
                 "reste": reste,
                 "frais": frais,
-                "total": total
+                "total": total,
+                "tour": group.tour_actuel
             }
         )
 
-    # =============================
-    # TRAITEMENT POST
-    # =============================
+    # =====================================================
+    # POST
+    # =====================================================
     montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
 
     try:
@@ -719,42 +736,35 @@ def initier_versement(request, member_id):
 
     montant = montant.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
-    # =============================
-    # 🔒 BLOQUER SI DÉJÀ PAYÉ
-    # =============================
+    # 🔒 déjà payé
     if reste <= 0:
-        messages.warning(request, "✅ Vous avez déjà atteint le montant requis.")
+        messages.warning(request, "✅ Montant déjà atteint pour ce tour.")
         return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-    # =============================
-    # 🔒 BLOQUER DÉPASSEMENT
-    # =============================
+    # 🔒 dépassement
     if montant > reste:
         messages.error(
             request,
-            f"❌ Dépassement interdit ! Il vous reste seulement {reste} FCFA à payer."
+            f"❌ Dépassement ! Il reste {reste} FCFA."
         )
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
-    # =============================
-    # 💰 CALCUL FRAIS
-    # =============================
+    # 💰 frais
     frais = (montant * Decimal("0.02")).quantize(Decimal("1"))
 
-    # =============================
-    # 💾 ENREGISTREMENT
-    # =============================
+    # 💾 save
     Versement.objects.create(
         member=member,
         montant=montant,
         frais=frais,
         methode="CAISSE",
-        statut="EN_ATTENTE"
+        statut="EN_ATTENTE",
+        tour=group.tour_actuel
     )
 
     messages.success(
         request,
-        f"✅ Versement de {montant} FCFA enregistré pour {member.user.nom or member.user.phone}. En attente de validation."
+        f"✅ {montant} FCFA enregistré (Tour {group.tour_actuel})."
     )
 
     return redirect("cotisationtontine:group_detail", group_id=group.id)
@@ -842,34 +852,79 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.contrib import messages
 from django.db import transaction
+import random
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
+from django.http import JsonResponse
+from django.db import transaction
+from django.db.models import Q, Sum
+from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+
+from .models import Group, GroupMember, Tirage, Versement
+
 
 @login_required
 @transaction.atomic
 def tirage_au_sort_view(request, group_id):
 
-    group = get_object_or_404(Group, id=group_id)
+    # 🔒 LOCK DB (évite double tirage simultané)
+    group = get_object_or_404(
+        Group.objects.select_for_update(),
+        id=group_id
+    )
 
     # 🔒 Sécurité
     if request.user != group.admin and not request.user.is_superuser:
-        if request.headers.get("x-requested-with") == "XMLHttpRequest":
-            return JsonResponse({"error": "Accès non autorisé"}, status=403)
-
-        messages.error(request, "Accès non autorisé.")
-        return redirect("cotisationtontine:group_detail", group_id=group.id)
+        return JsonResponse({"error": "Accès non autorisé"}, status=403)
 
     membres_actifs = group.membres.filter(actif=True, exit_liste=False)
 
-    # 🔒 Vérifier que tous les membres ont payé (cotisation du cycle)
+    if not membres_actifs.exists():
+        return JsonResponse({"error": "Aucun membre actif"}, status=400)
 
-    # 🔒 Vérifier que tous les membres ont payé (cotisation du cycle)
+    # =====================================================
+    # 🔥 LOGIQUE RÉELLE DU CYCLE (SANS is_active)
+    # =====================================================
 
-    from .models import Versement
+    gagnants_ids = group.tirages.filter(
+        cycle_number=group.cycle_numero
+    ).values_list("gagnant_id", flat=True)
 
-    filter_q = Q(member__group=group, statut="VALIDE")
+    membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
 
-    # 🔄 gérer reset
-    if group.date_reset:
-        filter_q &= Q(date_creation__gte=group.date_reset)
+    # 🔴 Si plus de membres → cycle terminé
+    if not membres_restants.exists():
+
+        group.cycle_termine = True
+        group.is_active = False
+        group.save(update_fields=["cycle_termine", "is_active"])
+
+        # 🔁 Auto reset si activé
+        if group.auto_reset:
+            group.reset_cycle()
+
+        return JsonResponse({
+            "reset": True,
+            "message": "Cycle terminé. Nouveau cycle démarré.",
+            "cycle": group.cycle_numero
+        })
+
+    # =====================================================
+    # 🔥 TOUR COURANT (IMPORTANT)
+    # =====================================================
+
+    tour_en_cours = group.tour_actuel
+
+    # =====================================================
+    # 🔒 VÉRIFIER QUE TOUT LE MONDE A PAYÉ
+    # =====================================================
+
+    filter_q = Q(
+        member__group=group,
+        statut="VALIDE",
+        tour=tour_en_cours
+    )
 
     membres_non_a_jour = []
 
@@ -890,87 +945,83 @@ def tirage_au_sort_view(request, group_id):
             "non_payes": membres_non_a_jour
         }, status=400)
 
-
-    if not membres_actifs.exists():
-        return JsonResponse({"error": "Aucun membre actif"}, status=400)
-
     # 🔒 Vérifier versements en attente
-    versements_en_attente = Versement.objects.filter(
+    if Versement.objects.filter(
         member__group=group,
-        statut="EN_ATTENTE"
-    )
-
-    if versements_en_attente.exists():
+        statut="EN_ATTENTE",
+        tour=tour_en_cours
+    ).exists():
         return JsonResponse({
             "error": "Tous les versements doivent être validés avant le tirage."
         }, status=400)
 
-    # 🔁 Détection du cycle actuel
-    dernier_tirage = group.tirages.order_by("-date_tirage").first()
-    cycle_actuel = dernier_tirage.cycle_number if dernier_tirage else 1
+    # =====================================================
+    # 🎯 MEMBRES ÉLIGIBLES (LOGIQUE FIABLE)
+    # =====================================================
 
-    # 👥 Gagnants du cycle courant seulement
-    gagnants_ids = group.tirages.filter(
-        cycle_number=cycle_actuel
-    ).values_list("gagnant_id", flat=True)
+    membres_eligibles = membres_restants
 
-    membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
+    # =====================================================
+    # 🎲 TIRAGE
+    # =====================================================
 
-    # 🔄 Reset cycle automatique
-    if not membres_restants.exists():
-        return JsonResponse({
-            "reset": True,
-            "message": "Tous les membres ont gagné. Nouveau cycle."
-        })
+    gagnant = random.choice(list(membres_eligibles))
 
-    # 🎲 Tirage sécurisé
-    gagnant = random.choice(list(membres_restants))
-
-    # 💰 Calcul montant avec reset
-
-    filter_q = Q(member__group=group, statut="VALIDE")
-
-    if group.date_reset:
-        filter_q &= Q(date_creation__gte=group.date_reset)
-
+    # 💰 Calcul montant du tour courant
     montant_total = (
         Versement.objects
         .filter(filter_q)
         .aggregate(total=Sum("montant"))["total"] or 0
     )
 
-    # 🧠 Lock anti double tirage (important)
-    if Tirage.objects.filter(
-        group=group,
-        gagnant=gagnant,
-        cycle_number=cycle_actuel
-    ).exists():
-        return JsonResponse({"error": "Tirage déjà effectué pour ce membre"}, status=400)
-
-    # 💾 Enregistrement
+    # 💾 Enregistrement AVANT reset
     Tirage.objects.create(
         group=group,
         gagnant=gagnant,
         montant=montant_total,
-        cycle_number=cycle_actuel
+        cycle_number=group.cycle_numero,
+        tour=tour_en_cours
     )
 
-    # 🔄 RESET AUTOMATIQUE APRÈS CHAQUE TIRAGE
-    from django.utils import timezone
+    # 🔥 Marquer gagnant (optionnel mais utile UI)
+    gagnant.a_recu = True
+    gagnant.save(update_fields=["a_recu"])
 
-    group.date_reset = timezone.now()
-    group.save(update_fields=["date_reset"])
+    # 📌 Mise à jour groupe
+    group.prochain_gagnant = gagnant
+    group.save(update_fields=["prochain_gagnant"])
 
+    # =====================================================
+    # 🔥 RESET APRÈS TIRAGE
+    # =====================================================
 
-    # 📲 (optionnel) WhatsApp ici
-    # send_whatsapp(gagnant, group)
+    group.reset_apres_tirage()
 
-    # ⚡ Réponse JSON (clé pour ton animation)
+    # =====================================================
+    # 🔥 CHECK FINAL CYCLE
+    # =====================================================
+
+    gagnants_ids = group.tirages.filter(
+        cycle_number=group.cycle_numero
+    ).values_list("gagnant_id", flat=True)
+
+    membres_restants = membres_actifs.exclude(id__in=gagnants_ids)
+
+    if not membres_restants.exists():
+        group.cycle_termine = True
+        group.is_active = False
+        group.save(update_fields=["cycle_termine", "is_active"])
+
+    # =====================================================
+    # ✅ RÉPONSE
+    # =====================================================
+
     return JsonResponse({
         "success": True,
         "gagnant": gagnant.alias or getattr(gagnant.user, "username", "") or getattr(gagnant.user, "phone", ""),
         "montant": montant_total,
-        "cycle": cycle_actuel
+        "cycle": group.cycle_numero,
+        "tour": tour_en_cours
     })
 
 from django.db.models import Sum, Q
@@ -989,7 +1040,6 @@ def tirage_resultat_view(request, group_id, token=None):
     if request.user.is_authenticated:
         is_member = group.membres.filter(user=request.user).exists()
 
-    # accès via lien invité sécurisé
     if not is_member:
         if not token or str(getattr(group, "access_token", "")) != str(token):
             return HttpResponseForbidden("❌ Accès refusé")
@@ -1007,35 +1057,27 @@ def tirage_resultat_view(request, group_id, token=None):
 
     gagnant = None
     montant_total = 0
-    cycle_actuel = 1
+    cycle_actuel = group.cycle_numero
+    tour_affiche = group.tour_actuel
 
     # -------------------------------------------------
-    # 🔁 DÉTECTION CYCLE
+    # 🔥 UTILISER LE DERNIER TIRAGE (CORRECTION CLÉ)
     # -------------------------------------------------
     if dernier_tirage:
         gagnant = dernier_tirage.gagnant
         cycle_actuel = dernier_tirage.cycle_number or 1
 
-    # -------------------------------------------------
-    # 💰 CALCUL MONTANT
-    # -------------------------------------------------
-    filter_q = Q(member__group=group, statut="VALIDE")
+        # 🔥 LE BON MONTANT
+        montant_total = dernier_tirage.montant
 
-    if group.date_reset:
-        filter_q &= Q(date_creation__gte=group.date_reset)
-
-    montant_total = (
-        Versement.objects
-        .filter(filter_q)
-        .aggregate(total=Sum("montant"))["total"] or 0
-    )
+        # 🔥 LE BON TOUR
+        tour_affiche = dernier_tirage.tour
 
     # -------------------------------------------------
     # 👥 MEMBRES
     # -------------------------------------------------
     membres_actifs = group.membres.filter(actif=True, exit_liste=False)
 
-    # gagnants du cycle actuel
     gagnants_ids = tirages.filter(
         cycle_number=cycle_actuel
     ).values_list("gagnant_id", flat=True)
@@ -1068,6 +1110,9 @@ def tirage_resultat_view(request, group_id, token=None):
         "cycle_termine": cycle_termine,
         "nb_restants": restants,
         "progress": progress,
+
+        # 🔥 IMPORTANT
+        "tour_affiche": tour_affiche,
     }
 
     return render(
@@ -1234,8 +1279,7 @@ def reset_cycle_view(request, group_id):
     # 🧠 0. VÉRIFIER SI CYCLE TERMINÉ
     # -------------------------------------------------
 
-    dernier_tirage = group.tirages.order_by("-date_tirage").first()
-    cycle_actuel = dernier_tirage.cycle_number if dernier_tirage else 1
+    cycle_actuel = group.cycle_numero
 
     gagnants_ids = group.tirages.filter(
         cycle_number=cycle_actuel
@@ -1251,55 +1295,69 @@ def reset_cycle_view(request, group_id):
         return redirect("cotisationtontine:group_detail", group_id=group.id)
 
     # -------------------------------------------------
-    # 🧠 1. ENREGISTRER LE CYCLE
+    # 🧠 1. ARCHIVER LE CYCLE
     # -------------------------------------------------
 
-    from .models import Cycle, EtapeCycle
-
-    date_debut_cycle = group.date_reset or group.date_creation
-    date_fin_cycle = timezone.now()
+    from .models import Cycle, EtapeCycle, ActionLog
+    from django.utils import timezone
 
     cycle = Cycle.objects.create(
         group=group,
-        date_debut=date_debut_cycle,
-        date_fin=date_fin_cycle
+        date_debut=group.date_reset or group.date_creation,
+        date_fin=timezone.now()
     )
 
-    # -------------------------------------------------
-    # 🏆 2. SAUVEGARDER LES ÉTAPES
-    # -------------------------------------------------
-
-    tirages = group.tirages.filter(cycle_number=cycle_actuel)\
-                           .select_related("gagnant__user")\
-                           .order_by("date_tirage")
+    tirages = group.tirages.filter(
+        cycle_number=cycle_actuel
+    ).select_related("gagnant__user").order_by("date_tirage")
 
     for index, tirage in enumerate(tirages, start=1):
-
         EtapeCycle.objects.create(
             cycle=cycle,
             numero_etape=index,
-            date_etape=getattr(tirage, "date_tirage", timezone.now()),
+            date_etape=tirage.date_tirage,
             tirage=tirage
         )
 
     # -------------------------------------------------
-    # 🧹 3. SUPPRIMER UNIQUEMENT LE CYCLE ACTUEL
+    # 🧹 2. SUPPRIMER LES DONNÉES DU CYCLE
     # -------------------------------------------------
 
+    # 🔥 supprimer tirages
     group.tirages.filter(cycle_number=cycle_actuel).delete()
 
+    # 🔥 supprimer versements (CRUCIAL)
+    Versement.objects.filter(
+        member__group=group
+    ).delete()
+
     # -------------------------------------------------
-    # 🔄 4. RESET DATE
+    # 🔥 3. RESET MEMBRES (CRUCIAL)
     # -------------------------------------------------
 
+    for membre in membres_actifs:
+        membre.a_recu = False
+        membre.montant = 0
+        membre.save(update_fields=["a_recu", "montant"])
+
+    # -------------------------------------------------
+    # 🔄 4. RESET GROUPE
+    # -------------------------------------------------
+
+    group.cycle_numero += 1
+    group.tour_actuel = 1
+
+    group.is_active = True
+    group.cycle_termine = False
+    group.prochain_gagnant = None
+
     group.date_reset = timezone.now()
-    group.save(update_fields=["date_reset"])
+
+    group.save()
 
     # -------------------------------------------------
     # 📝 5. LOG
     # -------------------------------------------------
-
-    from .models import ActionLog
 
     ActionLog.objects.create(
         user=request.user,
@@ -1313,11 +1371,10 @@ def reset_cycle_view(request, group_id):
 
     messages.success(
         request,
-        f"✅ Cycle #{cycle_actuel} archivé. Nouveau cycle démarré pour {group.nom}."
+        f"✅ Cycle #{cycle_actuel} archivé. Nouveau cycle démarré."
     )
 
     return redirect("cotisationtontine:group_detail", group_id=group.id)
-
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
