@@ -62,6 +62,7 @@ class Group(models.Model):
     is_active = models.BooleanField(default=True)
     cycle_termine = models.BooleanField(default=False)
 
+    tirage_effectue = models.BooleanField(default=False)
     # -----------------------------
     # SUIVI DU GAGNANT
     # -----------------------------

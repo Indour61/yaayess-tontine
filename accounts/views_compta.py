@@ -110,3 +110,59 @@ def compta_dashboard(request):
     }
 
     return render(request, "accounts/compta_dashboard.html", context)
+
+
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth
+from cotisationtontine.models import Versement
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from datetime import datetime
+
+
+@login_required
+def compta_dashboard(request):
+
+    mois_filtre = request.GET.get("mois")  # format: YYYY-MM
+
+    queryset = Versement.objects.filter(statut="VALIDE")
+
+    # 🔍 Filtre par mois
+    if mois_filtre:
+        try:
+            date_obj = datetime.strptime(mois_filtre, "%Y-%m")
+            queryset = queryset.filter(
+                date_creation__year=date_obj.year,
+                date_creation__month=date_obj.month
+            )
+        except:
+            pass
+
+    # 💰 Commissions par groupe
+    commissions_par_groupe = (
+        queryset
+        .values("member__group__nom")
+        .annotate(total_commission=Sum("frais"))
+        .order_by("-total_commission")
+    )
+
+    for g in commissions_par_groupe:
+        g["total_commission"] = g["total_commission"] or 0
+
+    # 📅 Historique mensuel (toujours global)
+    commissions_par_groupe_mois = (
+        Versement.objects
+        .filter(statut="VALIDE")
+        .annotate(mois=TruncMonth("date_creation"))
+        .values("member__group__nom", "mois")
+        .annotate(total_commission=Sum("frais"))
+        .order_by("-mois")
+    )
+
+    context = {
+        "commissions_par_groupe": commissions_par_groupe,
+        "commissions_par_groupe_mois": commissions_par_groupe_mois,
+        "mois_filtre": mois_filtre,
+    }
+
+    return render(request, "accounts/compta_dashboard.html", context)

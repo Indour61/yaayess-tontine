@@ -8,6 +8,19 @@
 
 <h3 class="mb-4">💰 Comptabilité YaayESS</h3>
 
+<!-- 🔍 Filtre par mois -->
+<form method="get" class="mb-4 d-flex gap-2 align-items-center">
+
+    <label><strong>Filtrer par mois :</strong></label>
+
+    <input type="month" name="mois" value="{{ mois_filtre }}" class="form-control" style="max-width:200px;">
+
+    <button type="submit" class="btn btn-primary">Filtrer</button>
+
+    <a href="" class="btn btn-secondary">Reset</a>
+
+</form>
+
 <div class="row g-3">
 
 <div class="col-md-3">
@@ -42,28 +55,30 @@
 
 <hr class="my-4">
 
-<div class="card shadow-sm p-3 mb-4">
 
-<h5>📊 Frais par groupe</h5>
+<!-- 📅 Commissions par groupe (mensuel) -->
+<div class="card shadow-sm p-3">
 
-<table class="table table-striped">
+<h5>📅 Commissions par groupe (mensuel)</h5>
+
+<table class="table table-bordered">
 
 <thead>
 <tr>
 <th>Groupe</th>
-<th>Admin</th>
-<th>Total frais</th>
+<th>Mois</th>
+<th>Total</th>
 </tr>
 </thead>
 
 <tbody>
 
-{% for g in frais_par_groupe %}
+{% for g in commissions_par_groupe_mois %}
 
 <tr>
-<td>{{ g.group__nom }}</td>
-<td>{{ g.group__admin__phone }}</td>
-<td>{{ g.total_frais|default:0 }} FCFA</td>
+<td>{{ g.member__group__nom }}</td>
+<td>{{ g.mois|date:"F Y" }}</td>
+<td>{{ g.total_commission }} FCFA</td>
 </tr>
 
 {% empty %}
@@ -80,42 +95,7 @@
 
 </div>
 
-<div class="card shadow-sm p-3">
-
-<h5>📅 Frais par mois</h5>
-
-<table class="table table-bordered">
-
-<thead>
-<tr>
-<th>Mois</th>
-<th>Total frais</th>
-</tr>
-</thead>
-
-<tbody>
-
-{% for m in frais_par_mois %}
-
-<tr>
-<td>{{ m.mois|date:"F Y" }}</td>
-<td>{{ m.total|default:0 }} FCFA</td>
-</tr>
-
-{% empty %}
-
-<tr>
-<td colspan="2" class="text-center">Aucune donnée</td>
-</tr>
-
-{% endfor %}
-
-</tbody>
-
-</table>
-
-</div>
-
 </div>
 
 {% endblock %}
+

@@ -78,4 +78,7 @@ urlpatterns = [
     # ============================
     path("group/<int:group_id>/historique-cycles/", views.historique_cycles_view, name="historique_cycles"),
     path("historique-actions/", views.historique_actions_view, name="historique_actions"),
+
+    path('group/<int:group_id>/membre/<int:membre_id>/edit/', views.editer_membre_view, name='editer_membre'),
+    path('group/<int:group_id>/membre/<int:membre_id>/delete/', views.supprimer_membre_view, name='supprimer_membre'),
 ]

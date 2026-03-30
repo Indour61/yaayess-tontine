@@ -233,55 +233,69 @@ def ajouter_groupe_view(request):
 @login_required
 @transaction.atomic
 def ajouter_membre_view(request, group_id):
-    """
-    Ajouter un membre à un groupe existant.
-    Seul l'administrateur du groupe peut ajouter des membres.
-    """
+
     group = get_object_or_404(Group, id=group_id)
 
-    # Vérification des droits : seul l'admin du groupe peut ajouter
+    # 🔒 1. Sécurité admin
     if group.admin != request.user:
         messages.error(request, "⚠️ Vous n'avez pas les droits pour ajouter un membre à ce groupe.")
         return redirect("cotisationtontine:dashboard_tontine_simple")
 
+    # 🔒 2. BLOQUAGE MÉTIER (TRÈS IMPORTANT)
+    if group.tirage_effectue:
+        messages.error(request, "🚫 Impossible d'ajouter un membre : le cycle est déjà en cours.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    if group.cycle_termine:
+        messages.error(request, "🚫 Cycle terminé. Veuillez réinitialiser avant d'ajouter un membre.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
     if request.method == "POST":
         form = GroupMemberForm(request.POST)
+
         if form.is_valid():
             phone = form.cleaned_data.get("phone")
             nom = form.cleaned_data.get("nom")
 
-            # Vérifier si un utilisateur existe déjà avec ce numéro
+            # 🔒 3. VALIDATION NUMÉRO
+            if not phone:
+                messages.error(request, "Numéro invalide.")
+                return redirect(request.path)
+
+            # 🔒 4. Création ou récupération utilisateur
             user, created_user = CustomUser.objects.get_or_create(
                 phone=phone,
                 defaults={"nom": nom or f"Utilisateur {phone}"}
             )
 
-            # Si le user existait déjà mais avec un autre nom → prévenir
+            # 🔔 Alerte si conflit nom
             if not created_user and user.nom != nom:
                 messages.warning(
                     request,
-                    f"⚠️ Ce numéro est déjà associé à {user.nom}. Le nom fourni ({nom}) a été ignoré."
+                    f"⚠️ Ce numéro appartient déjà à {user.nom}. Nom fourni ignoré."
                 )
-                nom = user.nom  # Utiliser le nom existant
+                nom = user.nom
 
-            # Vérifier si le membre est déjà dans ce groupe
+            # 🔒 5. Vérifier doublon dans groupe
             if GroupMember.objects.filter(group=group, user=user).exists():
-                messages.info(request, f"ℹ️ {user.nom} est déjà membre du groupe {group.nom}.")
+                messages.info(request, f"ℹ️ {user.nom} est déjà membre du groupe.")
                 return redirect("cotisationtontine:group_detail", group_id=group.id)
 
-            # ✅ Vérifier si le nom existe déjà dans ce groupe avec un autre numéro
-            existing_members_same_name = GroupMember.objects.filter(group=group, user__nom=nom).exclude(user__phone=phone)
+            # 🔒 6. Détection noms identiques
+            existing = GroupMember.objects.filter(
+                group=group,
+                user__nom=nom
+            ).exclude(user__phone=phone)
+
             alias = None
-            if existing_members_same_name.exists():
-                # ✅ Message explicite avant l'ajout
+            if existing.exists():
                 messages.warning(
                     request,
-                    f"⚠️ Le nom '{nom}' existe déjà dans le groupe avec un autre numéro. "
-                    f"Un alias sera créé pour éviter la confusion."
+                    f"⚠️ Le nom '{nom}' existe déjà. Un alias sera utilisé."
                 )
                 alias = f"{nom} ({phone})"
 
-            # Ajouter le membre
+            # 🔥 7. CRÉATION MEMBRE
             group_member = GroupMember.objects.create(
                 group=group,
                 user=user,
@@ -289,17 +303,12 @@ def ajouter_membre_view(request, group_id):
                 alias=alias
             )
 
-            # Message de confirmation
-            if alias:
-                messages.success(request, f"✅ {alias} a été ajouté au groupe {group.nom}.")
-            else:
-                messages.success(request, f"✅ {user.nom} a été ajouté au groupe {group.nom}.")
-
-            # TODO: Simuler envoi WhatsApp
-            # message = f"Bonjour {user.nom}, vous avez été ajouté au groupe {group.nom} sur YaayESS. Connectez-vous avec votre numéro {phone}."
-            # simulate_whatsapp_send(phone, message)
+            # 🔔 Message
+            display_name = alias if alias else user.nom
+            messages.success(request, f"✅ {display_name} ajouté avec succès.")
 
             return redirect("cotisationtontine:group_detail", group_id=group.id)
+
     else:
         form = GroupMemberForm()
 
@@ -823,11 +832,87 @@ def refuser_versement(request, versement_id):
     return redirect("cotisationtontine:group_detail", group_id=group.id)
 
 
-def editer_membre_view(request, group_id, membre_id):
-    return HttpResponse(f"Éditer membre {membre_id} du groupe {group_id}")
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 
+
+from .models import Group, GroupMember
+from .forms import GroupMemberForm
+
+@login_required
+def editer_membre_view(request, group_id, membre_id):
+    group = get_object_or_404(Group, id=group_id)
+    membre = get_object_or_404(GroupMember, id=membre_id, group=group)
+
+    # 🔒 Sécurité
+    if request.user != group.admin and not request.user.is_superuser:
+        messages.error(request, "Accès non autorisé.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    if request.method == "POST":
+        form = GroupMemberForm(request.POST, instance=membre)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Membre modifié avec succès ✅")
+            return redirect("cotisationtontine:group_detail", group_id=group.id)
+    else:
+        form = GroupMemberForm(instance=membre)
+
+    return render(request, "cotisationtontine/editer_membre.html", {
+        "form": form,
+        "group": group,
+        "membre": membre
+    })
+
+@login_required
+@transaction.atomic
 def supprimer_membre_view(request, group_id, membre_id):
-    return HttpResponse(f"Supprimer membre {membre_id} du groupe {group_id}")
+
+    group = get_object_or_404(Group, id=group_id)
+    membre = get_object_or_404(GroupMember, id=membre_id, group=group)
+
+    # 🔒 1. Sécurité admin
+    if request.user != group.admin and not request.user.is_superuser:
+        messages.error(request, "⛔ Accès non autorisé.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # 🔒 2. BLOQUAGE SI CYCLE EN COURS
+    if group.tirage_effectue:
+        messages.error(request, "🚫 Impossible de supprimer un membre : le cycle est en cours.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # 🔒 3. BLOQUAGE SI CYCLE TERMINÉ
+    if group.cycle_termine:
+        messages.error(request, "🚫 Cycle terminé. Veuillez réinitialiser avant toute modification.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # 🔒 4. BLOQUAGE SI LE MEMBRE A DÉJÀ REÇU
+    if membre.a_recu:
+        messages.error(request, "🚫 Impossible : ce membre a déjà reçu la cagnotte.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # 🔒 5. BLOQUAGE SI LE MEMBRE A COTISÉ
+    if membre.montant > 0:
+        messages.error(request, "🚫 Impossible : ce membre a déjà cotisé.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # 🔒 6. PROTECTION MINIMUM (optionnel mais très important)
+    total_membres = group.membres.filter(actif=True).count()
+    if total_membres <= 1:
+        messages.error(request, "🚫 Impossible de supprimer le dernier membre du groupe.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    # 🔥 7. SUPPRESSION
+    if request.method == "POST":
+        membre.delete()
+        messages.success(request, "✅ Membre supprimé avec succès.")
+        return redirect("cotisationtontine:group_detail", group_id=group.id)
+
+    return render(request, "cotisationtontine/confirmer_suppression.html", {
+        "membre": membre,
+        "group": group
+    })
 
 
 def reset_cycle_view(request, group_id):

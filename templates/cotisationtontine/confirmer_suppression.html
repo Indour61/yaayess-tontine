@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h3>⚠️ Confirmation</h3>
+
+    <p>Voulez-vous vraiment supprimer <strong>{{ membre.name }}</strong> ?</p>
+
+    <form method="POST">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">Oui, supprimer</button>
+        <a href="{% url 'cotisationtontine:group_detail' group.id %}" class="btn btn-secondary">Annuler</a>
+    </form>
+</div>
+{% endblock %}
