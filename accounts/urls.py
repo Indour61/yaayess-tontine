@@ -1,5 +1,7 @@
 from django.urls import path
 from . import views
+from . import views_admin
+from .views_compta import compta_dashboard_global
 
 # API / JWT
 from .api_views import LoginAPI
@@ -56,7 +58,12 @@ urlpatterns = [
 
     # 🏢 SaaS Admin
     path("super-admin/dashboard/", saas_dashboard, name="saas_dashboard"),
-    path("super-admin/toggle-group/<int:group_id>/", toggle_group_access, name="toggle_group_access"),
+    path(
+        'super-admin/toggle-group/<str:type>/<int:group_id>/',
+        views_admin.toggle_group_access,
+        name='toggle_group_access'
+    ),
+
 
     # (option simplifiée)
     path("saas-dashboard/", saas_dashboard, name="saas_dashboard_alt"),
@@ -70,4 +77,8 @@ urlpatterns = [
 
     # 🧾 Reçus
     path("mes-recus/", mes_recus, name="mes_recus"),
+
+
 ]
+
+

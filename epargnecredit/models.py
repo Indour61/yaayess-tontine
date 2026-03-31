@@ -13,7 +13,7 @@ from django.db.models import Sum
 class Group(models.Model):
 
     nom = models.CharField(max_length=255)
-
+    is_active = models.BooleanField(default=True)
     date_creation = models.DateTimeField(auto_now_add=True)
     date_reset = models.DateTimeField(null=True, blank=True)
 

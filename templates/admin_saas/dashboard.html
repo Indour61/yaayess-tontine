@@ -206,8 +206,7 @@ Bloqué
 <td class="text-center">
 
 <a class="btn btn-sm btn-warning"
-href="{% url 'accounts:toggle_group_access' group.id %}">
-
+href="{% url 'accounts:toggle_group_access' group.type group.id %}"
 <i class="fas fa-power-off"></i>
 
 </a>

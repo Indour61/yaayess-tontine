@@ -6,9 +6,9 @@
 
 <div class="container mt-4">
 
-<h3 class="mb-4">💰 Comptabilité YaayESS</h3>
+<h3 class="mb-4">💰 Comptabilité Globale YaayESS</h3>
 
-<!-- 🔍 Filtre par mois -->
+<!-- 🔍 FILTRE -->
 <form method="get" class="mb-4 d-flex gap-2 align-items-center">
 
     <label><strong>Filtrer par mois :</strong></label>
@@ -21,43 +21,106 @@
 
 </form>
 
+<!-- 💰 KPI FINANCIERS -->
 <div class="row g-3">
 
-<div class="col-md-3">
-<div class="card shadow-sm text-center p-3">
-<h6>Frais Cotisation</h6>
-<h3 class="text-primary">{{ tontine_frais|default:0 }} FCFA</h3>
-</div>
+    <div class="col-md-3">
+        <div class="card shadow-sm text-center p-3">
+            <h6>Frais Cotisation</h6>
+            <h3 class="text-primary">{{ total_tontine|default:0 }} FCFA</h3>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm text-center p-3">
+            <h6>Frais Épargne</h6>
+            <h3 class="text-success">{{ total_epargne|default:0 }} FCFA</h3>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm text-center p-3">
+            <h6>Frais Remboursements</h6>
+            <h3 class="text-warning">{{ total_remboursement|default:0 }} FCFA</h3>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card shadow-sm text-center p-3 bg-light">
+            <h6>Total Plateforme</h6>
+            <h2>{{ total_plateforme|default:0 }} FCFA</h2>
+        </div>
+    </div>
+
 </div>
 
-<div class="col-md-3">
-<div class="card shadow-sm text-center p-3">
-<h6>Frais Épargne</h6>
-<h3 class="text-success">{{ epargne_frais|default:0 }} FCFA</h3>
-</div>
-</div>
+<!-- 📊 KPI BUSINESS -->
+<div class="row g-3 mt-2">
 
-<div class="col-md-3">
-<div class="card shadow-sm text-center p-3">
-<h6>Frais Remboursements</h6>
-<h3 class="text-warning">{{ remboursement_frais|default:0 }} FCFA</h3>
-</div>
-</div>
+    <div class="col-md-4">
+        <div class="card shadow-sm text-center p-3">
+            <h6>📦 Groupes</h6>
+            <h3>{{ total_groupes }}</h3>
+        </div>
+    </div>
 
-<div class="col-md-3">
-<div class="card shadow-sm text-center p-3 bg-light">
-<h6>Total Plateforme</h6>
-<h2>{{ total_frais|default:0 }} FCFA</h2>
-</div>
-</div>
+    <div class="col-md-4">
+        <div class="card shadow-sm text-center p-3">
+            <h6>👥 Utilisateurs</h6>
+            <h3>{{ total_users }}</h3>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card shadow-sm text-center p-3">
+            <h6>📈 Revenu / Groupe</h6>
+            <h3>{{ revenu_moyen_par_groupe }} FCFA</h3>
+        </div>
+    </div>
 
 </div>
 
 <hr class="my-4">
 
+<!-- 🏆 TOP GROUPES -->
+<div class="card shadow-sm p-3 mb-4">
 
-<!-- 📅 Commissions par groupe (mensuel) -->
-<div class="card shadow-sm p-3">
+    <h5>🏆 Top groupes (revenus)</h5>
+
+    <table class="table table-striped">
+
+        <thead>
+            <tr>
+                <th>Groupe</th>
+                <th>Total</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
+        {% for g in top_groupes %}
+
+            <tr>
+                <td>{{ g.group }}</td>
+                <td>{{ g.total }} FCFA</td>
+            </tr>
+
+        {% empty %}
+
+            <tr>
+                <td colspan="2" class="text-center">Aucune donnée</td>
+            </tr>
+
+        {% endfor %}
+
+        </tbody>
+
+    </table>
+
+</div>
+
+<!-- 📅 HISTORIQUE MENSUEL -->
+<div class="card shadow-sm p-3 mb-4">
 
 <h5>📅 Commissions par groupe (mensuel)</h5>
 
@@ -76,9 +139,9 @@
 {% for g in commissions_par_groupe_mois %}
 
 <tr>
-<td>{{ g.member__group__nom }}</td>
+<td>{{ g.group }}</td>
 <td>{{ g.mois|date:"F Y" }}</td>
-<td>{{ g.total_commission }} FCFA</td>
+<td>{{ g.total }} FCFA</td>
 </tr>
 
 {% empty %}
@@ -95,7 +158,46 @@
 
 </div>
 
+<!-- 📊 GRAPHIQUE -->
+<div class="card shadow-sm p-3">
+
+<h5>📊 Évolution des revenus</h5>
+
+<canvas id="chartRevenue"></canvas>
+
 </div>
 
-{% endblock %}
+</div>
 
+<!-- 📈 CHART.JS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+const labels = [
+    {% for item in commissions_par_groupe_mois %}
+        "{{ item.mois|date:'M Y' }}",
+    {% endfor %}
+];
+
+const data = [
+    {% for item in commissions_par_groupe_mois %}
+        {{ item.total }},
+    {% endfor %}
+];
+
+new Chart(document.getElementById('chartRevenue'), {
+    type: 'line',
+    data: {
+        labels: labels,
+        datasets: [{
+            label: 'Revenus (FCFA)',
+            data: data,
+            tension: 0.3
+        }]
+    }
+});
+
+</script>
+
+{% endblock %}
