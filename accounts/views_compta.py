@@ -1,74 +1,35 @@
 from decimal import Decimal
 from datetime import datetime
 
-from django.contrib.auth.decorators import login_required
-from django.contrib.admin.views.decorators import staff_member_required
+
 from django.shortcuts import render
-from django.db.models import Sum, Count
+from django.db.models import Sum
 from django.db.models.functions import TruncMonth
 
 # MODELS
 from accounts.models import CustomUser
-
 from cotisationtontine.models import Versement as TontineVersement, Group as TontineGroup
 from epargnecredit.models import Versement as EpargneVersement, PretRemboursement, Group as EpargneGroup
-
+from django.contrib.admin.views.decorators import staff_member_required
 
 # =========================================================
-# 💰 DASHBOARD SIMPLE (ADMIN)
+# 💰 DASHBOARD GLOBAL UNIQUE (CORRIGÉ)
 # =========================================================
 
 @staff_member_required
 def compta_dashboard(request):
 
-    tontine_frais = TontineVersement.objects.filter(
-        statut__iexact="VALIDE"
-    ).aggregate(total=Sum("frais"))["total"] or Decimal("0")
-
-    epargne_frais = EpargneVersement.objects.filter(
-        statut__iexact="VALIDE"
-    ).aggregate(total=Sum("frais"))["total"] or Decimal("0")
-
-    remboursements = PretRemboursement.objects.filter(
-        statut__iexact="VALIDE"
-    )
-
-    total_remboursements = remboursements.aggregate(
-        total=Sum("montant")
-    )["total"] or Decimal("0")
-
-    remboursement_frais = total_remboursements * Decimal("0.01")
-
-    total_frais = tontine_frais + epargne_frais + remboursement_frais
-
-    context = {
-        "tontine_frais": tontine_frais,
-        "epargne_frais": epargne_frais,
-        "remboursement_frais": remboursement_frais,
-        "total_frais": total_frais,
-    }
-
-    return render(request, "accounts/compta_dashboard.html", context)
-
-
-# =========================================================
-# 🚀 DASHBOARD GLOBAL FINTECH
-# =========================================================
-
-@login_required
-def compta_dashboard_global(request):
-
     mois_filtre = request.GET.get("mois")
 
     # ================================
-    # 🔹 QUERYSETS
+    # 🔹 QUERYSETS (CORRIGÉ)
     # ================================
     tontine = TontineVersement.objects.filter(statut__iexact="VALIDE")
     epargne = EpargneVersement.objects.filter(statut__iexact="VALIDE")
     remboursement = PretRemboursement.objects.filter(statut__iexact="VALIDE")
 
     # ================================
-    # 🔍 FILTRE PAR MOIS
+    # 🔍 FILTRE PAR MOIS (CORRIGÉ)
     # ================================
     if mois_filtre:
         try:
@@ -93,21 +54,42 @@ def compta_dashboard_global(request):
             pass
 
     # ================================
-    # 💰 KPIs FINANCIERS
+    # 💰 KPI FINANCIERS (FIX 0 BUG)
     # ================================
-    total_tontine = tontine.aggregate(total=Sum("frais"))["total"] or Decimal("0")
-    total_epargne = epargne.aggregate(total=Sum("frais"))["total"] or Decimal("0")
+    # ================================
+    # 💰 KPI FINANCIERS (FIX FINAL)
+    # ================================
 
+    # TONTINE
+    total_tontine = tontine.aggregate(
+        total=Sum("frais")
+    )["total"] or Decimal("0")
+
+    # EPARGNE
+    total_epargne = epargne.aggregate(
+        total=Sum("frais")
+    )["total"] or Decimal("0")
+
+    # REMBOURSEMENTS (calcul commission)
     total_remboursements = remboursement.aggregate(
         total=Sum("montant")
     )["total"] or Decimal("0")
 
+    # 👉 Commission dynamique (1%)
     total_remboursement = total_remboursements * Decimal("0.01")
 
+    # 👉 TOTAL PLATEFORME
     total_plateforme = total_tontine + total_epargne + total_remboursement
 
+    # 🔥 DEBUG (à garder temporairement)
+    print("TONTINE:", total_tontine)
+    print("EPARGNE:", total_epargne)
+    print("REMBOURSEMENT:", total_remboursement)
+    print("TOTAL:", total_plateforme)
+
+
     # ================================
-    # 👥 KPIs BUSINESS (CORRIGÉ)
+    # 👥 KPIs BUSINESS
     # ================================
     total_groupes = (
         TontineGroup.objects.count() +
@@ -127,16 +109,17 @@ def compta_dashboard_global(request):
 
     def merge(queryset):
         for item in queryset.values("member__group__nom").annotate(total=Sum("frais")):
-            group = item["member__group__nom"]
+            group = item["member__group__nom"] or "Sans nom"
             data[group] = data.get(group, Decimal("0")) + (item["total"] or Decimal("0"))
 
     merge(tontine)
     merge(epargne)
 
-    commissions_par_groupe = [
-        {"group": k, "total": v}
-        for k, v in sorted(data.items(), key=lambda x: x[1], reverse=True)
-    ]
+    commissions_par_groupe = sorted(
+        [{"group": k, "total": v} for k, v in data.items()],
+        key=lambda x: x["total"],
+        reverse=True
+    )
 
     # ================================
     # 📅 HISTORIQUE MENSUEL
@@ -155,13 +138,10 @@ def compta_dashboard_global(request):
     merge_monthly(tontine)
     merge_monthly(epargne)
 
-    commissions_par_groupe_mois = [
-        {
-            "mois": k,
-            "total": v
-        }
-        for k, v in sorted(historique.items())
-    ]
+    commissions_par_groupe_mois = sorted(
+        [{"mois": k, "total": v} for k, v in historique.items()],
+        key=lambda x: x["mois"]
+    )
 
     # ================================
     # 🔥 TOP GROUPES
@@ -169,18 +149,21 @@ def compta_dashboard_global(request):
     top_groupes = commissions_par_groupe[:5]
 
     # ================================
-    # CONTEXT
+    # CONTEXT FINAL
     # ================================
     context = {
-        "total_tontine": total_tontine,
-        "total_epargne": total_epargne,
-        "total_remboursement": total_remboursement,
-        "total_plateforme": total_plateforme,
+        # KPI affichés en haut (IMPORTANT)
+        "tontine_frais": total_tontine,
+        "epargne_frais": total_epargne,
+        "remboursement_frais": total_remboursement,
+        "total_frais": total_plateforme,
 
+        # BUSINESS
         "total_groupes": total_groupes,
         "total_users": total_users,
         "revenu_moyen_par_groupe": round(revenu_moyen_par_groupe, 2),
 
+        # TABLEAUX
         "commissions_par_groupe": commissions_par_groupe,
         "commissions_par_groupe_mois": commissions_par_groupe_mois,
         "top_groupes": top_groupes,
@@ -188,5 +171,4 @@ def compta_dashboard_global(request):
         "mois_filtre": mois_filtre,
     }
 
-    return render(request, "accounts/compta_dashboard_global.html", context)
-
+    return render(request, "accounts/compta_dashboard.html", context)

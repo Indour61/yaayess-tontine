@@ -17,8 +17,7 @@
 
     <button type="submit" class="btn btn-primary">Filtrer</button>
 
-    <a href="" class="btn btn-secondary">Reset</a>
-
+    <a href="{% url 'accounts:compta_dashboard' %}" class="btn btn-secondary">Reset</a>
 </form>
 
 <!-- 💰 KPI FINANCIERS -->
@@ -27,28 +26,28 @@
     <div class="col-md-3">
         <div class="card shadow-sm text-center p-3">
             <h6>Frais Cotisation</h6>
-            <h3 class="text-primary">{{ total_tontine|default:0 }} FCFA</h3>
+            <h3 class="text-primary">{{ tontine_frais|default:0 }} FCFA</h3>
         </div>
     </div>
 
     <div class="col-md-3">
         <div class="card shadow-sm text-center p-3">
             <h6>Frais Épargne</h6>
-            <h3 class="text-success">{{ total_epargne|default:0 }} FCFA</h3>
+            <h3 class="text-success">{{ epargne_frais|default:0 }} FCFA</h3>
         </div>
     </div>
 
     <div class="col-md-3">
         <div class="card shadow-sm text-center p-3">
             <h6>Frais Remboursements</h6>
-            <h3 class="text-warning">{{ total_remboursement|default:0 }} FCFA</h3>
+            <h3 class="text-warning">{{ remboursement_frais|default:0 }} FCFA</h3>
         </div>
     </div>
 
     <div class="col-md-3">
         <div class="card shadow-sm text-center p-3 bg-light">
             <h6>Total Plateforme</h6>
-            <h2>{{ total_plateforme|default:0 }} FCFA</h2>
+            <h2>{{ total_frais|default:0 }} FCFA</h2>
         </div>
     </div>
 
@@ -122,13 +121,12 @@
 <!-- 📅 HISTORIQUE MENSUEL -->
 <div class="card shadow-sm p-3 mb-4">
 
-<h5>📅 Commissions par groupe (mensuel)</h5>
+<h5>📅 Évolution mensuelle des revenus</h5>
 
 <table class="table table-bordered">
 
 <thead>
 <tr>
-<th>Groupe</th>
 <th>Mois</th>
 <th>Total</th>
 </tr>
@@ -139,7 +137,6 @@
 {% for g in commissions_par_groupe_mois %}
 
 <tr>
-<td>{{ g.group }}</td>
 <td>{{ g.mois|date:"F Y" }}</td>
 <td>{{ g.total }} FCFA</td>
 </tr>
@@ -147,7 +144,7 @@
 {% empty %}
 
 <tr>
-<td colspan="3" class="text-center">Aucune donnée</td>
+<td colspan="2" class="text-center">Aucune donnée</td>
 </tr>
 
 {% endfor %}

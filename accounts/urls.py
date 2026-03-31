@@ -1,8 +1,8 @@
 from django.urls import path
 from . import views
 from . import views_admin
-from .views_compta import compta_dashboard_global
 
+from .views_compta import compta_dashboard
 # API / JWT
 from .api_views import LoginAPI
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
