@@ -1,6 +1,8 @@
 from django.urls import path
 from . import views
 from . import views_admin
+from .views import invoices_dashboard
+from .views import invoice_pdf
 
 from .views_compta import compta_dashboard
 # API / JWT
@@ -78,7 +80,8 @@ urlpatterns = [
     # 🧾 Reçus
     path("mes-recus/", mes_recus, name="mes_recus"),
 
-
+    path('factures/', invoices_dashboard, name='invoices_dashboard'),
+    path('invoice/<int:invoice_id>/pdf/', invoice_pdf, name='invoice_pdf'),
 ]
 
 

@@ -5,6 +5,12 @@ from django.db.models.functions import TruncMonth
 from decimal import Decimal
 import json
 
+
+# ✅ bon
+from cotisationtontine.models import Versement
+
+
+
 from accounts.models import CustomUser
 
 # TONTINE

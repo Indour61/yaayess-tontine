@@ -413,3 +413,85 @@ class Notification(models.Model):
     def __str__(self):
         return self.message
 
+# models.py
+
+from django.db import models
+from epargnecredit.models import Group
+
+
+class Invoice(models.Model):
+
+    STATUS_CHOICES = [
+        ('pending', 'En attente'),
+        ('paid', 'Payée'),
+        ('overdue', 'En retard'),
+    ]
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="factures")
+
+    mois = models.DateField()
+
+    montant_cotisation = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    montant_epargne = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    montant_remboursement = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # 🔥 NUMERO FACTURE
+    numero = models.CharField(max_length=50, unique=True, blank=True)
+#    numero = models.CharField(max_length=50, blank=True, null=True)
+    statut = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+
+    date_creation = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.numero} - {self.group.nom} - {self.mois}"
+
+    # 🔥 GÉNÉRATION AUTOMATIQUE DU NUMERO
+    def save(self, *args, **kwargs):
+
+        if not self.numero:
+            year = self.mois.year
+
+            last_invoice = Invoice.objects.filter(
+                numero__startswith=f"YAAY-{year}"
+            ).order_by('-id').first()
+
+            if last_invoice and last_invoice.numero:
+                last_number = int(last_invoice.numero.split('-')[-1])
+                new_number = last_number + 1
+            else:
+                new_number = 1
+
+            self.numero = f"YAAY-{year}-{str(new_number).zfill(4)}"
+
+        super().save(*args, **kwargs)
+
+    class Meta:
+        unique_together = ('group', 'mois')
+        ordering = ['-date_creation']
+
+
+from django.db import transaction
+
+def save(self, *args, **kwargs):
+
+    if not self.numero:
+        year = self.mois.year
+
+        with transaction.atomic():
+
+            last_invoice = Invoice.objects.select_for_update().filter(
+                numero__startswith=f"YAAY-{year}"
+            ).order_by('-numero').first()  # ✅ IMPORTANT
+
+            if last_invoice and last_invoice.numero:
+                last_number = int(last_invoice.numero.split('-')[-1])
+                new_number = last_number + 1
+            else:
+                new_number = 1
+
+            self.numero = f"YAAY-{year}-{str(new_number).zfill(4)}"
+
+    super().save(*args, **kwargs)
+

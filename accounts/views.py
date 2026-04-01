@@ -960,3 +960,37 @@ def dashboard(request):
     # 🛑 fallback
     return render(request, 'dashboard.html', context)
 
+
+# accounts/views.py
+
+from django.shortcuts import render
+from .models import Invoice
+
+
+def invoices_dashboard(request):
+
+    factures = Invoice.objects.select_related('group').order_by('-mois')
+
+    return render(request, "accounts/invoices.html", {
+        "factures": factures
+    })
+
+from django.http import HttpResponse
+from django.template.loader import get_template
+from xhtml2pdf import pisa
+from .models import Invoice
+
+
+def invoice_pdf(request, invoice_id):
+
+    invoice = Invoice.objects.get(id=invoice_id)
+
+    template = get_template('accounts/invoice_pdf.html')
+    html = template.render({'invoice': invoice})
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="facture_{invoice.id}.pdf"'
+
+    pisa.CreatePDF(html, dest=response)
+
+    return response

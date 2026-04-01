@@ -313,6 +313,8 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import models
 
+from cotisationtontine.models import GroupMember  # 🔥 important si pas déjà import
+
 
 class Versement(models.Model):
 
@@ -328,10 +330,16 @@ class Versement(models.Model):
         related_name='versements'
     )
 
-    # 🔥 NOUVEAU : gestion des tours
+    # 🔁 TOUR
     tour = models.IntegerField(
         default=1,
         help_text="Numéro du tour de tontine"
+    )
+
+    # 🔥 NOUVEAU : CYCLE (CRUCIAL POUR TON BUG)
+    cycle = models.IntegerField(
+        default=1,
+        help_text="Numéro du cycle"
     )
 
     montant = models.DecimalField(max_digits=12, decimal_places=0)
@@ -365,21 +373,27 @@ class Versement(models.Model):
         ordering = ["-date_creation"]
         indexes = [
             models.Index(fields=["member", "tour"]),
+            models.Index(fields=["member", "cycle"]),  # 🔥 important perf
             models.Index(fields=["statut"]),
         ]
 
     def __str__(self):
-        return f"{self.member.user} - {self.montant} FCFA (Tour {self.tour}) [{self.statut}]"
+        return f"{self.member.user} - {self.montant} FCFA (Cycle {self.cycle} | Tour {self.tour}) [{self.statut}]"
 
     # =====================================================
-    # 🔹 Calcul automatique des frais YaayESS (2%)
+    # 🔹 SAVE AUTO (frais + cycle + tour)
     # =====================================================
     def save(self, *args, **kwargs):
 
+        # 💰 calcul frais automatique
         if not self.frais or self.frais == 0:
             self.frais = (self.montant * Decimal("0.02")).quantize(Decimal("1"))
 
-        # 🔥 SÉCURITÉ : affecter automatiquement le tour si absent
+        # 🔁 affecter cycle automatiquement
+        if not self.cycle and self.member and self.member.group:
+            self.cycle = self.member.group.cycle_numero
+
+        # 🔁 affecter tour automatiquement
         if not self.tour and self.member and self.member.group:
             self.tour = self.member.group.tour_actuel
 
@@ -391,6 +405,7 @@ class Versement(models.Model):
     @property
     def montant_total(self):
         return self.montant + self.frais
+
 
 # =====================================================
 # TIRAGE (AVEC CYCLE NUMBER)
@@ -465,11 +480,15 @@ class ActionLog(models.Model):
 
 class Cycle(models.Model):
     group = models.ForeignKey("Group", on_delete=models.CASCADE, related_name="cycles")
+
+    # 🔥 AJOUT IMPORTANT
+    numero = models.IntegerField(default=1)
+
     date_debut = models.DateTimeField()
     date_fin = models.DateTimeField()
 
     def __str__(self):
-        return f"Cycle {self.id} - {self.group.nom}"
+        return f"Cycle {self.numero} - {self.group.nom}"
 
     @property
     def total_etapes(self):

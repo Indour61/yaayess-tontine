@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Factures - YaayESS{% endblock %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+    <!-- 🔥 HEADER -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h3 class="mb-0">🧾 Factures (Commissions)</h3>
+            <small class="text-muted">Suivi des revenus mensuels par groupe</small>
+        </div>
+
+        <!-- 🔍 FILTRE MOIS -->
+        <form method="get" class="d-flex gap-2">
+            <input type="month" name="mois" class="form-control form-control-sm">
+            <button type="submit" class="btn btn-sm btn-primary">Filtrer</button>
+        </form>
+    </div>
+
+    <!-- 💡 INFO -->
+    <div class="alert alert-info">
+        💡 Les factures correspondent aux <strong>commissions mensuelles</strong> générées par les groupes.
+    </div>
+
+    <!-- 📊 TABLE -->
+    <div class="table-responsive">
+
+        <table class="table table-hover align-middle">
+
+            <thead class="table-dark">
+                <tr>
+                    <th>Groupe</th>
+                    <th>Mois</th>
+                    <th>Commission</th>
+                    <th>Total</th>
+                    <th>Statut</th>
+                    <th class="text-center">Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for f in factures %}
+                <tr>
+
+                    <!-- 🧑‍🤝‍🧑 Groupe -->
+                    <td>
+                        <strong>{{ f.group.nom }}</strong>
+                    </td>
+
+                    <!-- 📅 Mois -->
+                    <td>
+                        {{ f.mois|date:"F Y" }}
+                    </td>
+
+                    <!-- 💰 Commission -->
+                    <td>
+                        <span class="text-primary fw-bold">
+                            {{ f.total|floatformat:0 }} FCFA
+                        </span>
+                    </td>
+
+                    <!-- 💵 Total -->
+                    <td>
+                        <strong>{{ f.total|floatformat:0 }} FCFA</strong>
+                    </td>
+
+                    <!-- 📊 Statut -->
+                    <td>
+                        {% if f.statut == 'paid' %}
+                            <span class="badge bg-success">✔ Payée</span>
+                        {% elif f.statut == 'pending' %}
+                            <span class="badge bg-warning text-dark">⏳ En attente</span>
+                        {% else %}
+                            <span class="badge bg-danger">⚠ En retard</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- ⚙️ Actions -->
+                    <td class="text-center">
+
+                        <div class="d-flex justify-content-center gap-2 flex-wrap">
+
+                            <!-- 📄 PDF -->
+                            <a href="#" class="btn btn-sm btn-outline-secondary">
+                                📄 PDF
+                            </a>
+
+                            <!-- 💳 Paiement -->
+                            <a href="#" class="btn btn-sm btn-success">
+                                💳 Payer
+                            </a>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        📭 Aucune facture disponible pour le moment
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+{% endblock %}
