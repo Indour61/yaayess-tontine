@@ -5,63 +5,96 @@
 
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: Helvetica, Arial, sans-serif;
             font-size: 12px;
             color: #333;
         }
 
-        /* HEADER */
-        .header {
-            background-color: #198754;
-            color: white;
-            padding: 10px;
-            text-align: center;
-            font-size: 18px;
+        /* HEADER TABLE (COMPATIBLE PDF) */
+        .header-table {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .title {
+            text-align: right;
+            font-size: 20px;
             font-weight: bold;
+            color: #198754;
         }
 
         .subtitle {
-            text-align: center;
-            font-size: 12px;
+            text-align: right;
+            font-size: 11px;
+            color: #555;
+        }
+
+        /* INFOS */
+        .info-table {
+            width: 100%;
+            margin-top: 15px;
             margin-bottom: 20px;
+        }
+
+        .info-left {
+            width: 50%;
+        }
+
+        .info-right {
+            text-align: right;
         }
 
         /* BOX */
         .box {
             border: 1px solid #ccc;
-            padding: 10px;
-            margin-bottom: 15px;
+            padding: 12px;
+            margin-bottom: 20px;
         }
 
         /* TABLE */
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
-        }
-
-        table, th, td {
-            border: 1px solid #000;
         }
 
         th {
             background-color: #198754;
             color: white;
             padding: 8px;
+            font-weight: bold;
         }
 
         td {
+            border: 1px solid #ccc;
             padding: 8px;
-            text-align: left;
         }
 
         /* TOTAL */
-        .total {
+        .total-box {
             margin-top: 20px;
+            text-align: right;
+        }
+
+        .total {
             font-size: 16px;
             font-weight: bold;
-            text-align: right;
             color: #198754;
+        }
+
+        /* BADGE */
+        .badge {
+            padding: 4px 8px;
+            font-size: 10px;
+            color: white;
+        }
+
+        .paid {
+            background-color: #198754;
+        }
+
+        .pending {
+            background-color: #ffc107;
+            color: #000;
         }
 
         /* FOOTER */
@@ -76,20 +109,46 @@
 
 <body>
 
-    <!-- 🔥 HEADER -->
-    <div class="header">
-        YAAYESS - FACTURE
-    </div>
+    <!-- 🔥 HEADER AVEC LOGO -->
+    <table class="header-table">
+        <tr>
+            <td>
+                <img src="{{ logo_path }}" width="80">
+            </td>
+            <td>
+                <div class="title">FACTURE YAAYESS</div>
+                <div class="subtitle">
+                    Plateforme de gestion de tontines et d’épargne collective
+                </div>
+            </td>
+        </tr>
+    </table>
 
-    <div class="subtitle">
-        Plateforme de gestion de tontines et d’épargne collective
-    </div>
+    <hr>
 
-    <!-- 📦 INFOS -->
+    <!-- 🧾 INFOS FACTURE -->
+    <table class="info-table">
+        <tr>
+            <td class="info-left">
+                <strong>Facture N° :</strong> YS-{{ invoice.id }}<br>
+                <strong>Date :</strong> {{ invoice.date_creation|date:"d/m/Y" }}
+            </td>
+
+            <td class="info-right">
+                <strong>Statut :</strong><br>
+                {% if invoice.statut == "PAYE" %}
+                    <span class="badge paid">Payée</span>
+                {% else %}
+                    <span class="badge pending">En attente</span>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <!-- 📦 INFOS GROUPE -->
     <div class="box">
         <strong>Groupe :</strong> {{ invoice.group.nom }}<br>
-        <strong>Mois :</strong> {{ invoice.mois|date:"F Y" }}<br>
-        <strong>Date :</strong> {{ invoice.date_creation|date:"d/m/Y" }}
+        <strong>Mois :</strong> {{ invoice.mois|date:"F Y" }}
     </div>
 
     <!-- 📊 DÉTAIL -->
@@ -102,20 +161,23 @@
         </thead>
         <tbody>
             <tr>
-                <td>Commission plateforme (YaayESS)</td>
+                <td>Commission plateforme YaayESS (2%)</td>
                 <td>{{ invoice.total|floatformat:0 }}</td>
             </tr>
         </tbody>
     </table>
 
     <!-- 💰 TOTAL -->
-    <div class="total">
-        TOTAL À PAYER : {{ invoice.total|floatformat:0 }} FCFA
+    <div class="total-box">
+        <div class="total">
+            TOTAL À PAYER : {{ invoice.total|floatformat:0 }} FCFA
+        </div>
     </div>
 
     <!-- 🧾 FOOTER -->
     <div class="footer">
         YaayESS © {{ invoice.date_creation|date:"Y" }} <br>
+        Dakar, Sénégal <br>
         Contact : ibrahim.ndr@gmail.com | +221 76 721 39 35
     </div>
 

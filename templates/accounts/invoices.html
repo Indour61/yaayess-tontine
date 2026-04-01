@@ -15,7 +15,7 @@
 
         <!-- 🔍 FILTRE MOIS -->
         <form method="get" class="d-flex gap-2">
-            <input type="month" name="mois" class="form-control form-control-sm">
+            <input type="month" name="mois" value="{{ request.GET.mois }}" class="form-control form-control-sm">
             <button type="submit" class="btn btn-sm btn-primary">Filtrer</button>
         </form>
     </div>
@@ -69,9 +69,9 @@
 
                     <!-- 📊 Statut -->
                     <td>
-                        {% if f.statut == 'paid' %}
+                        {% if f.statut == 'PAYE' %}
                             <span class="badge bg-success">✔ Payée</span>
-                        {% elif f.statut == 'pending' %}
+                        {% elif f.statut == 'EN_ATTENTE' %}
                             <span class="badge bg-warning text-dark">⏳ En attente</span>
                         {% else %}
                             <span class="badge bg-danger">⚠ En retard</span>
@@ -83,14 +83,22 @@
 
                         <div class="d-flex justify-content-center gap-2 flex-wrap">
 
-                            <!-- 📄 PDF -->
-                            <a href="#" class="btn btn-sm btn-outline-secondary">
-                                📄 PDF
+                            <!-- 👁️ Voir -->
+                            <a href="{% url 'accounts:invoice_pdf' f.id %}" target="_blank"
+                               class="btn btn-sm btn-outline-secondary">
+                                👁️
+                            </a>
+
+                            <!-- ⬇️ Télécharger -->
+                            <a href="{% url 'accounts:invoice_pdf' f.id %}?download=1"
+                               class="btn btn-sm btn-secondary">
+                                ⬇
                             </a>
 
                             <!-- 💳 Paiement -->
-                            <a href="#" class="btn btn-sm btn-success">
-                                💳 Payer
+                            <a href="#"
+                               class="btn btn-sm btn-success">
+                                💳
                             </a>
 
                         </div>

@@ -977,20 +977,43 @@ def invoices_dashboard(request):
 
 from django.http import HttpResponse
 from django.template.loader import get_template
+from django.shortcuts import get_object_or_404
+from django.contrib.auth.decorators import login_required
 from xhtml2pdf import pisa
 from .models import Invoice
 
 
+import os
+from django.conf import settings
+
+from django.http import HttpResponse
+from django.template.loader import get_template
+from django.shortcuts import get_object_or_404
+from django.contrib.auth.decorators import login_required
+from xhtml2pdf import pisa
+from .models import Invoice
+
+
+@login_required
 def invoice_pdf(request, invoice_id):
 
-    invoice = Invoice.objects.get(id=invoice_id)
+    invoice = get_object_or_404(Invoice, id=invoice_id)
 
     template = get_template('accounts/invoice_pdf.html')
-    html = template.render({'invoice': invoice})
+    html = template.render({'invoice': invoice, 'logo_path': '/static/images/logo.png'})
 
     response = HttpResponse(content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="facture_{invoice.id}.pdf"'
 
-    pisa.CreatePDF(html, dest=response)
+    # 🔥 MODE DOWNLOAD OU PREVIEW
+    if request.GET.get("download") == "1":
+        response['Content-Disposition'] = f'attachment; filename="facture_{invoice.id}.pdf"'
+    else:
+        response['Content-Disposition'] = f'inline; filename="facture_{invoice.id}.pdf"'
+
+    pisa_status = pisa.CreatePDF(html, dest=response)
+
+    if pisa_status.err:
+        return HttpResponse("Erreur PDF ❌")
 
     return response
+

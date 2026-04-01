@@ -200,15 +200,30 @@ SaaS Dashboard
 {% endif %}
 
 {% if user.is_superuser %}
-<li class="nav-item">
-    <a class="nav-link text-warning" href="{% url 'accounts:compta_dashboard' %}">
 
-        💰 Compta Dashboard
+<li class="nav-item dropdown">
+    <a class="nav-link dropdown-toggle text-warning" href="#" data-bs-toggle="dropdown">
+        💰 Compta
     </a>
+
+    <ul class="dropdown-menu dropdown-menu-end shadow">
+
+        <li>
+            <a class="dropdown-item" href="{% url 'accounts:compta_dashboard' %}">
+                📊 Dashboard
+            </a>
+        </li>
+
+        <li>
+            <a class="dropdown-item" href="{% url 'accounts:invoices_dashboard' %}">
+                📄 Factures
+            </a>
+        </li>
+
+    </ul>
 </li>
+
 {% endif %}
-
-
 
 <!-- MENU UTILISATEUR -->
 <li class="nav-item dropdown">
