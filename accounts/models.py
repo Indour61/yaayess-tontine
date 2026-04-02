@@ -498,26 +498,41 @@ def save(self, *args, **kwargs):
 
 # accounts/models.py
 
-import random
-from django.db import models
-from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta
 
-User = get_user_model()
-
 class OTPVerification(models.Model):
+
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     code = models.CharField(max_length=6)
+
     created_at = models.DateTimeField(auto_now_add=True)
+
+    from django.utils import timezone
+    from datetime import timedelta
+
+    def default_expiry():
+        return timezone.now() + timedelta(minutes=5)
+
+    expires_at = models.DateTimeField(default=default_expiry)
+
+    attempts = models.IntegerField(default=0)
+    max_attempts = models.IntegerField(default=3)
+
     is_validated = models.BooleanField(default=False)
 
     def is_expired(self):
-        return timezone.now() > self.created_at + timedelta(minutes=5)
+        return timezone.now() > self.expires_at
 
-    @staticmethod
-    def generate_code():
-        return str(random.randint(100000, 999999))
+    def can_attempt(self):
+        return self.attempts < self.max_attempts
+
+
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
 
 from django.db import models
 from django.contrib.auth import get_user_model
@@ -534,8 +549,14 @@ class OTPAttempt(models.Model):
 
     ip_address = models.GenericIPAddressField(null=True, blank=True)
 
+    user_agent = models.TextField(null=True, blank=True)  # 🔥 appareil utilisé
+    country = models.CharField(max_length=100, null=True, blank=True)  # 🌍 optionnel
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user} - {'SUCCESS' if self.success else 'FAIL'}"
+        status = "SUCCESS" if self.success else "FAIL"
+        return f"{self.user} - {status} - {self.created_at}"
 
+    class Meta:
+        ordering = ['-created_at']
