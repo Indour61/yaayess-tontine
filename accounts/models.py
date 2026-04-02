@@ -495,62 +495,70 @@ def save(self, *args, **kwargs):
 
     super().save(*args, **kwargs)
 
-
-# accounts/models.py
-
+from django.db import models
+from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
+import random
 
+User = settings.AUTH_USER_MODEL
+
+
+# =========================================================
+# OTP VERIFICATION
+# =========================================================
 class OTPVerification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    phone = models.CharField(max_length=20)
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
     code = models.CharField(max_length=6)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
 
-    from django.utils import timezone
-    from datetime import timedelta
+    is_valid = models.BooleanField(default=True)
 
+    # 🔐 Générer code OTP
+    @staticmethod
+    def generate_code():
+        return str(random.randint(100000, 999999))
+
+    # ⏳ Expiration (5 min)
+    @staticmethod
     def default_expiry():
         return timezone.now() + timedelta(minutes=5)
 
-    expires_at = models.DateTimeField(default=default_expiry)
+    # 🔥 Auto-remplir expires_at (anti bug)
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = self.default_expiry()
+        super().save(*args, **kwargs)
 
-    attempts = models.IntegerField(default=0)
-    max_attempts = models.IntegerField(default=3)
-
-    is_validated = models.BooleanField(default=False)
-
+    # ❌ OTP expiré ?
     def is_expired(self):
         return timezone.now() > self.expires_at
 
-    def can_attempt(self):
-        return self.attempts < self.max_attempts
+    # 🔒 OTP encore valide ?
+    def is_usable(self):
+        return self.is_valid and not self.is_expired()
+
+    def __str__(self):
+        return f"{self.phone} - {self.code}"
 
 
-from django.db import models
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
-
-
-from django.db import models
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
-
-
+# =========================================================
+# OTP ATTEMPTS (sécurité)
+# =========================================================
 class OTPAttempt(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    otp = models.ForeignKey('OTPVerification', on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    otp = models.ForeignKey(OTPVerification, on_delete=models.CASCADE)
 
     entered_code = models.CharField(max_length=6)
     success = models.BooleanField(default=False)
 
     ip_address = models.GenericIPAddressField(null=True, blank=True)
-
-    user_agent = models.TextField(null=True, blank=True)  # 🔥 appareil utilisé
-    country = models.CharField(max_length=100, null=True, blank=True)  # 🌍 optionnel
+    user_agent = models.TextField(null=True, blank=True)
+    country = models.CharField(max_length=100, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -560,3 +568,4 @@ class OTPAttempt(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+

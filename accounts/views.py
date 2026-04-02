@@ -94,208 +94,189 @@ class RegisterAPIView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
-# ----------------------------------------------------
-# Vue d'inscription
-# ----------------------------------------------------
+import random
+from datetime import timedelta
+
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.contrib.auth import login
-from django.urls import reverse
-from django.db import transaction
 from django.utils import timezone
+import random  # ✅ AJOUT
+
+from .models import CustomUser
 from .forms import CustomUserCreationForm
-from accounts.services import send_otp
-from accounts.models import OTPVerification
-
-# ⚠️ IMPORTS CORRECTS
-
-from django.db import transaction
-from django.shortcuts import render, redirect
-from django.contrib import messages
-from accounts.models import OTPVerification
-from accounts.services import send_otp
 
 
-@transaction.atomic
+# =========================================================
+# 🔐 SIGNUP + ENVOI OTP
+# =========================================================
 def signup_view(request):
-
-    # 🔐 Si déjà connecté
-    if request.user.is_authenticated:
-        if request.user.option == "1":
-            return redirect("cotisationtontine:dashboard_tontine_simple")
-        return redirect("epargnecredit:dashboard_epargne_credit")
-
     if request.method == "POST":
         form = CustomUserCreationForm(request.POST)
 
+        phone = request.POST.get("phone")
+
+        # 🔥 CAS 1 : utilisateur existe déjà
+        if CustomUser.objects.filter(phone=phone).exists():
+            user = CustomUser.objects.get(phone=phone)
+
+            # 🔢 OTP
+            otp = str(random.randint(100000, 999999))
+
+            request.session["otp"] = otp
+            request.session["phone"] = user.phone
+            request.session["otp_time"] = timezone.now().isoformat()
+
+            print(f"📱 [OTP EXISTING USER] {otp} → {user.phone}")
+
+            messages.info(request, "Compte existant détecté. Vérification requise 📱")
+
+            return redirect("accounts:verify_otp")
+
+        # 🔥 CAS 2 : nouvel utilisateur
         if form.is_valid():
             user = form.save(commit=False)
-
-            # 🔒 Bloquer tant que OTP non validé
             user.is_active = False
             user.save()
 
-            # 🔢 Générer OTP
-            code = OTPVerification.generate_code()
+            otp = str(random.randint(100000, 999999))
 
-            OTPVerification.objects.create(
-                user=user,
-                code=code
-            )
+            request.session["otp"] = otp
+            request.session["phone"] = user.phone
+            request.session["otp_time"] = timezone.now().isoformat()
 
-            # 📩 Envoi OTP (EMAIL + SMS centralisé)
-            send_otp(user, code)
-
-            # 💾 Sauvegarde session
-            request.session["otp_user_id"] = user.id
+            print(f"📱 [OTP NEW USER] {otp} → {user.phone}")
 
             messages.success(request, "Un code de vérification a été envoyé 📱")
 
             return redirect("accounts:verify_otp")
+
+        else:
+            print("❌ FORM ERRORS:", form.errors)
+            messages.error(request, form.errors)
 
     else:
         form = CustomUserCreationForm()
 
     return render(request, "accounts/signup.html", {"form": form})
 
-from django.contrib.auth import login
-from django.contrib import messages
-from django.shortcuts import render, redirect
-from django.contrib.auth import get_user_model
-from django.utils import timezone
+from datetime import timedelta  # ✅ AJOUT
 
-from accounts.models import OTPVerification, OTPAttempt
+from datetime import timedelta
+import random
 
-User = get_user_model()
+# =========================================================
+# 🔍 VERIFY OTP
+# =========================================================
+def verify_otp_view(request):
+    phone = request.session.get("phone")
+    otp_session = request.session.get("otp")
+    otp_time = request.session.get("otp_time")
 
-
-def verify_otp(request):
-
-    user_id = request.session.get("otp_user_id")
-
-    # 🔒 Sécurité session
-    if not user_id:
-        messages.error(request, "Session expirée ❌")
+    # ❌ session perdue
+    if not phone or not otp_session or not otp_time:
+        messages.error(request, "Session expirée. Veuillez vous réinscrire.")
         return redirect("accounts:signup")
 
     try:
-        user = User.objects.get(id=user_id)
-    except User.DoesNotExist:
-        messages.error(request, "Utilisateur introuvable ❌")
+        otp_time = timezone.datetime.fromisoformat(otp_time)
+
+        if timezone.is_naive(otp_time):
+            otp_time = timezone.make_aware(otp_time)
+
+    except Exception:
+        messages.error(request, "Erreur session OTP.")
         return redirect("accounts:signup")
 
-    # 🔎 Récupérer dernier OTP actif
-    otp = OTPVerification.objects.filter(
-        user=user,
-        is_validated=False
-    ).last()
-
-    if not otp:
-        messages.error(request, "Aucun code OTP trouvé ❌")
-        return redirect("accounts:signup")
+    # ⏳ expiration OTP (2 min)
+    if timezone.now() > otp_time + timedelta(minutes=2):
+        messages.error(request, "Code expiré. Demandez un nouveau.")
+        return redirect("accounts:resend_otp")
 
     if request.method == "POST":
-        code = request.POST.get("code")
-        ip = request.META.get("REMOTE_ADDR")
+        otp_user = request.POST.get("otp")
 
-        # ⏱ Vérifier expiration
-        if otp.is_expired():
-            messages.error(request, "Code expiré ⏱")
-            return redirect("accounts:verify_otp")
+        if otp_user == otp_session:
+            try:
+                user = CustomUser.objects.get(phone=phone)
 
-        # 🚫 Limite tentatives
-        if not otp.can_attempt():
-            messages.error(request, "Trop de tentatives ❌")
-            return redirect("accounts:verify_otp")
+                # ✅ activer
+                user.is_active = True
+                user.save()
 
-        # 🔄 Incrément tentative
-        otp.attempts += 1
-        otp.save()
+                # 🔐 login
+                login(request, user)
 
-        success = (otp.code == code)
+                # 🧹 clean session
+                for key in ["otp", "phone", "otp_time"]:
+                    request.session.pop(key, None)
 
-        # 📊 Log tentative (anti fraude)
-        OTPAttempt.objects.create(
-            user=user,
-            otp=otp,
-            entered_code=code,
-            success=success,
-            ip_address=ip
-        )
+                messages.success(request, "🎉 Compte activé avec succès !")
 
-        if success:
-            otp.is_validated = True
-            otp.save()
+                # ✅ redirection vers une page EXISTANTE
+                return redirect("accounts:landing")  # ✔️ déjà dans ton urls.py
 
-            user.is_active = True
-            user.save()
+            except CustomUser.DoesNotExist:
+                messages.error(request, "Utilisateur introuvable.")
+                return redirect("accounts:signup")
 
-            login(request, user)
+        else:
+            messages.error(request, "Code incorrect ❌")
 
-            # 🧹 Nettoyage session
-            request.session.pop("otp_user_id", None)
-
-            messages.success(request, "Compte validé ✅")
-
-            # 🔐 Redirection intelligente
-            if user.option == "1":
-                return redirect("cotisationtontine:dashboard_tontine_simple")
-
-            return redirect("epargnecredit:dashboard_epargne_credit")
-
-        messages.error(request, "Code incorrect ❌")
-
+    # ✅ IMPORTANT : afficher la page OTP
     return render(request, "accounts/verify_otp.html")
 
-from django.http import JsonResponse
-from django.utils import timezone
-from datetime import timedelta
-from accounts.services import generate_and_send_otp
-from django.contrib.auth import get_user_model
 
-User = get_user_model()
+# =========================================================
+# 🔄 RENVOYER OTP
+# =========================================================
+def resend_otp_view(request):
+    phone = request.session.get("phone")
+    last_otp_time = request.session.get("otp_time")
 
+    if not phone:
+        messages.error(request, "Session expirée.")
+        return redirect("accounts:signup")
 
-def resend_otp(request):
+    # ⛔ anti-spam
+    if last_otp_time:
+        try:
+            last_otp_time = timezone.datetime.fromisoformat(last_otp_time)
 
-    user_id = request.session.get("otp_user_id")
+            if timezone.is_naive(last_otp_time):
+                last_otp_time = timezone.make_aware(last_otp_time)
 
-    if not user_id:
-        return JsonResponse({"error": "Session expirée"}, status=400)
+            if timezone.now() < last_otp_time + timedelta(seconds=30):
+                messages.warning(request, "Veuillez patienter avant de redemander un code.")
+                return redirect("accounts:verify_otp")
 
-    user = User.objects.get(id=user_id)
+        except Exception:
+            pass
 
-    # 🔁 Limite anti spam (30 sec)
-    last_otp = OTPVerification.objects.filter(user=user).last()
+    otp = str(random.randint(100000, 999999))
 
-    if last_otp and timezone.now() < last_otp.created_at + timedelta(seconds=30):
-        return JsonResponse({
-            "error": "Attendez 30 secondes avant de renvoyer."
-        }, status=429)
+    request.session["otp"] = otp
+    request.session["otp_time"] = timezone.now().isoformat()
 
-    generate_and_send_otp(user)
+    print(f"📱 [RESEND OTP] {otp} → {phone}")
 
-    return JsonResponse({"success": True})
+    messages.success(request, "Nouveau code envoyé 📱")
 
+    return redirect("accounts:verify_otp")
 
-
-
-from django.shortcuts import redirect
-
+# =========================================================
+# 🔁 REDIRECTION INTELLIGENTE
+# =========================================================
 def redirect_user(user):
-    """
-    Redirection intelligente SANS forcer un groupe
-    """
 
     # OPTION 1 : TONTINE
     if user.option == "1":
         return redirect("cotisationtontine:dashboard_tontine_simple")
 
-    # OPTION 2 : EPARGNE
+    # OPTION 2 : EPARGNE & CREDIT
     if user.option == "2":
         return redirect("epargnecredit:dashboard_epargne_credit")
 
-    # fallback
     return redirect("accounts:landing")
 
 # ----------------------------------------------------

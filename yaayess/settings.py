@@ -53,6 +53,11 @@ DATABASES = {
     }
 }
 
+SESSION_COOKIE_AGE = 3600  # 1 heure
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_SECURE = False  # True en production HTTPS
+SESSION_COOKIE_HTTPONLY = True
 
 # PROD security (activés automatiquement quand DEBUG=False)
 if not DEBUG:

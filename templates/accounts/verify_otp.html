@@ -11,7 +11,8 @@
     <form method="POST">
         {% csrf_token %}
 
-        <input type="text" name="code" placeholder="Entrer le code"
+        <!-- ✅ CORRECTION ICI -->
+        <input type="text" name="otp" placeholder="Entrer le code"
                style="padding:10px;width:100%;margin-bottom:10px" required>
 
         <button type="submit" style="padding:10px;width:100%">
@@ -21,22 +22,11 @@
 
     <br>
 
-    <button onclick="resendOTP()" style="padding:8px;width:100%">
-        🔁 Renvoyer le code
-    </button>
+    <!-- ✅ CORRECTION : lien au lieu de fetch -->
+    <a href="{% url 'accounts:resend_otp' %}">
+        <button style="padding:8px;width:100%">
+            🔁 Renvoyer le code
+        </button>
+    </a>
 
 </div>
-
-<script>
-function resendOTP() {
-    fetch("{% url 'accounts:resend_otp' %}")
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) {
-            alert(data.error);
-        } else {
-            alert("Code renvoyé 📩");
-        }
-    });
-}
-</script>

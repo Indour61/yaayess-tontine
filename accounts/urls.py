@@ -1,89 +1,80 @@
 from django.urls import path
 from . import views
-from . import views_admin
-from .views import invoices_dashboard
-from .views import invoice_pdf
-from .views import signup_view, verify_otp, resend_otp
-
 from .views_compta import compta_dashboard
-# API / JWT
+from .views_recus import mes_recus
+from .views_admin import saas_dashboard, toggle_group_access
+
+from .views import (
+    signup_view,
+    verify_otp_view,
+    resend_otp_view,
+    invoices_dashboard,
+    invoice_pdf,
+    MeView,
+    RegisterAPIView,
+    LoginAPIView,
+)
+
 from .api_views import LoginAPI
+
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 from accounts.jwt_serializer import PhoneTokenObtainPairSerializer
 
-# Views API
-from .views import MeView, RegisterAPIView, LoginAPIView
 
-# Admin / SaaS
-from .views_admin import saas_dashboard, toggle_group_access
-
-# Compta / Reçus
-from .views_compta import compta_dashboard
-from .views_recus import mes_recus
-
-
-# 🔐 JWT personnalisé (connexion avec téléphone)
+# 🔐 JWT personnalisé
 class PhoneTokenObtainPairView(TokenObtainPairView):
     serializer_class = PhoneTokenObtainPairSerializer
 
 
-app_name = 'accounts'
+app_name = "accounts"
 
 
 urlpatterns = [
 
-    # 🔥 LANDING PAGE (IMPORTANT)
-    path('', views.landing_view, name='landing'),
+    # 🔥 LANDING
+    path("", views.landing_view, name="landing"),
 
-    # 🔐 Auth classique
-    path('login/', views.login_view, name='login'),
-    path('logout/', views.logout_view, name='logout'),
-    path('signup/', views.signup_view, name='signup'),
-    path("verify-otp/", verify_otp, name="verify_otp"),  # 🔥 IMPORTANT
-    path("resend-otp/", resend_otp, name="resend_otp"),  # 🔥 OBLIGATOIRE
+    # 🔐 AUTH
+    path("login/", views.login_view, name="login"),
+    path("logout/", views.logout_view, name="logout"),
+    path("signup/", signup_view, name="signup"),
 
-    # 🔗 Rejoindre groupe
-    path('rejoindre/<str:code>/', views.inscription_et_rejoindre, name='inscription_et_rejoindre'),
+    path("verify-otp/", verify_otp_view, name="verify_otp"),
+    path("resend-otp/", resend_otp_view, name="resend_otp"),
 
-    # ⏳ Attente validation
-    path('attente-validation/', views.attente_validation, name='attente_validation'),
+    # 🔗 GROUPE
+    path("rejoindre/<str:code>/", views.inscription_et_rejoindre, name="inscription_et_rejoindre"),
+    path("attente-validation/", views.attente_validation, name="attente_validation"),
 
-    # 👤 Profil utilisateur API
-    path('me/', MeView.as_view(), name='api_me'),
+    # 👤 USER API
+    path("me/", MeView.as_view(), name="api_me"),
 
-    # 🔌 API Auth
+    # 🔌 API AUTH
     path("api/register/", RegisterAPIView.as_view(), name="api_register"),
-
-    # ⚠️ Nettoyage : garder UNE seule route login API
     path("api/login/", LoginAPIView.as_view(), name="api_login"),
 
-    # 🔐 JWT Token
+    # 🔐 JWT
     path("api/token/", PhoneTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 
-    # 🏢 SaaS Admin
+    # 🏢 ADMIN SAAS
     path("super-admin/dashboard/", saas_dashboard, name="saas_dashboard"),
-    path(
-        'super-admin/toggle-group/<str:type>/<int:group_id>/',
-        views_admin.toggle_group_access,
-        name='toggle_group_access'
-    ),
+    path("super-admin/toggle-group/<str:type>/<int:group_id>/", toggle_group_access, name="toggle_group_access"),
 
-
-    # (option simplifiée)
+    # 🔁 VERSION SIMPLE ADMIN
     path("saas-dashboard/", saas_dashboard, name="saas_dashboard_alt"),
     path("toggle-group/<int:group_id>/", toggle_group_access, name="toggle_group_access_alt"),
 
-    # 👥 Groupe
+    # 👥 GROUPE
     path("create-group/", views.create_group, name="create_group"),
 
-    # 💰 Comptabilité
+    # 💰 COMPTA
     path("compta-dashboard/", compta_dashboard, name="compta_dashboard"),
 
-    # 🧾 Reçus
+    # 🧾 REÇUS
     path("mes-recus/", mes_recus, name="mes_recus"),
 
-    path('factures/', invoices_dashboard, name='invoices_dashboard'),
-    path('invoice/<int:invoice_id>/pdf/', invoice_pdf, name='invoice_pdf'),
+    # 🧾 FACTURES
+    path("factures/", invoices_dashboard, name="invoices_dashboard"),
+    path("invoice/<int:invoice_id>/pdf/", invoice_pdf, name="invoice_pdf"),
 ]
-

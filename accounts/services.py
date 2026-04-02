@@ -51,8 +51,8 @@ def generate_and_send_otp(user):
     # ❌ supprimer anciens OTP
     OTPVerification.objects.filter(
         user=user,
-        is_validated=False
-    ).delete()
+        is_valid=True
+     ).delete()
 
     # 🔢 générer code
     code = OTPVerification.generate_code()
