@@ -1,0 +1,42 @@
+<div style="max-width:400px;margin:auto;margin-top:100px;text-align:center">
+
+    <h2>🔐 Vérification OTP</h2>
+
+    {% if messages %}
+        {% for message in messages %}
+            <p style="color:red;">{{ message }}</p>
+        {% endfor %}
+    {% endif %}
+
+    <form method="POST">
+        {% csrf_token %}
+
+        <input type="text" name="code" placeholder="Entrer le code"
+               style="padding:10px;width:100%;margin-bottom:10px" required>
+
+        <button type="submit" style="padding:10px;width:100%">
+            ✅ Valider
+        </button>
+    </form>
+
+    <br>
+
+    <button onclick="resendOTP()" style="padding:8px;width:100%">
+        🔁 Renvoyer le code
+    </button>
+
+</div>
+
+<script>
+function resendOTP() {
+    fetch("{% url 'accounts:resend_otp' %}")
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            alert("Code renvoyé 📩");
+        }
+    });
+}
+</script>

@@ -103,79 +103,182 @@ from django.contrib.auth import login
 from django.urls import reverse
 from django.db import transaction
 from django.utils import timezone
-
 from .forms import CustomUserCreationForm
+from accounts.services import send_otp
+from accounts.models import OTPVerification
 
 # ⚠️ IMPORTS CORRECTS
+
+from django.db import transaction
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from accounts.models import OTPVerification
+from accounts.services import send_otp
 
 
 @transaction.atomic
 def signup_view(request):
 
+    # 🔐 Si déjà connecté
     if request.user.is_authenticated:
         if request.user.option == "1":
             return redirect("cotisationtontine:dashboard_tontine_simple")
         return redirect("epargnecredit:dashboard_epargne_credit")
 
-    group_id = request.GET.get("group_id") or request.POST.get("group_id")
-
-    group = None
-    group_type = None  # 🔥 on va déterminer le type
-
     if request.method == "POST":
         form = CustomUserCreationForm(request.POST)
 
         if form.is_valid():
-            user = form.save()
-            login(request, user)
+            user = form.save(commit=False)
 
-            # 🔎 Si group_id fourni
-            if group_id:
-                try:
-                    if user.option == "1":
-                        group = TontineGroup.objects.get(id=group_id)
-                        TontineMember.objects.get_or_create(
-                            group=group,
-                            user=user,
-                            defaults={"date_joined": timezone.now()},
-                        )
-                    else:
-                        group = ECGroup.objects.get(id=group_id)
-                        ECMember.objects.get_or_create(
-                            group=group,
-                            user=user,
-                            defaults={"date_joined": timezone.now()},
-                        )
-                except Exception:
-                    messages.warning(request, "Groupe invalide.")
+            # 🔒 Bloquer tant que OTP non validé
+            user.is_active = False
+            user.save()
 
-            messages.success(request, f"Bienvenue {user.nom} !")
+            # 🔢 Générer OTP
+            code = OTPVerification.generate_code()
 
-            # 🔐 Redirection propre
-            if user.option == "1":
-                if group:
-                    return redirect(
-                        reverse(
-                            "cotisationtontine:group_detail",
-                            args=[group.id],
-                        )
-                    )
-                return redirect(
-                    "cotisationtontine:dashboard_tontine_simple"
-                )
-
-            return redirect(
-                "epargnecredit:dashboard_epargne_credit"
+            OTPVerification.objects.create(
+                user=user,
+                code=code
             )
+
+            # 📩 Envoi OTP (EMAIL + SMS centralisé)
+            send_otp(user, code)
+
+            # 💾 Sauvegarde session
+            request.session["otp_user_id"] = user.id
+
+            messages.success(request, "Un code de vérification a été envoyé 📱")
+
+            return redirect("accounts:verify_otp")
 
     else:
         form = CustomUserCreationForm()
 
-    return render(
-        request,
-        "accounts/signup.html",
-        {"form": form},
-    )
+    return render(request, "accounts/signup.html", {"form": form})
+
+from django.contrib.auth import login
+from django.contrib import messages
+from django.shortcuts import render, redirect
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+
+from accounts.models import OTPVerification, OTPAttempt
+
+User = get_user_model()
+
+
+def verify_otp(request):
+
+    user_id = request.session.get("otp_user_id")
+
+    # 🔒 Sécurité session
+    if not user_id:
+        messages.error(request, "Session expirée ❌")
+        return redirect("accounts:signup")
+
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        messages.error(request, "Utilisateur introuvable ❌")
+        return redirect("accounts:signup")
+
+    # 🔎 Récupérer dernier OTP actif
+    otp = OTPVerification.objects.filter(
+        user=user,
+        is_validated=False
+    ).last()
+
+    if not otp:
+        messages.error(request, "Aucun code OTP trouvé ❌")
+        return redirect("accounts:signup")
+
+    if request.method == "POST":
+        code = request.POST.get("code")
+        ip = request.META.get("REMOTE_ADDR")
+
+        # ⏱ Vérifier expiration
+        if otp.is_expired():
+            messages.error(request, "Code expiré ⏱")
+            return redirect("accounts:verify_otp")
+
+        # 🚫 Limite tentatives
+        if not otp.can_attempt():
+            messages.error(request, "Trop de tentatives ❌")
+            return redirect("accounts:verify_otp")
+
+        # 🔄 Incrément tentative
+        otp.attempts += 1
+        otp.save()
+
+        success = (otp.code == code)
+
+        # 📊 Log tentative (anti fraude)
+        OTPAttempt.objects.create(
+            user=user,
+            otp=otp,
+            entered_code=code,
+            success=success,
+            ip_address=ip
+        )
+
+        if success:
+            otp.is_validated = True
+            otp.save()
+
+            user.is_active = True
+            user.save()
+
+            login(request, user)
+
+            # 🧹 Nettoyage session
+            request.session.pop("otp_user_id", None)
+
+            messages.success(request, "Compte validé ✅")
+
+            # 🔐 Redirection intelligente
+            if user.option == "1":
+                return redirect("cotisationtontine:dashboard_tontine_simple")
+
+            return redirect("epargnecredit:dashboard_epargne_credit")
+
+        messages.error(request, "Code incorrect ❌")
+
+    return render(request, "accounts/verify_otp.html")
+
+from django.http import JsonResponse
+from django.utils import timezone
+from datetime import timedelta
+from accounts.services import generate_and_send_otp
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+def resend_otp(request):
+
+    user_id = request.session.get("otp_user_id")
+
+    if not user_id:
+        return JsonResponse({"error": "Session expirée"}, status=400)
+
+    user = User.objects.get(id=user_id)
+
+    # 🔁 Limite anti spam (30 sec)
+    last_otp = OTPVerification.objects.filter(user=user).last()
+
+    if last_otp and timezone.now() < last_otp.created_at + timedelta(seconds=30):
+        return JsonResponse({
+            "error": "Attendez 30 secondes avant de renvoyer."
+        }, status=429)
+
+    generate_and_send_otp(user)
+
+    return JsonResponse({"success": True})
+
+
+
 
 from django.shortcuts import redirect
 
@@ -419,6 +522,46 @@ def _resolve_group_by_code(code: str):
         g = _find_group_in_model(GroupModel, code)
         if g:
             return g
+
+    def verify_otp(request):
+
+        user_id = request.session.get("otp_user_id")
+
+        if not user_id:
+            return redirect("signup")
+
+        user = User.objects.get(id=user_id)
+
+        if request.method == "POST":
+            code = request.POST.get("code")
+
+            otp = OTPVerification.objects.filter(
+                user=user,
+                code=code,
+                is_validated=False
+            ).last()
+
+            if otp and not otp.is_expired():
+                otp.is_validated = True
+                otp.save()
+
+                user.is_active = True
+                user.save()
+
+                login(request, user)
+
+                messages.success(request, "Compte validé ✅")
+
+                if user.option == "1":
+                    return redirect("cotisationtontine:dashboard_tontine_simple")
+
+                return redirect("epargnecredit:dashboard_epargne_credit")
+
+            messages.error(request, "Code invalide ou expiré ❌")
+
+        return render(request, "accounts/verify_otp.html")
+
+
 
     # 2️⃣ Recherche via Invitation (priorité epargnecredit)
     for app_label in ("epargnecredit", "cotisationtontine", "accounts"):
@@ -1016,4 +1159,5 @@ def invoice_pdf(request, invoice_id):
         return HttpResponse("Erreur PDF ❌")
 
     return response
+
 

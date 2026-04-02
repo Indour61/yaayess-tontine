@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Sum
 from datetime import datetime, date
-
 from cotisationtontine.models import Versement
 from epargnecredit.models import Group
 from accounts.models import Invoice

@@ -3,6 +3,7 @@ from . import views
 from . import views_admin
 from .views import invoices_dashboard
 from .views import invoice_pdf
+from .views import signup_view, verify_otp, resend_otp
 
 from .views_compta import compta_dashboard
 # API / JWT
@@ -38,6 +39,8 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('signup/', views.signup_view, name='signup'),
+    path("verify-otp/", verify_otp, name="verify_otp"),  # 🔥 IMPORTANT
+    path("resend-otp/", resend_otp, name="resend_otp"),  # 🔥 OBLIGATOIRE
 
     # 🔗 Rejoindre groupe
     path('rejoindre/<str:code>/', views.inscription_et_rejoindre, name='inscription_et_rejoindre'),

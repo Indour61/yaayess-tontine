@@ -495,3 +495,47 @@ def save(self, *args, **kwargs):
 
     super().save(*args, **kwargs)
 
+
+# accounts/models.py
+
+import random
+from django.db import models
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from datetime import timedelta
+
+User = get_user_model()
+
+class OTPVerification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_validated = models.BooleanField(default=False)
+
+    def is_expired(self):
+        return timezone.now() > self.created_at + timedelta(minutes=5)
+
+    @staticmethod
+    def generate_code():
+        return str(random.randint(100000, 999999))
+
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+class OTPAttempt(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    otp = models.ForeignKey('OTPVerification', on_delete=models.CASCADE)
+
+    entered_code = models.CharField(max_length=6)
+    success = models.BooleanField(default=False)
+
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user} - {'SUCCESS' if self.success else 'FAIL'}"
+

@@ -223,15 +223,21 @@ TEMPLATES = [
     },
 ]
 
+# EMAIL
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'tonemail@gmail.com'
+EMAIL_HOST_PASSWORD = 'mot_de_passe'
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
-# ----------------------------------------------------
-# ✉️ EMAIL CONFIG - Version sécurisée
-# ----------------------------------------------------
-#EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
-#EMAIL_PORT = int(os.environ.get("EMAIL_PORT", 587))
-#EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
-#EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]        # Doit être défini
-#EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"] # Doit être défini
+
+# TWILIO
+TWILIO_ACCOUNT_SID = "xxxx"
+TWILIO_AUTH_TOKEN = "xxxx"
+TWILIO_PHONE_NUMBER = "+123456789"
+
 
 
 # ----------------------------------------------------

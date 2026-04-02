@@ -1,49 +1,70 @@
-# services.py ou utils.py
+# accounts/services.py
 
-from django.db.models import Sum
-from datetime import date
-from cotisationtontine.models import Versement
-from epargnecredit.models import Epargne, CreditRepayment
-from .models import Invoice
+from django.core.mail import send_mail
+from django.conf import settings
+from twilio.rest import Client
 
+# accounts/services.py
 
-def generate_monthly_invoices(month, year):
+def send_otp(user, code):
 
-    from epargnecredit.models import Group
+    message = f"Votre code YaayESS est : {code}"
 
-    groupes = Group.objects.all()
-
-    for group in groupes:
-
-        cotisations = Versement.objects.filter(
-            group=group,
-            date__month=month,
-            date__year=year
-        ).aggregate(total=Sum('montant'))['total'] or 0
-
-        epargnes = Epargne.objects.filter(
-            group=group,
-            date__month=month,
-            date__year=year
-        ).aggregate(total=Sum('montant'))['total'] or 0
-
-        remboursements = CreditRepayment.objects.filter(
-            credit__group=group,
-            date__month=month,
-            date__year=year
-        ).aggregate(total=Sum('montant'))['total'] or 0
-
-        total = cotisations + epargnes + remboursements
-
-        Invoice.objects.update_or_create(
-            group=group,
-            mois=date(year, month, 1),
-            defaults={
-                "montant_cotisation": cotisations,
-                "montant_epargne": epargnes,
-                "montant_remboursement": remboursements,
-                "total": total
-            }
+    # 📧 EMAIL
+    if user.email:
+        send_mail(
+            "Code YaayESS",
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=True
         )
 
+    # 📱 SMS (MODE DEV SÉCURISÉ)
+    if hasattr(user, "phone") and user.phone:
+        try:
+            if settings.DEBUG:
+                print(f"📱 [SIMULATION SMS] Code OTP: {code} → {user.phone}")
+            else:
+                client = Client(
+                    settings.TWILIO_ACCOUNT_SID,
+                    settings.TWILIO_AUTH_TOKEN
+                )
+
+                client.messages.create(
+                    body=message,
+                    from_=settings.TWILIO_PHONE_NUMBER,
+                    to=user.phone
+                )
+
+        except Exception as e:
+            print("❌ Erreur SMS:", e)
+
+
+from django.utils import timezone
+from datetime import timedelta
+from accounts.models import OTPVerification
+
+
+def generate_and_send_otp(user):
+
+    # ❌ supprimer anciens OTP
+    OTPVerification.objects.filter(
+        user=user,
+        is_validated=False
+    ).delete()
+
+    # 🔢 générer code
+    code = OTPVerification.generate_code()
+
+    otp = OTPVerification.objects.create(
+        user=user,
+        code=code,
+        expires_at=timezone.now() + timedelta(minutes=5)
+    )
+
+    # 📩 envoyer OTP
+    send_otp(user, code)
+
+    return otp
 
