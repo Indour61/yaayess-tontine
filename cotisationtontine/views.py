@@ -802,17 +802,19 @@ def initier_versement(request, member_id):
         methode="CAISSE",
         statut="EN_ATTENTE",
         tour=group.tour_actuel,
-        cycle=group.cycle_numero  # 🔥 CRUCIAL
+        cycle=group.cycle_numero
     )
 
     print("✅ VERSEMENT CRÉÉ ID =", versement.id)
 
+    # 🔥 MESSAGE UX AMÉLIORÉ
     messages.success(
         request,
-        f"✅ {montant} FCFA enregistré (Cycle {group.cycle_numero} - Tour {group.tour_actuel})."
+        f"⏳ Paiement de {montant} FCFA soumis. En attente de validation admin."
     )
 
     return redirect("cotisationtontine:group_detail", group_id=group.id)
+
 
 # ==========================================
 # VALIDATION ADMIN

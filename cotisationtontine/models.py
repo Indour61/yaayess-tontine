@@ -313,7 +313,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import models
 
-from cotisationtontine.models import GroupMember  # 🔥 important si pas déjà import
+from cotisationtontine.models import GroupMember
 
 
 class Versement(models.Model):
@@ -324,6 +324,12 @@ class Versement(models.Model):
         ("REFUSE", "Refusé"),
     )
 
+    METHODE_CHOICES = (
+        ("WAVE", "Wave"),
+        ("OM", "Orange Money"),
+        ("CAISSE", "Caisse"),
+    )
+
     member = models.ForeignKey(
         GroupMember,
         on_delete=models.CASCADE,
@@ -331,18 +337,21 @@ class Versement(models.Model):
     )
 
     # 🔁 TOUR
-    tour = models.IntegerField(
+    tour = models.PositiveIntegerField(
         default=1,
         help_text="Numéro du tour de tontine"
     )
 
-    # 🔥 NOUVEAU : CYCLE (CRUCIAL POUR TON BUG)
-    cycle = models.IntegerField(
+    # 🔁 CYCLE
+    cycle = models.PositiveIntegerField(
         default=1,
         help_text="Numéro du cycle"
     )
 
-    montant = models.DecimalField(max_digits=12, decimal_places=0)
+    montant = models.DecimalField(
+        max_digits=12,
+        decimal_places=0
+    )
 
     frais = models.DecimalField(
         max_digits=12,
@@ -350,7 +359,19 @@ class Versement(models.Model):
         default=Decimal("0")
     )
 
-    methode = models.CharField(max_length=20, default="CAISSE")
+    # 🔥 MÉTHODE DE PAIEMENT (amélioré)
+    methode = models.CharField(
+        max_length=20,
+        choices=METHODE_CHOICES,
+        default="WAVE"
+    )
+
+    # 🔥 PREUVE (AJOUT CRUCIAL)
+    preuve = models.ImageField(
+        upload_to="preuves/",
+        null=True,
+        blank=True
+    )
 
     statut = models.CharField(
         max_length=20,
@@ -369,16 +390,28 @@ class Versement(models.Model):
     date_creation = models.DateTimeField(auto_now_add=True)
     date_validation = models.DateTimeField(null=True, blank=True)
 
+    # 🔥 NOUVEAU : NOTE ADMIN (optionnel mais utile)
+    note_admin = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Raison du refus ou commentaire"
+    )
+
     class Meta:
         ordering = ["-date_creation"]
+
         indexes = [
             models.Index(fields=["member", "tour"]),
-            models.Index(fields=["member", "cycle"]),  # 🔥 important perf
+            models.Index(fields=["member", "cycle"]),
             models.Index(fields=["statut"]),
+            models.Index(fields=["tour", "cycle"]),  # 🔥 optimisation forte
         ]
 
     def __str__(self):
-        return f"{self.member.user} - {self.montant} FCFA (Cycle {self.cycle} | Tour {self.tour}) [{self.statut}]"
+        return (
+            f"{self.member.user} - {self.montant} FCFA "
+            f"(Cycle {self.cycle} | Tour {self.tour}) [{self.statut}]"
+        )
 
     # =====================================================
     # 🔹 SAVE AUTO (frais + cycle + tour)
