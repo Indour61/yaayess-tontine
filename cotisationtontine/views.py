@@ -680,6 +680,14 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib import messages
 from django.db.models import Sum
 
+from decimal import Decimal, ROUND_HALF_UP
+
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.db.models import Sum
+from django.shortcuts import get_object_or_404, redirect, render
+
 from cotisationtontine.models import GroupMember, Versement
 
 
@@ -695,7 +703,10 @@ def initier_versement(request, member_id):
     group = member.group
     group.refresh_from_db()
 
-    # 🔒 sécurité
+    # =====================================================
+    # 🔒 SÉCURITÉ
+    # =====================================================
+
     user_is_admin = (
         request.user == group.admin
         or request.user.is_superuser
@@ -722,32 +733,41 @@ def initier_versement(request, member_id):
         return redirect("cotisationtontine:group_detail", group_id=group.id)
 
     # =====================================================
-    # 🔥 BLOQUER DOUBLE PAIEMENT DANS LE MÊME CYCLE
+    # 🔥 BLOQUER DOUBLE PAIEMENT VALIDÉ
     # =====================================================
 
-    deja_paye = Versement.objects.filter(
+    # 🔥 TOTAL déjà versé (VALIDÉ uniquement)
+    total_valide = Versement.objects.filter(
         member=member,
         statut="VALIDE",
         cycle=group.cycle_numero,
-        tour=group.tour_actuel  # 🔥 AJOUT CRUCIAL
-    ).exists()
+        tour=group.tour_actuel
+    ).aggregate(
+        total=Sum("montant")
+    )["total"] or Decimal("0")
 
-    if deja_paye:
-        messages.warning(
+    # 🔥 Montant max à atteindre
+    montant_max = group.montant_base or Decimal("0")
+
+    # 🔥 Calcul du reste
+    reste = montant_max - total_valide
+
+    # 🔒 Bloquer si déjà complet
+    if reste <= 0:
+        messages.success(
             request,
-            f"⚠️ Vous avez déjà payé pour le tour {group.tour_actuel}."
+            f"✅ Vous avez déjà complété le paiement pour le tour {group.tour_actuel}."
         )
         return redirect("cotisationtontine:group_detail", group_id=group.id)
-
-
+    
     # =====================================================
-    # 🔥 TOTAL PAR TOUR (PAR CYCLE)
+    # 🔥 CALCUL DU RESTE À PAYER
     # =====================================================
 
     versements_tour = member.versements.filter(
         statut__in=["EN_ATTENTE", "VALIDE"],
         tour=group.tour_actuel,
-        cycle=group.cycle_numero  # 🔥 CRUCIAL
+        cycle=group.cycle_numero
     )
 
     total_actuel = versements_tour.aggregate(
@@ -758,7 +778,7 @@ def initier_versement(request, member_id):
     reste = montant_max - total_actuel
 
     # =====================================================
-    # GET
+    # GET → AFFICHAGE PAGE
     # =====================================================
 
     if request.method == "GET":
@@ -781,11 +801,14 @@ def initier_versement(request, member_id):
         )
 
     # =====================================================
-    # POST
+    # POST → TRAITEMENT
     # =====================================================
 
     montant_raw = (request.POST.get("montant") or "").replace(",", ".").strip()
+    methode = request.POST.get("methode")
+    preuve = request.FILES.get("preuve")
 
+    # 🔒 validation montant
     try:
         montant = Decimal(montant_raw)
     except Exception:
@@ -809,6 +832,14 @@ def initier_versement(request, member_id):
         return redirect("cotisationtontine:initier_versement", member_id=member_id)
 
     # =====================================================
+    # 🔒 VALIDATION MÉTHODE
+    # =====================================================
+
+    if methode not in ["WAVE", "OM", "CAISSE"]:
+        messages.error(request, "❌ Méthode de paiement invalide.")
+        return redirect("cotisationtontine:initier_versement", member_id=member_id)
+
+    # =====================================================
     # 💰 FRAIS
     # =====================================================
 
@@ -822,7 +853,8 @@ def initier_versement(request, member_id):
         member=member,
         montant=montant,
         frais=frais,
-        methode="CAISSE",
+        methode=methode,
+        preuve=preuve,
         statut="EN_ATTENTE",
         tour=group.tour_actuel,
         cycle=group.cycle_numero
@@ -830,14 +862,16 @@ def initier_versement(request, member_id):
 
     print("✅ VERSEMENT CRÉÉ ID =", versement.id)
 
-    # 🔥 MESSAGE UX AMÉLIORÉ
+    # =====================================================
+    # 🔥 MESSAGE UX
+    # =====================================================
+
     messages.success(
         request,
-        f"⏳ Paiement de {montant} FCFA soumis. En attente de validation admin."
+        f"⏳ Paiement de {montant} FCFA envoyé via {methode}. En attente de validation."
     )
 
     return redirect("cotisationtontine:group_detail", group_id=group.id)
-
 
 # ==========================================
 # VALIDATION ADMIN

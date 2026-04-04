@@ -60,26 +60,31 @@ class GroupMemberForm(forms.ModelForm):
 
 # ✅ Formulaire de versement
 
-# cotisationtontine/forms.py
-
 from django import forms
 from .models import Versement
 
+
 class VersementForm(forms.ModelForm):
+
     class Meta:
         model = Versement
-        fields = ['member', 'montant', 'methode']  # ❌ 'statut' supprimé
+        fields = ['member', 'montant', 'methode', 'preuve']  # 🔥 ajout preuve
+
         widgets = {
             'member': forms.Select(attrs={'class': 'form-select'}),
-            'montant': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
-            'methode': forms.Select(attrs={'class': 'form-select'}),  # ✅ on garde ce champ
+            'montant': forms.NumberInput(attrs={'class': 'form-control'}),
+            'methode': forms.Select(attrs={'class': 'form-select'}),
+            'preuve': forms.FileInput(attrs={'class': 'form-control'}),
         }
 
     def __init__(self, *args, **kwargs):
-        super(VersementForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+
+        # 🔥 aligné avec ton modèle
         self.fields['methode'].choices = [
-            ('paydunya', 'PayDunya'),
-            ('caisse', 'Caisse (sans frais)'),
+            ('WAVE', 'Wave'),
+            ('OM', 'Orange Money'),
+            ('CAISSE', 'Caisse'),
         ]
 
 from django import forms
