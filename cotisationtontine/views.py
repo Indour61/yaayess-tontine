@@ -759,7 +759,7 @@ def initier_versement(request, member_id):
             f"✅ Vous avez déjà complété le paiement pour le tour {group.tour_actuel}."
         )
         return redirect("cotisationtontine:group_detail", group_id=group.id)
-    
+
     # =====================================================
     # 🔥 CALCUL DU RESTE À PAYER
     # =====================================================

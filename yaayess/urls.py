@@ -5,6 +5,7 @@ from django.urls import path, include
 
 from accounts.views import landing_view
 from accounts.api.auth_views import MobileLoginView
+from django.conf.urls.static import static
 
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
 from accounts.jwt_serializer import PhoneTokenObtainPairSerializer
@@ -50,5 +51,6 @@ urlpatterns = [
 # 📁 MEDIA FILES
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 
 

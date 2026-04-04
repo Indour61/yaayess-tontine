@@ -69,12 +69,21 @@
       <div class="col-12 col-md-6">
         <label class="form-label">Méthode de paiement</label>
 
-        <select name="methode" class="form-select" required>
-          <option value="">Choisir</option>
-          <option value="WAVE">Wave</option>
-          <option value="OM">Orange Money</option>
-          <option value="CAISSE">Caisse</option>
-        </select>
+        <div class="mb-3">
+            <label class="form-label">💳 Mode de paiement</label>
+            <select name="methode" class="form-select" required>
+
+                <!-- ✅ Par défaut -->
+                <option value="CAISSE" selected>💵 Caisse</option>
+
+                <!-- Ensuite -->
+                <option value="WAVE">📱 Wave</option>
+                <option value="OM">📲 Orange Money</option>
+
+            </select>
+        </div>
+
+        
 
         <div class="invalid-feedback">
           Veuillez choisir une méthode.

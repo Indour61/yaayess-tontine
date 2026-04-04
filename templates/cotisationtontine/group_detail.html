@@ -173,6 +173,20 @@
 </a>
 
 </div>
+
+<td>
+    {% if v.preuve %}
+        <a href="{{ v.preuve.url }}" target="_blank">
+            <img src="{{ v.preuve.url }}"
+                 width="50"
+                 height="50"
+                 style="object-fit:cover; border-radius:5px;">
+        </a>
+    {% else %}
+        <span class="text-muted">Aucune</span>
+    {% endif %}
+</td>
+
 {% endif %}
 
 <!-- 👥 MEMBRES -->
@@ -250,6 +264,7 @@
     <th>Montant</th>
     <th>Statut</th>
     <th>Date</th>
+    <th>Preuve</th>
 </tr>
 </thead>
 
@@ -273,6 +288,18 @@
 </td>
 
 <td>{{ v.date_creation|date:"d/m/Y H:i" }}</td>
+<td>
+    {% if v.preuve %}
+        <img src="{{ v.preuve.url }}"
+             width="50"
+             height="50"
+             class="img-thumbnail preuve-img"
+             data-img="{{ v.preuve.url }}"
+             style="cursor:pointer;">
+    {% else %}
+        <span class="text-muted">Aucune</span>
+    {% endif %}
+</td>
 
 </tr>
 {% empty %}
@@ -281,7 +308,9 @@
         Aucun paiement
     </td>
 </tr>
+
 {% endfor %}
+
 </tbody>
 
 <tfoot>
@@ -313,7 +342,8 @@ function lancerTirage(){
         window.location.href = "{% url 'cotisationtontine:tirage_resultat' group.id %}";
     });
 }
-</script>
+</script
+
 
 <style>
 .group-header{
