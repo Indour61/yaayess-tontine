@@ -12,12 +12,8 @@
     <h2 class="fw-bold text-success mb-2">
       📋 Mes groupes
     </h2>
-    {% if is_admin_group %}
-    <a href="{% url 'cotisationtontine:ajouter_groupe' %}"
-       class="btn btn-success shadow-sm">
-       ➕ Créer un groupe
-    </a>
-    {% endif %}
+
+    <!-- ✅ Toujours afficher le bouton -->
 
 
   </div>
@@ -83,7 +79,7 @@
         {% if request.user.is_super_admin %}
           Aucun groupe trouvé
         {% else %}
-          Aucun groupe créé
+          Vous n'avez encore aucun groupe
         {% endif %}
 
       </h5>
@@ -93,17 +89,16 @@
         {% if request.user.is_super_admin %}
           Aucun groupe n'est disponible pour le moment.
         {% else %}
-          Commencez par créer votre premier groupe.
+          Commencez par créer votre premier groupe 👇
         {% endif %}
 
       </p>
 
-   {% if is_admin_group %}
-    <a href="{% url 'cotisationtontine:ajouter_groupe' %}"
-       class="btn btn-success shadow-sm">
-       ➕ Créer un groupe
-    </a>
-    {% endif %}
+      <!-- ✅ Bouton toujours visible -->
+      <a href="{% url 'cotisationtontine:ajouter_groupe' %}"
+         class="btn btn-success shadow-sm mt-2">
+         ➕ Créer mon premier groupe
+      </a>
 
     </div>
 

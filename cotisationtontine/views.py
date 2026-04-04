@@ -327,6 +327,11 @@ from cotisationtontine.models import Group
 
 from django.db.models import Q
 
+from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+from django.shortcuts import render
+from cotisationtontine.models import Group, GroupMember
+
 @login_required
 def group_list_view(request):
 
@@ -357,6 +362,7 @@ def group_list_view(request):
         "cotisationtontine/group_list.html",
         context
     )
+
 
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required

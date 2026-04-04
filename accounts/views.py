@@ -695,21 +695,19 @@ def _normalize_phone(raw: str) -> str:
         return "+" + "".join(ch for ch in s[1:] if ch.isdigit())
     return "".join(ch for ch in s if ch.isdigit())
 
+from django.db import transaction, IntegrityError
+from django.contrib import messages
+from django.contrib.auth import authenticate, login
+from django.middleware.csrf import get_token
+from django.http import Http404, HttpRequest, HttpResponse
+from django.shortcuts import render
+
 @ensure_csrf_cookie
 @csrf_protect
 @transaction.atomic
 def inscription_et_rejoindre(request: HttpRequest, code: str) -> HttpResponse:
-    """
-    1) Retrouve le groupe depuis <code>
-    2) Si l'utilisateur existe (phone), authentifie puis ajoute au groupe
-    3) Sinon crée le compte (nom, phone, password), option forcée selon l'app d'origine
-    4) Auto-valide si le lien vient de epargnecredit
-    5) Redirige automatiquement vers le bon module (tontine ou epargne)
-    """
     try:
         group = _resolve_group_by_code(code)
-
-        
     except Http404:
         messages.error(request, "Lien d’invitation invalide ou expiré.")
         return render(
@@ -719,167 +717,141 @@ def inscription_et_rejoindre(request: HttpRequest, code: str) -> HttpResponse:
             status=404,
         )
 
-    # Déterminer l’option (forcée) selon l’app du groupe
+    # Détection app
     app_label = getattr(group._meta, "app_label", None)
 
     if app_label == "epargnecredit":
         forced_option = OPTION_EC
-    elif app_label == "cotisationtontine":
-        forced_option = OPTION_TONTINE
     else:
-        forced_option = OPTION_TONTINE  # fallback sécurité
+        forced_option = OPTION_TONTINE
 
     is_ec_link = app_label == "epargnecredit"
-#    forced_option = _forced_option_for_group(group)  # "1" (tontine) ou "2" (epargnecredit)
-#    is_ec_link = getattr(group._meta, "app_label", None) == "epargnecredit"
 
+    # ---------------- GET ----------------
     if request.method == "GET":
-        # Force cookie CSRF (utile si ouverture du lien dans un nouvel onglet)
         get_token(request)
         request.session["__csrf_touch__"] = timezone.now().isoformat()
         request.session.modified = True
+
         return render(
             request,
             "accounts/inscription_par_invit.html",
             {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
         )
 
-    # ----------- POST -----------
+    # ---------------- POST ----------------
     nom = (request.POST.get("nom") or "").strip()
     phone = _normalize_phone(request.POST.get("phone"))
     password = (request.POST.get("password") or "").strip()
     confirm_password = (request.POST.get("confirm_password") or "").strip()
 
-    # On ignore toute "option" libre si forced_option est défini
-    option = forced_option or (request.POST.get("option") or "").strip()
-    if option not in (OPTION_TONTINE, OPTION_EC):
-        option = OPTION_TONTINE  # défaut sûr
+    option = forced_option
 
-    # Validations rapides
+    # -------- VALIDATIONS --------
     if not all([nom, phone, password, confirm_password]):
         messages.error(request, "Tous les champs sont requis.")
-        return render(
-            request,
-            "accounts/inscription_par_invit.html",
-            {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
-            status=400,
-        )
+        return render(request, "accounts/inscription_par_invit.html",
+                      {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
+                      status=400)
 
     if password != confirm_password:
         messages.error(request, "Les mots de passe ne correspondent pas.")
-        return render(
-            request,
-            "accounts/inscription_par_invit.html",
-            {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
-            status=400,
-        )
+        return render(request, "accounts/inscription_par_invit.html",
+                      {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
+                      status=400)
 
-    # Cas 1 : un compte existe déjà avec ce phone
-    existing_by_phone = User.objects.filter(phone=phone).first()
-    if existing_by_phone:
-        user = authenticate(request, username=phone, password=password)
-        if user is None:
-            messages.error(request, "Mot de passe incorrect pour ce numéro de téléphone.")
-            return render(
-                request,
-                "accounts/inscription_par_invit.html",
-                {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
-                status=400,
-            )
+    # =====================================================
+    # 🔥 CORRECTION PRINCIPALE ICI
+    # =====================================================
 
-        # Prépare update ciblé
-        fields_to_update = []
-
-        # Mise à jour du nom si vide
-        if not getattr(user, "nom", None):
-            user.nom = nom
-            fields_to_update.append("nom")
-
-        # Synchroniser l'option avec celle du groupe du lien
-        if option and getattr(user, "option", None) != option:
-            user.option = option
-            fields_to_update.append("option")
-
-        # ✅ AUTO-VALIDATION EC pour un lien epargnecredit
-        if is_ec_link:
-            if getattr(user, "option", None) != OPTION_EC:
-                user.option = OPTION_EC
-                if "option" not in fields_to_update:
-                    fields_to_update.append("option")
-            if not getattr(user, "is_validated", False):
-                user.is_validated = True
-                fields_to_update.append("is_validated")
-
-        if fields_to_update:
-            user.save(update_fields=fields_to_update)
-
-        login(request, user)
-        _add_member_to_group(request, user, group)
-
-        if is_ec_link and getattr(user, "is_validated", False):
-            messages.success(request, "Bienvenue ! Votre compte est validé pour Épargne & Crédit.")
-
-        return _redirect_by_option(user, group)
-
-    # Cas 2 : un autre compte porte déjà ce nom
-    if User.objects.filter(nom__iexact=nom).exclude(phone=phone).exists():
-        messages.error(request, "Le nom existe déjà. Choisissez-en un autre.")
-        return render(
-            request,
-            "accounts/inscription_par_invit.html",
-            {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
-            status=400,
-        )
-
-    # Création du compte
     try:
+        user = User.objects.filter(phone=phone).first()
+
+        # ===============================
+        # CAS 1 : UTILISATEUR EXISTANT
+        # ===============================
+        if user:
+            if user:
+                messages.error(request, "Ce numéro de téléphone existe.")
+                return render(
+                    request,
+                    "accounts/inscription_par_invit.html",
+                    {
+                        "group": group,
+                        "forced_option": forced_option,
+                        "option_labels": OPTION_LABELS
+                    },
+                    status=400
+                )
+
+
+            user = auth_user
+
+            updated_fields = []
+
+            if not user.nom:
+                user.nom = nom
+                updated_fields.append("nom")
+
+            if user.option != option:
+                user.option = option
+                updated_fields.append("option")
+
+            # ✅ AUTO VALIDATION EC
+            if is_ec_link:
+                if not user.is_validated:
+                    user.is_validated = True
+                    updated_fields.append("is_validated")
+
+            if updated_fields:
+                user.save(update_fields=updated_fields)
+
+            login(request, user)
+            _add_member_to_group(request, user, group)
+
+            messages.success(request, "Connexion réussie. Vous avez rejoint le groupe.")
+
+            return _redirect_by_option(user, group)
+
+        # ===============================
+        # CAS 2 : NOUVEL UTILISATEUR
+        # ===============================
         alias = _unique_alias_for(nom)
+
         user = User.objects.create_user(
             nom=nom,
             phone=phone,
             password=password,
             alias=alias,
-            option=option,  # forcé selon l'app du groupe
+            option=option,
         )
 
-        # ✅ AUTO-VALIDATION EC pour un lien epargnecredit (juste après création)
+        # ✅ AUTO VALIDATION EC
         if is_ec_link:
-            changed = False
-            if getattr(user, "option", None) != OPTION_EC:
-                user.option = OPTION_EC
-                changed = True
-            if not getattr(user, "is_validated", False):
-                user.is_validated = True
-                changed = True
-            if changed:
-                user.save(update_fields=["option", "is_validated"] if is_ec_link else None)
+            user.is_validated = True
+            user.option = OPTION_EC
+            user.save(update_fields=["is_validated", "option"])
 
-        messages.success(request, f"Compte créé avec succès pour {nom} (alias : {alias}).")
+        login(request, user)
+        _add_member_to_group(request, user, group)
+
+        messages.success(request, f"Compte créé avec succès. Bienvenue {nom} !")
+
+        return _redirect_by_option(user, group)
+
     except IntegrityError:
-        messages.error(request, "Ce nom ou ce numéro est déjà utilisé.")
-        return render(
-            request,
-            "accounts/inscription_par_invit.html",
-            {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
-            status=400,
-        )
+        # 🔥 Sécurité ultime anti crash
+        messages.error(request, "Ce numéro est déjà utilisé. Essayez de vous connecter.")
+        return render(request, "accounts/inscription_par_invit.html",
+                      {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
+                      status=400)
+
     except Exception as e:
-        messages.error(request, f"Erreur lors de la création du compte : {e}")
-        return render(
-            request,
-            "accounts/inscription_par_invit.html",
-            {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
-            status=400,
-        )
-
-    # Connexion + ajout au groupe
-    login(request, user)
-    _add_member_to_group(request, user, group)
-
-    if is_ec_link and getattr(user, "is_validated", False):
-        messages.success(request, "Bienvenue ! Votre compte est validé pour Épargne & Crédit.")
-
-    return _redirect_by_option(user, group)
+        print("ERREUR CRITIQUE:", e)
+        messages.error(request, "Une erreur est survenue. Réessayez.")
+        return render(request, "accounts/inscription_par_invit.html",
+                      {"group": group, "forced_option": forced_option, "option_labels": OPTION_LABELS},
+                      status=500)
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect
