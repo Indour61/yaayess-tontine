@@ -106,39 +106,28 @@ import random  # ✅ AJOUT
 from .models import CustomUser
 from .forms import CustomUserCreationForm
 
+from django.contrib import messages
+from django.shortcuts import render, redirect
+from django.utils import timezone
+import random
 
-# =========================================================
-# 🔐 SIGNUP + ENVOI OTP
-# =========================================================
 def signup_view(request):
     if request.method == "POST":
         form = CustomUserCreationForm(request.POST)
-
         phone = request.POST.get("phone")
 
-        # 🔥 CAS 1 : utilisateur existe déjà
+        # 🔴 CAS 1 : NUMÉRO EXISTE → BLOQUER DIRECT
         if CustomUser.objects.filter(phone=phone).exists():
-            user = CustomUser.objects.get(phone=phone)
+            messages.error(request, "<strong>Ce numéro de téléphone existe. Veuillez vous réinscrire</strong>")
+            return render(request, "accounts/signup.html", {"form": form})
 
-            # 🔢 OTP
-            otp = str(random.randint(100000, 999999))
-
-            request.session["otp"] = otp
-            request.session["phone"] = user.phone
-            request.session["otp_time"] = timezone.now().isoformat()
-
-            print(f"📱 [OTP EXISTING USER] {otp} → {user.phone}")
-
-            messages.info(request, "Compte existant détecté. Vérification requise 📱")
-
-            return redirect("accounts:verify_otp")
-
-        # 🔥 CAS 2 : nouvel utilisateur
+        # 🟢 CAS 2 : NOUVEL UTILISATEUR
         if form.is_valid():
             user = form.save(commit=False)
             user.is_active = False
             user.save()
 
+            # 🔢 OTP
             otp = str(random.randint(100000, 999999))
 
             request.session["otp"] = otp
@@ -772,7 +761,7 @@ def inscription_et_rejoindre(request: HttpRequest, code: str) -> HttpResponse:
         # ===============================
         if user:
             if user:
-                messages.error(request, "Ce numéro de téléphone existe.")
+                messages.error(request, "Ce numéro de téléphone existe.Veuillez vous reinscrire.")
                 return render(
                     request,
                     "accounts/inscription_par_invit.html",
