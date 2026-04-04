@@ -587,6 +587,27 @@ def group_detail(request, group_id):
     progress = int((nb_termines / total_membres) * 100) if total_membres > 0 else 0
 
     # =====================================================
+    # 💰 HISTORIQUE COMPLET DES PAIEMENTS
+    # =====================================================
+
+    versements_list = (
+        Versement.objects
+        .filter(member__group=group)
+        .select_related("member__user")
+        .order_by("-date_creation")[:10]  # 🔥 LIMITATION ICI
+    )
+
+    # 🔥 TOTAL GLOBAL (TOUS LES PAIEMENTS)
+    total_global = (
+        versements_list.aggregate(
+            total=Coalesce(
+                Sum("montant"),
+                Value(0, output_field=DecimalField(max_digits=12, decimal_places=2))
+            )
+        )["total"]
+    )
+
+    # =====================================================
     # 📦 CONTEXT
     # =====================================================
     context = {
@@ -606,6 +627,8 @@ def group_detail(request, group_id):
         "tour_actuel": tour_actuel,
         "nb_restants": nb_restants,
         "progress": progress,
+        "versements_list": versements_list,
+        "total_global": total_global,
     }
 
     return render(request, "cotisationtontine/group_detail.html", context)
