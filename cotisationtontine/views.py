@@ -325,18 +325,15 @@ from django.db.models import Q
 from cotisationtontine.models import Group
 
 
+from django.db.models import Q
+
 @login_required
 def group_list_view(request):
-    """
-    Liste des groupes de l'utilisateur
-    """
 
     user = request.user
 
-    # 🔑 Super admin : voir tous les groupes
     if getattr(user, "is_super_admin", False):
         groupes = Group.objects.all().order_by("-date_creation")
-
     else:
         groupes = (
             Group.objects.filter(
@@ -347,8 +344,12 @@ def group_list_view(request):
             .order_by("-date_creation")
         )
 
+    # 🔥 AJOUT IMPORTANT
+    is_admin_group = Group.objects.filter(admin=user).exists()
+
     context = {
-        "groupes": groupes
+        "groupes": groupes,
+        "is_admin_group": is_admin_group   # ✅ AJOUT
     }
 
     return render(

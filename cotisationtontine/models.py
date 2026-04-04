@@ -545,7 +545,3 @@ class Invitation(models.Model):
 
     def __str__(self):
         return f"Invitation {self.phone} - {self.group.nom}"
-
-
-
-

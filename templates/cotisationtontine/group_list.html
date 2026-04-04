@@ -12,13 +12,13 @@
     <h2 class="fw-bold text-success mb-2">
       📋 Mes groupes
     </h2>
-
+    {% if is_admin_group %}
     <a href="{% url 'cotisationtontine:ajouter_groupe' %}"
        class="btn btn-success shadow-sm">
-
        ➕ Créer un groupe
-
     </a>
+    {% endif %}
+
 
   </div>
 
@@ -98,16 +98,12 @@
 
       </p>
 
-      {% if not request.user.is_super_admin %}
-
-      <a href="{% url 'cotisationtontine:ajouter_groupe' %}"
-         class="btn btn-success mt-2">
-
-         ➕ Créer mon premier groupe
-
-      </a>
-
-      {% endif %}
+   {% if is_admin_group %}
+    <a href="{% url 'cotisationtontine:ajouter_groupe' %}"
+       class="btn btn-success shadow-sm">
+       ➕ Créer un groupe
+    </a>
+    {% endif %}
 
     </div>
 
