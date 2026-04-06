@@ -145,11 +145,51 @@
 {% endif %}
 
 <!-- 🚨 ALERT -->
-{% if versements_en_attente_liste %}
-<div class="alert alert-warning">
-⏳ Des paiements sont en attente de validation
+{% if user_is_admin %}
+<div class="card shadow-sm mb-4 border-warning">
+    <div class="card-header bg-warning text-dark fw-bold">
+        💰 Versements en attente
+    </div>
+
+    <div class="card-body">
+
+        {% for v in versements_en_attente_liste %}
+        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+
+            <div>
+                <strong>{{ v.member.user.nom|default:v.member.user.phone }}</strong><br>
+                <small>{{ v.montant|intcomma }} FCFA</small>
+            </div>
+
+            <div class="d-flex gap-2">
+
+                {% if v.preuve %}
+                <a href="{{ v.preuve.url }}" target="_blank" class="btn btn-sm btn-info">
+                    👁 Preuve
+                </a>
+                {% endif %}
+
+                <a href="{% url 'cotisationtontine:valider_versement' v.id %}"
+                   class="btn btn-sm btn-success">
+                    ✅
+                </a>
+
+                <a href="{% url 'cotisationtontine:refuser_versement' v.id %}"
+                   class="btn btn-sm btn-danger">
+                    ❌
+                </a>
+
+            </div>
+
+        </div>
+        {% empty %}
+        <p class="text-muted">Aucun versement en attente</p>
+        {% endfor %}
+
+    </div>
 </div>
 {% endif %}
+
 
 <!-- 🎲 ACTIONS -->
 {% if user_is_admin %}
@@ -219,28 +259,24 @@
 <td>
 
 {% if m.versement_en_attente %}
-<span class="text-warning fw-bold">⏳ En attente</span>
+    <span class="badge bg-warning">⏳ En attente</span>
 
-{% if user_is_admin %}
-<a href="{% url 'cotisationtontine:valider_versement' m.versement_en_attente.id %}" class="btn btn-sm btn-success">✔</a>
-<a href="{% url 'cotisationtontine:refuser_versement' m.versement_en_attente.id %}" class="btn btn-sm btn-danger">✖</a>
-{% endif %}
+{% elif m.total_montant >= group.montant_base %}
+    <span class="badge bg-success">✅ Payé</span>
 
-{% elif m.total_montant < group.montant_base %}
-
-{% if m.user == request.user %}
-<a href="{% url 'cotisationtontine:initier_versement' m.id %}" class="btn btn-sm btn-primary">
-💰 Payer
-</a>
-{% else %}
-<span class="badge bg-secondary">👤</span>
-{% endif %}
+{% elif m.user == request.user or user_is_admin %}
+    <!-- 🔥 ADMIN OU MEMBRE -->
+    <a href="{% url 'cotisationtontine:initier_versement' m.id %}"
+       class="btn btn-primary btn-sm">
+        💳 Payer
+    </a>
 
 {% else %}
-<span class="badge bg-success">✅ Payé</span>
+    <span class="badge bg-secondary">👤</span>
 {% endif %}
 
 </td>
+
 
 <td>{{ m.total_montant|intcomma }} FCFA</td>
 <td>{{ m.last_date|date:"d/m/Y H:i"|default:"-" }}</td>
@@ -342,8 +378,8 @@ function lancerTirage(){
         window.location.href = "{% url 'cotisationtontine:tirage_resultat' group.id %}";
     });
 }
-</script
 
+</script>
 
 <style>
 .group-header{
